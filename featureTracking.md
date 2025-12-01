@@ -15,7 +15,7 @@ The purpose of the alpha release is to test out the core mechanics for firing an
 - [ ] finalize core stations (mechanics for each action type, making sure ship states are affected)
 	- [ ] tactical (PRIORITY)
 		- [x] Fire (attack with weapon - DONE)
-		- [ ] Calibrate Weapons (minor - next attack damage +1)
+		- [RFT] Calibrate Weapons (minor - next attack damage +1)
 		- [ ] Prepare (minor - raise/lower shields, arm/disarm weapons)
 		- [ ] Targeting Solution (minor - next attack can re-roll or choose system hit)
 		- [ ] Defensive Fire (opposed roll, spend 2 Momentum to counterattack)
