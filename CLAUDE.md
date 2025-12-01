@@ -101,6 +101,7 @@ Each bridge position has specific minor and major actions available:
 
 ## File Reference
 
+- `featureTracking.md` - **Check this first!** Tracks planned features and current development priorities
 - `starshiprules.md` - Extracted starship combat rules from STA 2e Core Rulebook
 - `STA2e_Core Rulebook_DIGITAL_v1.1.txt` - Full rulebook text (human reference only, DO NOT READ)
 

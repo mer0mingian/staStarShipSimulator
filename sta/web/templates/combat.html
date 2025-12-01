@@ -131,12 +131,12 @@
         <div class="stats-grid">
             {% set systems = [('Comms', player_ship.systems.comms, 'comms'), ('Computers', player_ship.systems.computers, 'computers'), ('Engines', player_ship.systems.engines, 'engines'), ('Sensors', player_ship.systems.sensors, 'sensors'), ('Structure', player_ship.systems.structure, 'structure'), ('Weapons', player_ship.systems.weapons, 'weapons')] %}
             {% for name, value, key in systems %}
-            {% set breach_potency = player_ship.breaches | selectattr('system.value', 'equalto', key) | map(attribute='potency') | sum %}
-            <div class="stat-row {% if breach_potency > 0 %}breached{% endif %}">
+            {% set breach_potency = player_ship.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
+            <div class="stat-row {% if breach_potency > 0 %}breached{% endif %}" data-system="{{ key }}">
                 <span>{{ name }}</span>
                 <span class="stat-value">
                     {{ value }}
-                    {% if breach_potency > 0 %}<span class="breach-indicator">[Breach {{ breach_potency }}]</span>{% endif %}
+                    <span class="breach-indicator" style="{% if breach_potency == 0 %}display:none{% endif %}">[Breach <span class="breach-count">{{ breach_potency }}</span>]</span>
                 </span>
             </div>
             {% endfor %}
@@ -186,7 +186,7 @@
         <div class="stats-grid">
             {% set systems = [('Comms', enemy.systems.comms, 'comms'), ('Computers', enemy.systems.computers, 'computers'), ('Engines', enemy.systems.engines, 'engines'), ('Sensors', enemy.systems.sensors, 'sensors'), ('Structure', enemy.systems.structure, 'structure'), ('Weapons', enemy.systems.weapons, 'weapons')] %}
             {% for name, value, key in systems %}
-            {% set breach_potency = enemy.breaches | selectattr('system.value', 'equalto', key) | map(attribute='potency') | sum %}
+            {% set breach_potency = enemy.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
             <div class="stat-row {% if breach_potency > 0 %}breached{% endif %}" data-system="{{ key }}">
                 <span>{{ name }}</span>
                 <span class="stat-value">
@@ -479,6 +479,11 @@
     // Update damage display when weapon changes
     document.getElementById('weapon-select').addEventListener('change', updateFireDetails);
 
+    // Ship stats for assist die display
+    const shipWeapons = {{ player_ship.systems.weapons if player_ship else 7 }};
+    const shipSecurity = {{ player_ship.departments.security if player_ship else 2 }};
+    const shipTargetNumber = shipWeapons + shipSecurity;
+
     async function executeFireAction() {
         const weaponSelect = document.getElementById('weapon-select');
         const targetSelect = document.getElementById('target-select');
@@ -512,8 +517,13 @@
         const resultsDiv = document.getElementById('fire-results');
         resultsDiv.style.display = 'block';
 
-        // Build dice display
-        const diceHtml = data.rolls.map(roll => {
+        // Build dice display - character dice first, then ship assist die
+        const charDiceCount = 2 + bonusDice;
+        const charRolls = data.rolls.slice(0, charDiceCount);
+        const shipRoll = data.ship_roll;
+
+        // Character dice
+        const charDiceHtml = charRolls.map(roll => {
             let cls = 'dice-fail';
             if (roll === 1 || (focus && roll <= playerDiscs.security)) {
                 cls = 'dice-crit';
@@ -525,8 +535,24 @@
             return `<span class="dice-result ${cls}">${roll}</span>`;
         }).join('');
 
-        let html = `<h3>Attack Roll</h3><div>${diceHtml}</div>`;
-        html += `<p>${data.successes} successes vs Difficulty ${difficulty}</p>`;
+        // Ship assist die (different target number)
+        let shipDiceHtml = '';
+        if (shipRoll !== null && shipRoll !== undefined) {
+            let cls = 'dice-fail';
+            if (shipRoll === 1) {
+                cls = 'dice-crit';
+            } else if (shipRoll <= data.ship_target_number) {
+                cls = 'dice-success';
+            } else if (shipRoll === 20) {
+                cls = 'dice-complication';
+            }
+            shipDiceHtml = `<span class="dice-result ${cls}" style="border: 2px solid var(--lcars-tan);" title="Ship Assist (target ${data.ship_target_number})">${shipRoll}</span>`;
+        }
+
+        let html = `<h3>Attack Roll</h3>`;
+        html += `<div style="margin-bottom: 5px;"><strong>Character:</strong> ${charDiceHtml} (target ≤${data.target_number})</div>`;
+        html += `<div style="margin-bottom: 10px;"><strong>Ship Assist:</strong> ${shipDiceHtml} (target ≤${data.ship_target_number})</div>`;
+        html += `<p>${data.successes} total successes vs Difficulty ${difficulty}</p>`;
 
         if (data.complications > 0) {
             html += `<p style="color: var(--lcars-red);">${data.complications} complication(s)!</p>`;
@@ -536,15 +562,48 @@
             html += `<div class="alert alert-success"><strong>HIT!</strong></div>`;
             html += `<div class="damage-report">`;
             html += `<h4>Damage Report</h4>`;
-            html += `<p>Total Damage: ${data.total_damage}</p>`;
+            html += `<p>Base Damage: ${data.base_damage}</p>`;
+            if (data.resistance_reduction > 0) {
+                html += `<p style="color: var(--lcars-tan);">Resistance (${data.target_resistance}): -${data.resistance_reduction}</p>`;
+            }
+            if (data.complication_reduction > 0) {
+                html += `<p style="color: var(--lcars-tan);">Complications: -${data.complication_reduction}</p>`;
+            }
+            html += `<p><strong>Final Damage: ${data.total_damage}</strong></p>`;
+            html += `<hr style="border-color: #444; margin: 8px 0;">`;
             html += `<p>Shield Damage: ${data.shield_damage}</p>`;
             if (data.hull_damage > 0) {
                 html += `<p style="color: var(--lcars-red);">Hull Damage: ${data.hull_damage}</p>`;
             }
             html += `<p>Target Shields: ${data.target_shields_remaining}</p>`;
-            if (data.breach_caused) {
-                html += `<p style="color: var(--lcars-red); font-weight: bold;">BREACH! System hit: ${data.system_hit.toUpperCase()}</p>`;
+            if (data.breaches_caused > 0) {
+                html += `<p style="color: var(--lcars-red); font-weight: bold;">${data.breaches_caused} BREACH(ES)! Systems hit: ${data.systems_hit.map(s => s.toUpperCase()).join(', ')}</p>`;
             }
+
+            // Show ship status warnings
+            if (data.target_status) {
+                const status = data.target_status;
+
+                if (status.destroyed_systems && status.destroyed_systems.length > 0) {
+                    html += `<p style="color: var(--lcars-red); font-weight: bold;">⚠ SYSTEMS DESTROYED: ${status.destroyed_systems.map(s => s.toUpperCase()).join(', ')}</p>`;
+                }
+
+                if (status.is_destroyed) {
+                    html += `<div class="alert" style="background: var(--lcars-red); color: white; padding: 10px; margin-top: 10px; text-align: center;">`;
+                    html += `<strong>🔥 TARGET DESTROYED! 🔥</strong>`;
+                    html += `</div>`;
+                } else if (status.warp_core_breach_risk) {
+                    html += `<div class="alert" style="background: orange; color: black; padding: 10px; margin-top: 10px; text-align: center;">`;
+                    html += `<strong>⚠ WARP CORE BREACH IMMINENT! ⚠</strong><br>`;
+                    html += `<small>Roll d20 at end of round. If > Engineering rating, reactor explodes!</small>`;
+                    html += `</div>`;
+                } else if (status.has_critical_damage) {
+                    html += `<div class="alert" style="background: darkorange; color: white; padding: 10px; margin-top: 10px;">`;
+                    html += `<strong>CRITICAL DAMAGE!</strong> Ship disabled (${status.total_breaches}/${status.scale} breaches). Next breach = destruction.`;
+                    html += `</div>`;
+                }
+            }
+
             html += `</div>`;
 
             // Update momentum if any generated
@@ -576,18 +635,31 @@
                 shieldsBar.style.width = `${(data.target_shields_remaining / maxShields) * 100}%`;
             }
 
-            // Update breaches if any
-            if (data.breach_caused && data.system_hit) {
-                const systemRow = panel.querySelector(`[data-system="${data.system_hit}"]`);
-                if (systemRow) {
-                    systemRow.classList.add('breached');
-                    const indicator = systemRow.querySelector('.breach-indicator');
-                    const countSpan = systemRow.querySelector('.breach-count');
-                    if (indicator && countSpan) {
-                        indicator.style.display = 'inline';
-                        countSpan.textContent = parseInt(countSpan.textContent || 0) + 1;
+            // Update breaches using the full breach data from the server
+            if (data.target_breaches) {
+                // Reset all breach displays first
+                const systemRows = panel.querySelectorAll('[data-system]');
+                systemRows.forEach(row => {
+                    row.classList.remove('breached');
+                    const indicator = row.querySelector('.breach-indicator');
+                    const countSpan = row.querySelector('.breach-count');
+                    if (indicator) indicator.style.display = 'none';
+                    if (countSpan) countSpan.textContent = '0';
+                });
+
+                // Apply breaches from server data
+                data.target_breaches.forEach(breach => {
+                    const systemRow = panel.querySelector(`[data-system="${breach.system}"]`);
+                    if (systemRow) {
+                        systemRow.classList.add('breached');
+                        const indicator = systemRow.querySelector('.breach-indicator');
+                        const countSpan = systemRow.querySelector('.breach-count');
+                        if (indicator && countSpan) {
+                            indicator.style.display = 'inline';
+                            countSpan.textContent = breach.potency;
+                        }
                     }
-                }
+                });
             }
         }
     }

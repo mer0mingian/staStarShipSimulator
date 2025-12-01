@@ -8,11 +8,14 @@
     {% if encounters %}
         <ul class="action-list">
             {% for enc in encounters %}
-                <li>
-                    <a href="{{ url_for('encounters.combat', encounter_id=enc.encounter_id) }}" style="color: inherit; text-decoration: none;">
+                <li style="display: flex; justify-content: space-between; align-items: center;">
+                    <a href="{{ url_for('encounters.combat', encounter_id=enc.encounter_id) }}" style="color: inherit; text-decoration: none; flex-grow: 1;">
                         <strong>{{ enc.name }}</strong>
                         <span class="action-type">Round {{ enc.round }} - {{ enc.current_turn.title() }}'s Turn</span>
                     </a>
+                    <button class="btn btn-small btn-danger" onclick="deleteEncounter('{{ enc.encounter_id }}', '{{ enc.name }}')" title="Delete encounter">
+                        ✕
+                    </button>
                 </li>
             {% endfor %}
         </ul>
@@ -25,4 +28,42 @@
     <h2>Quick Start</h2>
     <a href="{{ url_for('encounters.new_encounter') }}" class="btn">New Encounter</a>
 </div>
+
+<style>
+    .btn-danger {
+        background: var(--lcars-red);
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        cursor: pointer;
+        border-radius: 3px;
+    }
+    .btn-danger:hover {
+        background: #cc0000;
+    }
+</style>
+
+<script>
+async function deleteEncounter(encounterId, name) {
+    if (!confirm(`Delete encounter "${name}"? This cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/encounter/${encounterId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            // Reload the page to refresh the list
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error deleting encounter: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error deleting encounter: ' + error.message);
+    }
+}
+</script>
 {% endblock %}

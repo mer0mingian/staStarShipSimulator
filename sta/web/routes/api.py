@@ -254,9 +254,20 @@ def fire_weapon():
         }
 
         if result.succeeded:
-            # Calculate damage
+            # Calculate damage per STA 2e rules:
+            # 1. Determine base damage
+            # 2. Apply Resistance (minimum 1 damage)
+            # 3. Complications reduce damage by 1 each
+            # 4. Apply to shields, then hull
+
             base_damage = weapon.damage + player_ship.weapons_damage_bonus()
-            total_damage = base_damage
+
+            # Apply resistance (minimum 1 damage remains)
+            damage_after_resistance = max(1, base_damage - target_ship.resistance)
+
+            # Complications reduce damage by 1 each
+            complication_reduction = result.complications
+            total_damage = max(0, damage_after_resistance - complication_reduction)
 
             # Apply to target - shields absorb first
             old_shields = target_ship.shields
@@ -264,18 +275,16 @@ def fire_weapon():
             target_ship.shields -= shield_damage
             remaining_damage = total_damage - shield_damage
 
-            # Apply resistance to hull damage
-            hull_damage = 0
+            # Remaining damage is hull damage (resistance already applied)
+            hull_damage = remaining_damage
             breaches_caused = 0
             systems_hit = []
 
-            if remaining_damage > 0:
-                hull_damage = max(0, remaining_damage - target_ship.resistance)
-
+            if hull_damage > 0:
                 # Calculate number of breaches: every 5 points of hull damage causes a breach
                 if hull_damage >= 5:
                     breaches_caused = hull_damage // 5
-                elif hull_damage > 0:
+                else:
                     # Any hull damage that gets through causes at least 1 breach
                     breaches_caused = 1
 
@@ -314,16 +323,25 @@ def fire_weapon():
 
             session.commit()
 
+            # Get target ship status after damage
+            target_status = target_ship.get_status()
+
             response.update({
+                "base_damage": base_damage,
+                "resistance_reduction": base_damage - damage_after_resistance,
+                "complication_reduction": min(complication_reduction, damage_after_resistance),
                 "total_damage": total_damage,
                 "shield_damage": shield_damage,
                 "hull_damage": hull_damage,
                 "target_shields_remaining": target_ship.shields,
+                "target_resistance": target_ship.resistance,
                 "breaches_caused": breaches_caused,
                 "systems_hit": systems_hit,
                 "new_momentum": encounter.momentum,
                 # Return updated breach state for the target
                 "target_breaches": breaches_data,
+                # Ship status
+                "target_status": target_status,
             })
         else:
             # Miss - no damage
@@ -337,5 +355,33 @@ def fire_weapon():
             })
 
         return jsonify(response)
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>", methods=["DELETE"])
+def delete_encounter(encounter_id: str):
+    """Delete an encounter and optionally its associated ships."""
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Delete enemy ships associated with this encounter
+        enemy_ids = json.loads(encounter.enemy_ship_ids_json)
+        for enemy_id in enemy_ids:
+            enemy_ship = session.query(StarshipRecord).filter_by(id=enemy_id).first()
+            if enemy_ship:
+                session.delete(enemy_ship)
+
+        # Delete the encounter
+        session.delete(encounter)
+        session.commit()
+
+        return jsonify({"success": True, "message": "Encounter deleted"})
     finally:
         session.close()
