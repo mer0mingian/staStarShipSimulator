@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}New Encounter - STA Starship Simulator{% endblock %}
+{% block header %}New Encounter{% endblock %}
+
+{% block content %}
+<form method="POST">
+    <div class="grid">
+        <div class="panel">
+            <h2>Encounter Details</h2>
+            <label for="name">Encounter Name</label>
+            <input type="text" name="name" id="name" value="Battle at the Neutral Zone" style="width: 100%;">
+        </div>
+
+        <div class="panel">
+            <h2>Your Position</h2>
+            <label for="position">Bridge Station</label>
+            <select name="position" id="position" style="width: 100%;">
+                {% for pos in positions %}
+                    <option value="{{ pos }}" {% if pos == 'captain' %}selected{% endif %}>
+                        {{ pos.title() }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="panel">
+            <h2>Character</h2>
+            <label>
+                <input type="radio" name="character_action" value="generate" checked>
+                Generate Random Character
+            </label>
+            {% if characters %}
+                <label>
+                    <input type="radio" name="character_action" value="existing">
+                    Use Existing:
+                </label>
+                <select name="character_id" style="width: 100%;">
+                    {% for char in characters %}
+                        <option value="{{ char.id }}">{{ char.name }} ({{ char.rank }})</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+        </div>
+
+        <div class="panel">
+            <h2>Your Ship</h2>
+            <label>
+                <input type="radio" name="ship_action" value="generate" checked>
+                Generate Random Ship
+            </label>
+            {% if ships %}
+                <label>
+                    <input type="radio" name="ship_action" value="existing">
+                    Use Existing:
+                </label>
+                <select name="ship_id" style="width: 100%;">
+                    {% for ship in ships %}
+                        <option value="{{ ship.id }}">{{ ship.name }} ({{ ship.ship_class }}-class)</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Enemy</h2>
+        <p>A random enemy ship will be generated for this encounter.</p>
+    </div>
+
+    <button type="submit" class="btn">Start Encounter</button>
+    <a href="{{ url_for('main.index') }}" class="btn" style="background: #666;">Cancel</a>
+</form>
+{% endblock %}

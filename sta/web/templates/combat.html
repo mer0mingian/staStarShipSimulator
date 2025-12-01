@@ -1,0 +1,642 @@
+{% extends "base.html" %}
+
+{% block title %}{{ encounter.name }} - Combat{% endblock %}
+{% block header %}{{ encounter.name }} - Round {{ encounter.round }}{% endblock %}
+
+{% block content %}
+<div class="grid">
+    <!-- Resource Pools -->
+    <div class="panel">
+        <h2>Resources</h2>
+        <div class="resource-pool momentum">
+            <span>Momentum</span>
+            <button class="btn btn-small" onclick="updateMomentum(-1)">-</button>
+            <span class="value" id="momentum">{{ encounter.momentum }}</span>
+            <button class="btn btn-small" onclick="updateMomentum(1)">+</button>
+            <span style="color: #666;">/ 6</span>
+        </div>
+        <div class="resource-pool threat">
+            <span>Threat</span>
+            <button class="btn btn-small" onclick="updateThreat(-1)">-</button>
+            <span class="value" id="threat">{{ encounter.threat }}</span>
+            <button class="btn btn-small" onclick="updateThreat(1)">+</button>
+        </div>
+        <div style="margin-top: 15px;">
+            <strong>Current Turn:</strong>
+            <span id="current-turn" style="color: {% if encounter.current_turn == 'player' %}var(--lcars-green){% else %}var(--lcars-red){% endif %};">
+                {{ encounter.current_turn.upper() }}
+            </span>
+            <button class="btn btn-small" onclick="nextTurn()">End Turn</button>
+        </div>
+    </div>
+
+    <!-- Player Character -->
+    {% if player_char %}
+    <div class="panel">
+        <h2>{{ player_char.name }}</h2>
+        <div class="stat-row">
+            <span>Rank / Position</span>
+            <span class="stat-value">{{ player_char.rank }} - {{ position.value.title() }}</span>
+        </div>
+        <div class="stat-row">
+            <span>Stress</span>
+            <span class="stat-value">{{ player_char.stress }} / {{ player_char.stress_max }}</span>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">ATTRIBUTES</h3>
+        <div class="stats-grid">
+            <div class="stat-row">
+                <span>Control</span>
+                <span class="stat-value">{{ player_char.attributes.control }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Daring</span>
+                <span class="stat-value">{{ player_char.attributes.daring }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Fitness</span>
+                <span class="stat-value">{{ player_char.attributes.fitness }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Insight</span>
+                <span class="stat-value">{{ player_char.attributes.insight }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Presence</span>
+                <span class="stat-value">{{ player_char.attributes.presence }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Reason</span>
+                <span class="stat-value">{{ player_char.attributes.reason }}</span>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">DISCIPLINES</h3>
+        <div class="stats-grid">
+            <div class="stat-row">
+                <span>Command</span>
+                <span class="stat-value">{{ player_char.disciplines.command }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Conn</span>
+                <span class="stat-value">{{ player_char.disciplines.conn }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Engineering</span>
+                <span class="stat-value">{{ player_char.disciplines.engineering }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Medicine</span>
+                <span class="stat-value">{{ player_char.disciplines.medicine }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Science</span>
+                <span class="stat-value">{{ player_char.disciplines.science }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Security</span>
+                <span class="stat-value">{{ player_char.disciplines.security }}</span>
+            </div>
+        </div>
+
+        <div style="margin-top: 10px; font-size: 0.9em; color: var(--lcars-tan);">
+            <strong>Focuses:</strong> {{ player_char.focuses | join(', ') }}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="grid">
+    <!-- Player Ship -->
+    {% if player_ship %}
+    <div class="panel">
+        <h2>{{ player_ship.name }}</h2>
+        <div class="stat-row">
+            <span>Class</span>
+            <span class="stat-value">{{ player_ship.ship_class }}-class (Scale {{ player_ship.scale }})</span>
+        </div>
+        <div class="stat-row">
+            <span>Shields</span>
+            <span class="stat-value" id="player-shields">{{ player_ship.shields }} / {{ player_ship.shields_max }}</span>
+        </div>
+        <div class="shields-bar">
+            <div class="fill" id="player-shields-bar" style="width: {{ (player_ship.shields / player_ship.shields_max * 100) | int }}%;"></div>
+        </div>
+        <div class="stat-row">
+            <span>Resistance</span>
+            <span class="stat-value">{{ player_ship.resistance }}</span>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">SYSTEMS</h3>
+        <div class="stats-grid">
+            {% set systems = [('Comms', player_ship.systems.comms, 'comms'), ('Computers', player_ship.systems.computers, 'computers'), ('Engines', player_ship.systems.engines, 'engines'), ('Sensors', player_ship.systems.sensors, 'sensors'), ('Structure', player_ship.systems.structure, 'structure'), ('Weapons', player_ship.systems.weapons, 'weapons')] %}
+            {% for name, value, key in systems %}
+            {% set breach_potency = player_ship.breaches | selectattr('system.value', 'equalto', key) | map(attribute='potency') | sum %}
+            <div class="stat-row {% if breach_potency > 0 %}breached{% endif %}">
+                <span>{{ name }}</span>
+                <span class="stat-value">
+                    {{ value }}
+                    {% if breach_potency > 0 %}<span class="breach-indicator">[Breach {{ breach_potency }}]</span>{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">DEPARTMENTS</h3>
+        <div class="stats-grid">
+            <div class="stat-row"><span>Command</span><span class="stat-value">{{ player_ship.departments.command }}</span></div>
+            <div class="stat-row"><span>Conn</span><span class="stat-value">{{ player_ship.departments.conn }}</span></div>
+            <div class="stat-row"><span>Engineering</span><span class="stat-value">{{ player_ship.departments.engineering }}</span></div>
+            <div class="stat-row"><span>Medicine</span><span class="stat-value">{{ player_ship.departments.medicine }}</span></div>
+            <div class="stat-row"><span>Science</span><span class="stat-value">{{ player_ship.departments.science }}</span></div>
+            <div class="stat-row"><span>Security</span><span class="stat-value">{{ player_ship.departments.security }}</span></div>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">WEAPONS</h3>
+        {% for weapon in player_ship.weapons %}
+        <div class="stat-row">
+            <span>{{ weapon.name }}</span>
+            <span class="stat-value">Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }} | {{ weapon.range.value.title() }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Enemy Ships -->
+    {% for enemy in enemy_ships %}
+    <div class="panel enemy-ship" style="border-color: var(--lcars-red);" data-ship-id="{{ loop.index0 }}">
+        <h2 style="color: var(--lcars-red);">{{ enemy.name }}</h2>
+        <div class="stat-row">
+            <span>Class</span>
+            <span class="stat-value">{{ enemy.ship_class }}-class (Scale {{ enemy.scale }})</span>
+        </div>
+        <div class="stat-row">
+            <span>Shields</span>
+            <span class="stat-value enemy-shields">{{ enemy.shields }} / {{ enemy.shields_max }}</span>
+        </div>
+        <div class="shields-bar">
+            <div class="fill enemy-shields-bar" style="width: {{ (enemy.shields / enemy.shields_max * 100) | int }}%; background: var(--lcars-red);"></div>
+        </div>
+        <div class="stat-row">
+            <span>Resistance</span>
+            <span class="stat-value">{{ enemy.resistance }}</span>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">SYSTEMS</h3>
+        <div class="stats-grid">
+            {% set systems = [('Comms', enemy.systems.comms, 'comms'), ('Computers', enemy.systems.computers, 'computers'), ('Engines', enemy.systems.engines, 'engines'), ('Sensors', enemy.systems.sensors, 'sensors'), ('Structure', enemy.systems.structure, 'structure'), ('Weapons', enemy.systems.weapons, 'weapons')] %}
+            {% for name, value, key in systems %}
+            {% set breach_potency = enemy.breaches | selectattr('system.value', 'equalto', key) | map(attribute='potency') | sum %}
+            <div class="stat-row {% if breach_potency > 0 %}breached{% endif %}" data-system="{{ key }}">
+                <span>{{ name }}</span>
+                <span class="stat-value">
+                    {{ value }}
+                    <span class="breach-indicator" style="{% if breach_potency == 0 %}display:none{% endif %}">[Breach <span class="breach-count">{{ breach_potency }}</span>]</span>
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">DEPARTMENTS</h3>
+        <div class="stats-grid">
+            <div class="stat-row"><span>Command</span><span class="stat-value">{{ enemy.departments.command }}</span></div>
+            <div class="stat-row"><span>Conn</span><span class="stat-value">{{ enemy.departments.conn }}</span></div>
+            <div class="stat-row"><span>Engineering</span><span class="stat-value">{{ enemy.departments.engineering }}</span></div>
+            <div class="stat-row"><span>Medicine</span><span class="stat-value">{{ enemy.departments.medicine }}</span></div>
+            <div class="stat-row"><span>Science</span><span class="stat-value">{{ enemy.departments.science }}</span></div>
+            <div class="stat-row"><span>Security</span><span class="stat-value">{{ enemy.departments.security }}</span></div>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">WEAPONS</h3>
+        {% for weapon in enemy.weapons %}
+        <div class="stat-row">
+            <span>{{ weapon.name }}</span>
+            <span class="stat-value">Dmg {{ weapon.damage }}+{{ enemy.weapons_damage_bonus() }} | {{ weapon.range.value.title() }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Actions Panel -->
+<div class="grid">
+    <div class="panel">
+        <h2>Minor Actions</h2>
+        <ul class="action-list">
+            {% for action in actions.minor %}
+            <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})">
+                <strong>{{ action.name }}</strong>
+                <div class="action-type">{{ action.description[:80] }}...</div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="panel">
+        <h2>Major Actions</h2>
+        <ul class="action-list">
+            {% for action in actions.major %}
+            <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})" class="{% if action.name == 'Fire' %}fire-action{% endif %}">
+                <strong>{{ action.name }}</strong>
+                {% if action.difficulty > 0 %}
+                <span style="color: var(--lcars-tan);">(Diff {{ action.difficulty }})</span>
+                {% endif %}
+                <div class="action-type">{{ action.description[:80] }}...</div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<!-- Fire Action Panel (hidden by default) -->
+<div class="panel" id="fire-panel" style="display: none; border-color: var(--lcars-red);">
+    <h2 style="color: var(--lcars-red);">FIRE WEAPONS</h2>
+
+    <div class="grid" style="grid-template-columns: 1fr 1fr;">
+        <div>
+            <label for="weapon-select">Select Weapon</label>
+            <select id="weapon-select" style="width: 100%;">
+                {% for weapon in player_ship.weapons %}
+                <option value="{{ loop.index0 }}"
+                        data-damage="{{ weapon.damage }}"
+                        data-type="{{ weapon.weapon_type.value }}"
+                        data-range="{{ weapon.range.value }}">
+                    {{ weapon.name }} (Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }}, {{ weapon.range.value.title() }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="target-select">Select Target</label>
+            <select id="target-select" style="width: 100%;">
+                {% for enemy in enemy_ships %}
+                <option value="{{ loop.index0 }}">{{ enemy.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+        <strong>Attack Details:</strong>
+        <div id="attack-details">
+            <p><strong>Character Roll (2d20):</strong> Control ({{ player_char.attributes.control if player_char else 9 }}) + Security ({{ player_char.disciplines.security if player_char else 3 }}) = Target {{ (player_char.attributes.control + player_char.disciplines.security) if player_char else 12 }}</p>
+            <p><strong>Ship Assist (1d20):</strong> Weapons ({{ player_ship.systems.weapons if player_ship else 7 }}) + Security ({{ player_ship.departments.security if player_ship else 2 }}) = Target {{ (player_ship.systems.weapons + player_ship.departments.security) if player_ship else 9 }}</p>
+            <p>Difficulty: <span id="fire-difficulty">2</span> (Energy) / 3 (Torpedo)</p>
+            <p>Total Damage: <span id="fire-damage">{{ player_ship.weapons[0].damage + player_ship.weapons_damage_bonus() if player_ship.weapons else 0 }}</span></p>
+        </div>
+    </div>
+
+    <div style="margin-top: 15px;">
+        <label>
+            <input type="checkbox" id="fire-focus"> Focus Applies (Targeting Systems, etc.)
+        </label>
+    </div>
+    <div>
+        <label for="fire-bonus">Bonus Dice (from Momentum)</label>
+        <input type="number" id="fire-bonus" value="0" min="0" max="3" style="width: 80px;">
+    </div>
+
+    <button class="btn" onclick="executeFireAction()" style="margin-top: 15px;">FIRE!</button>
+    <button class="btn" onclick="cancelAction()" style="margin-top: 15px; background: #666;">Cancel</button>
+
+    <div id="fire-results" style="margin-top: 15px; display: none;"></div>
+</div>
+
+<!-- Generic Dice Roller (for non-Fire actions) -->
+<div class="panel" id="dice-panel">
+    <h2>Dice Roller</h2>
+    <div id="current-action-display" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px; display: none;">
+        <strong>Current Action:</strong> <span id="current-action-name"></span>
+    </div>
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+        <div>
+            <label for="roll-attr">Attribute</label>
+            <input type="number" id="roll-attr" value="{{ player_char.attributes.control if player_char else 9 }}" min="1" max="15" style="width: 100%;">
+        </div>
+        <div>
+            <label for="roll-disc">Discipline</label>
+            <input type="number" id="roll-disc" value="{{ player_char.disciplines.security if player_char else 3 }}" min="0" max="5" style="width: 100%;">
+        </div>
+        <div>
+            <label for="roll-diff">Difficulty</label>
+            <input type="number" id="roll-diff" value="2" min="0" max="5" style="width: 100%;">
+        </div>
+        <div>
+            <label for="roll-bonus">Bonus Dice</label>
+            <input type="number" id="roll-bonus" value="0" min="0" max="3" style="width: 100%;">
+        </div>
+        <div>
+            <label>
+                <input type="checkbox" id="roll-focus"> Focus Applies
+            </label>
+        </div>
+    </div>
+    <button class="btn" onclick="rollDice()" style="margin-top: 15px;">Roll 2d20</button>
+
+    <div id="dice-results" style="margin-top: 15px; display: none;">
+        <h3>Results</h3>
+        <div id="dice-display"></div>
+        <div id="dice-summary" style="margin-top: 10px;"></div>
+    </div>
+</div>
+
+<style>
+    .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 15px;
+    }
+    .breached {
+        color: var(--lcars-red) !important;
+    }
+    .breach-indicator {
+        color: var(--lcars-red);
+        font-size: 0.8em;
+        margin-left: 5px;
+    }
+    .fire-action {
+        border-left: 3px solid var(--lcars-red) !important;
+    }
+    .damage-report {
+        padding: 15px;
+        background: #222;
+        border-radius: 5px;
+        margin-top: 10px;
+    }
+    .damage-report h4 {
+        color: var(--lcars-red);
+        margin-bottom: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const encounterId = '{{ encounter.encounter_id }}';
+    const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
+    const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
+    const weaponsBonus = {{ player_ship.weapons_damage_bonus() if player_ship else 0 }};
+
+    // Player stats for reference
+    const playerAttrs = {
+        control: {{ player_char.attributes.control if player_char else 9 }},
+        daring: {{ player_char.attributes.daring if player_char else 9 }},
+        fitness: {{ player_char.attributes.fitness if player_char else 9 }},
+        insight: {{ player_char.attributes.insight if player_char else 9 }},
+        presence: {{ player_char.attributes.presence if player_char else 9 }},
+        reason: {{ player_char.attributes.reason if player_char else 9 }}
+    };
+    const playerDiscs = {
+        command: {{ player_char.disciplines.command if player_char else 2 }},
+        conn: {{ player_char.disciplines.conn if player_char else 2 }},
+        engineering: {{ player_char.disciplines.engineering if player_char else 2 }},
+        medicine: {{ player_char.disciplines.medicine if player_char else 2 }},
+        science: {{ player_char.disciplines.science if player_char else 2 }},
+        security: {{ player_char.disciplines.security if player_char else 2 }}
+    };
+
+    let currentAction = null;
+
+    async function updateMomentum(change) {
+        const response = await fetch(`/api/encounter/${encounterId}/momentum`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({change})
+        });
+        const data = await response.json();
+        document.getElementById('momentum').textContent = data.momentum;
+    }
+
+    async function updateThreat(change) {
+        const response = await fetch(`/api/encounter/${encounterId}/threat`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({change})
+        });
+        const data = await response.json();
+        document.getElementById('threat').textContent = data.threat;
+    }
+
+    async function nextTurn() {
+        const response = await fetch(`/api/encounter/${encounterId}/next-turn`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        const data = await response.json();
+        const turnEl = document.getElementById('current-turn');
+        turnEl.textContent = data.current_turn.toUpperCase();
+        turnEl.style.color = data.current_turn === 'player' ? 'var(--lcars-green)' : 'var(--lcars-red)';
+
+        if (data.current_turn === 'player') {
+            document.querySelector('header h1').textContent =
+                `{{ encounter.name }} - Round ${data.round}`;
+        }
+    }
+
+    function selectAction(name, type, difficulty) {
+        currentAction = {name, type, difficulty};
+
+        if (name === 'Fire') {
+            // Show fire panel, hide dice panel
+            document.getElementById('fire-panel').style.display = 'block';
+            document.getElementById('dice-panel').style.display = 'none';
+            document.getElementById('fire-results').style.display = 'none';
+            updateFireDetails();
+        } else {
+            // Show dice panel, hide fire panel
+            document.getElementById('fire-panel').style.display = 'none';
+            document.getElementById('dice-panel').style.display = 'block';
+            document.getElementById('current-action-display').style.display = 'block';
+            document.getElementById('current-action-name').textContent = `${name} (${type}, Difficulty ${difficulty})`;
+            document.getElementById('roll-diff').value = difficulty;
+        }
+
+        // Scroll to action panel
+        document.getElementById('fire-panel').scrollIntoView({behavior: 'smooth'});
+    }
+
+    function cancelAction() {
+        currentAction = null;
+        document.getElementById('fire-panel').style.display = 'none';
+        document.getElementById('dice-panel').style.display = 'block';
+        document.getElementById('current-action-display').style.display = 'none';
+    }
+
+    function updateFireDetails() {
+        const weaponSelect = document.getElementById('weapon-select');
+        const selectedOption = weaponSelect.options[weaponSelect.selectedIndex];
+        const baseDamage = parseInt(selectedOption.dataset.damage);
+        const weaponType = selectedOption.dataset.type;
+
+        const totalDamage = baseDamage + weaponsBonus;
+        const difficulty = weaponType === 'torpedo' ? 3 : 2;
+
+        document.getElementById('fire-damage').textContent = totalDamage;
+        document.getElementById('fire-difficulty').textContent = difficulty;
+    }
+
+    // Update damage display when weapon changes
+    document.getElementById('weapon-select').addEventListener('change', updateFireDetails);
+
+    async function executeFireAction() {
+        const weaponSelect = document.getElementById('weapon-select');
+        const targetSelect = document.getElementById('target-select');
+        const selectedWeapon = weaponSelect.options[weaponSelect.selectedIndex];
+        const targetIndex = parseInt(targetSelect.value);
+
+        const baseDamage = parseInt(selectedWeapon.dataset.damage);
+        const weaponType = selectedWeapon.dataset.type;
+        const difficulty = weaponType === 'torpedo' ? 3 : 2;
+        const focus = document.getElementById('fire-focus').checked;
+        const bonusDice = parseInt(document.getElementById('fire-bonus').value) || 0;
+
+        // Roll the attack
+        const response = await fetch('/api/fire', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                encounter_id: encounterId,
+                weapon_index: parseInt(weaponSelect.value),
+                target_index: targetIndex,
+                attribute: playerAttrs.control,
+                discipline: playerDiscs.security,
+                difficulty: difficulty,
+                focus: focus,
+                bonus_dice: bonusDice
+            })
+        });
+        const data = await response.json();
+
+        // Display results
+        const resultsDiv = document.getElementById('fire-results');
+        resultsDiv.style.display = 'block';
+
+        // Build dice display
+        const diceHtml = data.rolls.map(roll => {
+            let cls = 'dice-fail';
+            if (roll === 1 || (focus && roll <= playerDiscs.security)) {
+                cls = 'dice-crit';
+            } else if (roll <= data.target_number) {
+                cls = 'dice-success';
+            } else if (roll === 20) {
+                cls = 'dice-complication';
+            }
+            return `<span class="dice-result ${cls}">${roll}</span>`;
+        }).join('');
+
+        let html = `<h3>Attack Roll</h3><div>${diceHtml}</div>`;
+        html += `<p>${data.successes} successes vs Difficulty ${difficulty}</p>`;
+
+        if (data.complications > 0) {
+            html += `<p style="color: var(--lcars-red);">${data.complications} complication(s)!</p>`;
+        }
+
+        if (data.succeeded) {
+            html += `<div class="alert alert-success"><strong>HIT!</strong></div>`;
+            html += `<div class="damage-report">`;
+            html += `<h4>Damage Report</h4>`;
+            html += `<p>Total Damage: ${data.total_damage}</p>`;
+            html += `<p>Shield Damage: ${data.shield_damage}</p>`;
+            if (data.hull_damage > 0) {
+                html += `<p style="color: var(--lcars-red);">Hull Damage: ${data.hull_damage}</p>`;
+            }
+            html += `<p>Target Shields: ${data.target_shields_remaining}</p>`;
+            if (data.breach_caused) {
+                html += `<p style="color: var(--lcars-red); font-weight: bold;">BREACH! System hit: ${data.system_hit.toUpperCase()}</p>`;
+            }
+            html += `</div>`;
+
+            // Update momentum if any generated
+            if (data.momentum_generated > 0) {
+                html += `<p style="color: var(--lcars-blue);">+${data.momentum_generated} Momentum generated</p>`;
+                document.getElementById('momentum').textContent = data.new_momentum;
+            }
+
+            // Update enemy ship display
+            updateEnemyShipDisplay(targetIndex, data);
+        } else {
+            html += `<div class="alert alert-danger"><strong>MISS!</strong></div>`;
+        }
+
+        resultsDiv.innerHTML = html;
+    }
+
+    function updateEnemyShipDisplay(targetIndex, data) {
+        const enemyPanels = document.querySelectorAll('.enemy-ship');
+        if (enemyPanels[targetIndex]) {
+            const panel = enemyPanels[targetIndex];
+
+            // Update shields
+            const shieldsSpan = panel.querySelector('.enemy-shields');
+            const shieldsBar = panel.querySelector('.enemy-shields-bar');
+            if (shieldsSpan && data.target_shields_remaining !== undefined) {
+                const maxShields = parseInt(shieldsSpan.textContent.split('/')[1]);
+                shieldsSpan.textContent = `${data.target_shields_remaining} / ${maxShields}`;
+                shieldsBar.style.width = `${(data.target_shields_remaining / maxShields) * 100}%`;
+            }
+
+            // Update breaches if any
+            if (data.breach_caused && data.system_hit) {
+                const systemRow = panel.querySelector(`[data-system="${data.system_hit}"]`);
+                if (systemRow) {
+                    systemRow.classList.add('breached');
+                    const indicator = systemRow.querySelector('.breach-indicator');
+                    const countSpan = systemRow.querySelector('.breach-count');
+                    if (indicator && countSpan) {
+                        indicator.style.display = 'inline';
+                        countSpan.textContent = parseInt(countSpan.textContent || 0) + 1;
+                    }
+                }
+            }
+        }
+    }
+
+    async function rollDice() {
+        const attr = parseInt(document.getElementById('roll-attr').value);
+        const disc = parseInt(document.getElementById('roll-disc').value);
+        const diff = parseInt(document.getElementById('roll-diff').value);
+        const bonus = parseInt(document.getElementById('roll-bonus').value);
+        const focus = document.getElementById('roll-focus').checked;
+
+        const response = await fetch('/api/roll', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                attribute: attr,
+                discipline: disc,
+                difficulty: diff,
+                bonus_dice: bonus,
+                focus: focus
+            })
+        });
+        const data = await response.json();
+
+        document.getElementById('dice-results').style.display = 'block';
+
+        const diceDisplay = document.getElementById('dice-display');
+        diceDisplay.innerHTML = data.rolls.map(roll => {
+            let cls = 'dice-fail';
+            if (roll === 1 || (focus && roll <= disc)) {
+                cls = 'dice-crit';
+            } else if (roll <= data.target_number) {
+                cls = 'dice-success';
+            } else if (roll === 20) {
+                cls = 'dice-complication';
+            }
+            return `<span class="dice-result ${cls}">${roll}</span>`;
+        }).join('');
+
+        const summary = document.getElementById('dice-summary');
+        const resultClass = data.succeeded ? 'alert-success' : 'alert-danger';
+        summary.innerHTML = `
+            <div class="alert ${resultClass}">
+                <strong>${data.succeeded ? 'SUCCESS!' : 'FAILURE'}</strong><br>
+                ${data.successes} successes vs Difficulty ${data.difficulty}<br>
+                ${data.complications > 0 ? `<span style="color: darkred;">${data.complications} complication(s)!</span><br>` : ''}
+                ${data.succeeded && data.momentum_generated > 0 ? `+${data.momentum_generated} Momentum generated` : ''}
+            </div>
+        `;
+    }
+</script>
+{% endblock %}

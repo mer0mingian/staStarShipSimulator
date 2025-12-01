@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}STA Starship Simulator{% endblock %}</title>
+    <style>
+        :root {
+            --lcars-orange: #ff9900;
+            --lcars-blue: #9999ff;
+            --lcars-purple: #cc99cc;
+            --lcars-tan: #cc9966;
+            --lcars-red: #cc6666;
+            --lcars-green: #99cc99;
+            --lcars-bg: #000000;
+            --lcars-text: #ff9900;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--lcars-bg);
+            color: var(--lcars-text);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: var(--lcars-purple);
+            color: black;
+            padding: 10px 20px;
+            border-radius: 20px 20px 0 0;
+            margin-bottom: 20px;
+        }
+
+        header h1 {
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .panel {
+            background: #1a1a1a;
+            border: 2px solid var(--lcars-orange);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .panel h2 {
+            color: var(--lcars-blue);
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: var(--lcars-orange);
+            color: black;
+            text-decoration: none;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            background: var(--lcars-blue);
+        }
+
+        .btn-small {
+            padding: 5px 15px;
+            font-size: 0.9em;
+        }
+
+        .btn-danger {
+            background: var(--lcars-red);
+        }
+
+        .btn-success {
+            background: var(--lcars-green);
+        }
+
+        input, select {
+            background: #333;
+            border: 1px solid var(--lcars-orange);
+            color: var(--lcars-text);
+            padding: 8px 12px;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--lcars-blue);
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--lcars-tan);
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .stat-value {
+            color: var(--lcars-blue);
+            font-weight: bold;
+        }
+
+        .resource-pool {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #222;
+            border-radius: 10px;
+            margin: 5px 0;
+        }
+
+        .resource-pool .value {
+            font-size: 2em;
+            font-weight: bold;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .momentum .value { color: var(--lcars-blue); }
+        .threat .value { color: var(--lcars-red); }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .action-list {
+            list-style: none;
+        }
+
+        .action-list li {
+            padding: 8px;
+            margin: 5px 0;
+            background: #222;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .action-list li:hover {
+            background: #333;
+            border-left: 3px solid var(--lcars-orange);
+        }
+
+        .action-list .action-type {
+            font-size: 0.8em;
+            color: var(--lcars-tan);
+        }
+
+        .shields-bar {
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 5px 0;
+        }
+
+        .shields-bar .fill {
+            height: 100%;
+            background: var(--lcars-blue);
+            transition: width 0.3s;
+        }
+
+        .alert {
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+
+        .alert-success { background: var(--lcars-green); color: black; }
+        .alert-danger { background: var(--lcars-red); color: black; }
+        .alert-info { background: var(--lcars-blue); color: black; }
+
+        .dice-result {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            line-height: 40px;
+            text-align: center;
+            border-radius: 5px;
+            margin: 2px;
+            font-weight: bold;
+        }
+
+        .dice-success { background: var(--lcars-green); color: black; }
+        .dice-crit { background: var(--lcars-blue); color: black; }
+        .dice-fail { background: #333; }
+        .dice-complication { background: var(--lcars-red); color: black; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>{% block header %}STA Starship Simulator{% endblock %}</h1>
+        </header>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
