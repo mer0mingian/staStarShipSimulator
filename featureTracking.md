@@ -15,11 +15,14 @@ The purpose of the alpha release is to test out the core mechanics for firing an
 - [ ] finalize core stations (mechanics for each action type, making sure ship states are affected)
 	- [ ] tactical (PRIORITY)
 		- [x] Fire (attack with weapon - DONE)
-		- [RFT] Calibrate Weapons (minor - next attack damage +1)
+		- [x] Calibrate Weapons (minor - next attack damage +1)
 		- [ ] Prepare (minor - raise/lower shields, arm/disarm weapons)
 		- [RFT] Targeting Solution (minor - next attack can re-roll or choose system hit)
+			- [ ] BUG: does not actually let the player re-roll any die
 		- [ ] Defensive Fire (opposed roll, spend 2 Momentum to counterattack)
 		- [RFT] Modulate Shields (task roll - Resistance +2 until next turn)
+			- [ ] BUG: resistance did not take effect
+			- [ ] tweak: should be a difficulty of 1
 		- [ ] Tractor Beam (Control + Security, immobilize target at Close range)
 	- [ ] engineering
 		- [RFT] Damage Control (Presence + Engineering, Difficulty 2 + potency, patch breach)
