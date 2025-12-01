@@ -240,6 +240,9 @@ class EncounterRecord(Base):
     current_turn: Mapped[str] = mapped_column(String(20), default="player")
     is_active: Mapped[bool] = mapped_column(default=True)
 
+    # Active effects (tactical actions)
+    calibrate_weapons_active: Mapped[bool] = mapped_column(default=False)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 

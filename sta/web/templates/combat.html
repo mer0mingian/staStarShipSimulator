@@ -443,6 +443,9 @@
             document.getElementById('dice-panel').style.display = 'none';
             document.getElementById('fire-results').style.display = 'none';
             updateFireDetails();
+        } else if (name === 'Calibrate Weapons') {
+            // Execute calibrate weapons immediately (no roll required)
+            executeCalibrateWeapons();
         } else {
             // Show dice panel, hide fire panel
             document.getElementById('fire-panel').style.display = 'none';
@@ -461,6 +464,28 @@
         document.getElementById('fire-panel').style.display = 'none';
         document.getElementById('dice-panel').style.display = 'block';
         document.getElementById('current-action-display').style.display = 'none';
+    }
+
+    async function executeCalibrateWeapons() {
+        const response = await fetch(`/api/encounter/${encounterId}/calibrate-weapons`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            // Show success message in dice results
+            const resultsDiv = document.getElementById('dice-results');
+            const displayDiv = document.getElementById('dice-display');
+            resultsDiv.style.display = 'block';
+            displayDiv.innerHTML = `
+                <div class="alert alert-success" style="padding: 15px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                    <strong>WEAPONS CALIBRATED</strong>
+                    <p style="margin-top: 10px;">${data.message}</p>
+                </div>
+            `;
+            document.getElementById('dice-summary').innerHTML = '';
+        }
     }
 
     function updateFireDetails() {
@@ -562,7 +587,11 @@
             html += `<div class="alert alert-success"><strong>HIT!</strong></div>`;
             html += `<div class="damage-report">`;
             html += `<h4>Damage Report</h4>`;
-            html += `<p>Base Damage: ${data.base_damage}</p>`;
+            html += `<p>Base Damage: ${data.base_damage}`;
+            if (data.calibrate_bonus > 0) {
+                html += ` <span style="color: var(--lcars-green);">(+${data.calibrate_bonus} Calibrated)</span>`;
+            }
+            html += `</p>`;
             if (data.resistance_reduction > 0) {
                 html += `<p style="color: var(--lcars-tan);">Resistance (${data.target_resistance}): -${data.resistance_reduction}</p>`;
             }

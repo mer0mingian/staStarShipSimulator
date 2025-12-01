@@ -262,6 +262,14 @@ def fire_weapon():
 
             base_damage = weapon.damage + player_ship.weapons_damage_bonus()
 
+            # Check for Calibrate Weapons bonus (+1 damage)
+            calibrate_bonus = 0
+            if encounter.calibrate_weapons_active:
+                calibrate_bonus = 1
+                base_damage += calibrate_bonus
+                # Clear the flag after using it
+                encounter.calibrate_weapons_active = False
+
             # Apply resistance (minimum 1 damage remains)
             damage_after_resistance = max(1, base_damage - target_ship.resistance)
 
@@ -328,6 +336,7 @@ def fire_weapon():
 
             response.update({
                 "base_damage": base_damage,
+                "calibrate_bonus": calibrate_bonus,
                 "resistance_reduction": base_damage - damage_after_resistance,
                 "complication_reduction": min(complication_reduction, damage_after_resistance),
                 "total_damage": total_damage,
@@ -355,6 +364,34 @@ def fire_weapon():
             })
 
         return jsonify(response)
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/calibrate-weapons", methods=["POST"])
+def calibrate_weapons(encounter_id: str):
+    """Execute Calibrate Weapons minor action.
+
+    Sets a flag that gives +1 damage to the next attack.
+    """
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Set the calibrate weapons flag
+        encounter.calibrate_weapons_active = True
+        session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Weapons calibrated. Next attack: +1 damage.",
+            "calibrate_weapons_active": True,
+        })
     finally:
         session.close()
 
