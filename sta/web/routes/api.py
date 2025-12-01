@@ -2,9 +2,17 @@
 
 import json
 from flask import Blueprint, request, jsonify
-from sta.database import get_session, EncounterRecord, StarshipRecord
+from sta.database import get_session, EncounterRecord, StarshipRecord, CharacterRecord
 from sta.mechanics import task_roll, assisted_task_roll
 from sta.models.enums import SystemType
+from sta.models.combat import ActiveEffect
+from sta.mechanics.action_handlers import (
+    execute_buff_action,
+    execute_task_roll_action,
+    check_action_requirements,
+    apply_effects_to_attack,
+)
+from sta.mechanics.action_config import get_action_config, is_buff_action, is_task_roll_action
 
 api_bp = Blueprint("api", __name__)
 
@@ -256,19 +264,30 @@ def fire_weapon():
         if result.succeeded:
             # Calculate damage per STA 2e rules:
             # 1. Determine base damage
-            # 2. Apply Resistance (minimum 1 damage)
-            # 3. Complications reduce damage by 1 each
-            # 4. Apply to shields, then hull
+            # 2. Apply active effects (buffs)
+            # 3. Apply Resistance (minimum 1 damage)
+            # 4. Complications reduce damage by 1 each
+            # 5. Apply to shields, then hull
 
-            base_damage = weapon.damage + player_ship.weapons_damage_bonus()
+            base_damage_raw = weapon.damage + player_ship.weapons_damage_bonus()
 
-            # Check for Calibrate Weapons bonus (+1 damage)
-            calibrate_bonus = 0
-            if encounter.calibrate_weapons_active:
-                calibrate_bonus = 1
-                base_damage += calibrate_bonus
-                # Clear the flag after using it
-                encounter.calibrate_weapons_active = False
+            # Load active effects from database and apply them
+            active_effects_data = json.loads(encounter.active_effects_json)
+            active_effects = [ActiveEffect.from_dict(e) for e in active_effects_data]
+
+            from sta.models.combat import Encounter as EncounterModel
+            encounter_model = EncounterModel(
+                id=encounter.encounter_id,
+                active_effects=active_effects,
+            )
+
+            # Apply active effects to attack
+            base_damage, cleared_effects, effect_details = apply_effects_to_attack(
+                encounter_model, base_damage_raw, target_ship.resistance
+            )
+
+            # Save cleared effects back to database
+            encounter.active_effects_json = json.dumps([e.to_dict() for e in encounter_model.active_effects])
 
             # Apply resistance (minimum 1 damage remains)
             damage_after_resistance = max(1, base_damage - target_ship.resistance)
@@ -336,7 +355,8 @@ def fire_weapon():
 
             response.update({
                 "base_damage": base_damage,
-                "calibrate_bonus": calibrate_bonus,
+                "damage_bonus": effect_details.get("total_damage_bonus", 0),
+                "effects_applied": effect_details.get("effects_applied", []),
                 "resistance_reduction": base_damage - damage_after_resistance,
                 "complication_reduction": min(complication_reduction, damage_after_resistance),
                 "total_damage": total_damage,
@@ -368,30 +388,116 @@ def fire_weapon():
         session.close()
 
 
-@api_bp.route("/encounter/<encounter_id>/calibrate-weapons", methods=["POST"])
-def calibrate_weapons(encounter_id: str):
-    """Execute Calibrate Weapons minor action.
-
-    Sets a flag that gives +1 damage to the next attack.
+@api_bp.route("/encounter/<encounter_id>/execute-action", methods=["POST"])
+def execute_action(encounter_id: str):
     """
+    Generic action execution endpoint.
+
+    Handles buff actions and task roll actions based on configuration.
+    This replaces individual endpoints for each action.
+
+    Request JSON:
+        action_name: str - Name of the action to execute
+        attribute: int - (For task rolls) Attribute value
+        discipline: int - (For task rolls) Discipline value
+        difficulty: int - (Optional) Override difficulty
+        focus: bool - (Optional) Whether focus applies
+        bonus_dice: int - (Optional) Number of bonus dice
+
+    Returns:
+        JSON with success, message, and action results
+    """
+    data = request.json
+    action_name = data.get("action_name")
+
+    if not action_name:
+        return jsonify({"error": "action_name required"}), 400
+
+    config = get_action_config(action_name)
+    if not config:
+        return jsonify({"error": f"Unknown action: {action_name}"}), 400
+
     session = get_session()
     try:
-        encounter = session.query(EncounterRecord).filter_by(
+        # Load encounter
+        encounter_record = session.query(EncounterRecord).filter_by(
             encounter_id=encounter_id
         ).first()
 
-        if not encounter:
+        if not encounter_record:
             return jsonify({"error": "Encounter not found"}), 404
 
-        # Set the calibrate weapons flag
-        encounter.calibrate_weapons_active = True
+        # Load player ship
+        player_ship_record = session.query(StarshipRecord).filter_by(
+            id=encounter_record.player_ship_id
+        ).first()
+        if not player_ship_record:
+            return jsonify({"error": "Player ship not found"}), 404
+        player_ship = player_ship_record.to_model()
+
+        # Load player character (if needed for task rolls)
+        character = None
+        if encounter_record.player_character_id:
+            char_record = session.query(CharacterRecord).filter_by(
+                id=encounter_record.player_character_id
+            ).first()
+            if char_record:
+                character = char_record.to_model()
+
+        # Load active effects from database
+        active_effects_data = json.loads(encounter_record.active_effects_json)
+        active_effects = [ActiveEffect.from_dict(e) for e in active_effects_data]
+
+        # Create encounter model (simplified - we don't need full encounter state)
+        from sta.models.combat import Encounter
+        encounter = Encounter(
+            id=encounter_record.encounter_id,
+            momentum=encounter_record.momentum,
+            threat=encounter_record.threat,
+            round=encounter_record.round,
+            active_effects=active_effects,
+        )
+
+        # Check requirements
+        can_execute, error_msg = check_action_requirements(action_name, encounter, player_ship, config)
+        if not can_execute:
+            return jsonify({"error": error_msg}), 400
+
+        # Execute action based on type
+        if is_buff_action(action_name):
+            result = execute_buff_action(action_name, encounter, config)
+
+        elif is_task_roll_action(action_name):
+            if not character:
+                return jsonify({"error": "Character required for task roll"}), 400
+
+            attribute_value = data.get("attribute", 9)
+            discipline_value = data.get("discipline", 2)
+            focus = data.get("focus", False)
+            bonus_dice = data.get("bonus_dice", 0)
+
+            result = execute_task_roll_action(
+                action_name,
+                encounter,
+                character,
+                player_ship,
+                attribute_value,
+                discipline_value,
+                focus,
+                bonus_dice,
+                config
+            )
+
+        else:
+            return jsonify({"error": f"Action type not implemented: {config.get('type')}"}), 400
+
+        # Save updated state
+        encounter_record.momentum = encounter.momentum
+        encounter_record.active_effects_json = json.dumps([e.to_dict() for e in encounter.active_effects])
         session.commit()
 
-        return jsonify({
-            "success": True,
-            "message": "Weapons calibrated. Next attack: +1 damage.",
-            "calibrate_weapons_active": True,
-        })
+        return jsonify(result.to_dict())
+
     finally:
         session.close()
 
