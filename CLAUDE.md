@@ -104,6 +104,43 @@ Each bridge position has specific minor and major actions available:
 - `featureTracking.md` - **Check this first!** Tracks planned features and current development priorities
 - `starshiprules.md` - Extracted starship combat rules from STA 2e Core Rulebook
 - `STA2e_Core Rulebook_DIGITAL_v1.1.txt` - Full rulebook text (human reference only, DO NOT READ)
+- `ADDING_ACTIONS.md` - **NEW!** Quick guide for adding new actions using the declarative system
+
+## Action Framework (IMPORTANT!)
+
+**The project now uses a declarative, configuration-based system for actions!**
+
+### Why This Matters
+Instead of writing ~100 lines of custom code per action, you can now add actions in **~10 lines of configuration** (30 seconds of work!).
+
+### How to Add New Actions
+
+**For simple buff actions** (instant effects, no roll required):
+1. Add config to `sta/mechanics/action_config.py`
+2. Add action name to `BUFF_ACTIONS` array in `sta/web/templates/combat.html`
+3. Done! (~30 seconds)
+
+**For task roll actions** (require a 2d20 roll):
+1. Add config to `sta/mechanics/action_config.py`
+2. They automatically work with the dice panel - no UI changes needed!
+3. Done! (~30 seconds)
+
+### Key Files
+- `sta/mechanics/action_config.py` - Action configurations (10+ actions already defined)
+- `sta/mechanics/action_handlers.py` - Generic execution handlers
+- `sta/models/combat.py` - ActiveEffect model for tracking buffs
+- `sta/web/routes/api.py` - Generic `/api/encounter/<id>/execute-action` endpoint
+- `ADDING_ACTIONS.md` - Complete developer guide with examples
+
+### Already Configured Actions (RFT)
+These actions are already configured and ready to use:
+- **Tactical**: Calibrate Weapons, Targeting Solution, Modulate Shields
+- **Science**: Calibrate Sensors, Scan For Weakness, Sensor Sweep
+- **Engineering**: Damage Control, Regain Power, Regenerate Shields
+- **Conn**: Attack Pattern, Evasive Action, Maneuver
+- **Command** (Beta): Rally
+
+See `ADDING_ACTIONS.md` for detailed examples and patterns.
 
 ## Development Notes
 
