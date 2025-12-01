@@ -522,6 +522,31 @@
     const shipSecurity = {{ player_ship.departments.security if player_ship else 2 }};
     const shipTargetNumber = shipWeapons + shipSecurity;
 
+    // Store last fire action data for re-rolls
+    let lastFireData = null;
+
+    async function rerollDie(dieIndex) {
+        if (!lastFireData) {
+            alert('No previous roll to re-roll!');
+            return;
+        }
+
+        // Make the same request but with reroll parameters
+        const response = await fetch('/api/fire', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                ...lastFireData,
+                reroll_die_index: dieIndex,
+                previous_rolls: lastFireData.previous_rolls
+            })
+        });
+        const data = await response.json();
+
+        // Display the new results (same as executeFireAction)
+        displayFireResults(data, lastFireData.targetIndex, lastFireData.focus, lastFireData.bonusDice);
+    }
+
     async function executeFireAction() {
         const weaponSelect = document.getElementById('weapon-select');
         const targetSelect = document.getElementById('target-select');
@@ -533,6 +558,20 @@
         const difficulty = weaponType === 'torpedo' ? 3 : 2;
         const focus = document.getElementById('fire-focus').checked;
         const bonusDice = parseInt(document.getElementById('fire-bonus').value) || 0;
+
+        // Store for re-rolls
+        lastFireData = {
+            encounter_id: encounterId,
+            weapon_index: parseInt(weaponSelect.value),
+            target_index: targetIndex,
+            targetIndex: targetIndex,  // For display
+            attribute: playerAttrs.control,
+            discipline: playerDiscs.security,
+            difficulty: difficulty,
+            focus: focus,
+            bonus_dice: bonusDice,
+            bonusDice: bonusDice,  // For display
+        };
 
         // Roll the attack
         const response = await fetch('/api/fire', {
@@ -551,7 +590,14 @@
         });
         const data = await response.json();
 
+        // Store rolls for re-roll
+        lastFireData.previous_rolls = data.rolls;
+
         // Display results
+        displayFireResults(data, targetIndex, focus, bonusDice);
+    }
+
+    function displayFireResults(data, targetIndex, focus, bonusDice) {
         const resultsDiv = document.getElementById('fire-results');
         resultsDiv.style.display = 'block';
 
@@ -561,7 +607,7 @@
         const shipRoll = data.ship_roll;
 
         // Character dice
-        const charDiceHtml = charRolls.map(roll => {
+        const charDiceHtml = charRolls.map((roll, index) => {
             let cls = 'dice-fail';
             if (roll === 1 || (focus && roll <= playerDiscs.security)) {
                 cls = 'dice-crit';
@@ -570,7 +616,14 @@
             } else if (roll === 20) {
                 cls = 'dice-complication';
             }
-            return `<span class="dice-result ${cls}">${roll}</span>`;
+
+            // Add re-roll button if can_reroll is true
+            let rerollBtn = '';
+            if (data.can_reroll && !data.rerolled) {
+                rerollBtn = ` <button class="btn btn-small" onclick="rerollDie(${index})" style="font-size: 0.7em; padding: 2px 6px;">⟳</button>`;
+            }
+
+            return `<span class="dice-result ${cls}">${roll}${rerollBtn}</span>`;
         }).join('');
 
         // Ship assist die (different target number)
@@ -588,6 +641,19 @@
         }
 
         let html = `<h3>Attack Roll</h3>`;
+
+        // Show re-roll message if available
+        if (data.can_reroll && !data.rerolled) {
+            html += `<div class="alert" style="background: #1a3a3a; border: 2px solid var(--lcars-blue); color: var(--lcars-blue); padding: 8px; margin-bottom: 10px;">
+                <strong>TARGETING SOLUTION ACTIVE:</strong> Click ⟳ to re-roll any die
+            </div>`;
+        }
+        if (data.rerolled) {
+            html += `<div class="alert" style="background: #1a3a1a; border: 2px solid var(--lcars-green); color: var(--lcars-green); padding: 8px; margin-bottom: 10px;">
+                <strong>DIE RE-ROLLED</strong> (Targeting Solution consumed)
+            </div>`;
+        }
+
         html += `<div style="margin-bottom: 5px;"><strong>Character:</strong> ${charDiceHtml} (target ≤${data.target_number})</div>`;
         html += `<div style="margin-bottom: 10px;"><strong>Ship Assist:</strong> ${shipDiceHtml} (target ≤${data.ship_target_number})</div>`;
         html += `<p>${data.successes} total successes vs Difficulty ${difficulty}</p>`;
