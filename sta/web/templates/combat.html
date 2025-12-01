@@ -467,9 +467,13 @@
     }
 
     async function executeCalibrateWeapons() {
-        const response = await fetch(`/api/encounter/${encounterId}/calibrate-weapons`, {
+        // Use the generic execute-action endpoint
+        const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'}
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                action_name: 'Calibrate Weapons'
+            })
         });
         const data = await response.json();
 
@@ -480,11 +484,20 @@
             resultsDiv.style.display = 'block';
             displayDiv.innerHTML = `
                 <div class="alert alert-success" style="padding: 15px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
-                    <strong>WEAPONS CALIBRATED</strong>
-                    <p style="margin-top: 10px;">${data.message}</p>
+                    <strong>${data.message.toUpperCase()}</strong>
                 </div>
             `;
             document.getElementById('dice-summary').innerHTML = '';
+        } else {
+            // Show error
+            const resultsDiv = document.getElementById('dice-results');
+            const displayDiv = document.getElementById('dice-display');
+            resultsDiv.style.display = 'block';
+            displayDiv.innerHTML = `
+                <div class="alert alert-error" style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                    <strong>ERROR:</strong> ${data.error || 'Action failed'}
+                </div>
+            `;
         }
     }
 
@@ -588,8 +601,12 @@
             html += `<div class="damage-report">`;
             html += `<h4>Damage Report</h4>`;
             html += `<p>Base Damage: ${data.base_damage}`;
-            if (data.calibrate_bonus > 0) {
-                html += ` <span style="color: var(--lcars-green);">(+${data.calibrate_bonus} Calibrated)</span>`;
+            // Show active effects that were applied
+            if (data.damage_bonus > 0) {
+                html += ` <span style="color: var(--lcars-green);">(+${data.damage_bonus} bonus)</span>`;
+            }
+            if (data.effects_applied && data.effects_applied.length > 0) {
+                html += `<br><small style="color: var(--lcars-green);">${data.effects_applied.join(', ')}</small>`;
             }
             html += `</p>`;
             if (data.resistance_reduction > 0) {
