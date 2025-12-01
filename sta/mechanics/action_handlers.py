@@ -291,3 +291,34 @@ def apply_effects_to_attack(
     cleared = encounter.clear_effects(applies_to="attack", duration="next_action")
 
     return modified_damage, cleared, effect_details
+
+
+def apply_effects_to_defense(
+    encounter: Encounter,
+    base_resistance: int
+) -> tuple[int, list[ActiveEffect], dict[str, Any]]:
+    """
+    Apply active effects to defense and return modified resistance.
+
+    Returns:
+        (modified_resistance, cleared_effects, effect_details)
+    """
+    effects = encounter.get_effects("defense")
+    effect_details = {
+        "total_resistance_bonus": 0,
+        "effects_applied": [],
+    }
+
+    total_bonus = 0
+    for effect in effects:
+        if effect.resistance_bonus > 0:
+            total_bonus += effect.resistance_bonus
+            effect_details["effects_applied"].append(f"+{effect.resistance_bonus} from {effect.source_action}")
+
+    effect_details["total_resistance_bonus"] = total_bonus
+    modified_resistance = base_resistance + total_bonus
+
+    # Don't clear effects here - they typically last until end of turn
+    # and might apply to multiple attacks
+
+    return modified_resistance, [], effect_details

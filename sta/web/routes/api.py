@@ -11,6 +11,7 @@ from sta.mechanics.action_handlers import (
     execute_task_roll_action,
     check_action_requirements,
     apply_effects_to_attack,
+    apply_effects_to_defense,
 )
 from sta.mechanics.action_config import get_action_config, is_buff_action, is_task_roll_action
 
@@ -201,6 +202,8 @@ def fire_weapon():
     difficulty = data.get("difficulty", 2)
     focus = data.get("focus", False)
     bonus_dice = data.get("bonus_dice", 0)
+    reroll_die_index = data.get("reroll_die_index")  # Index of die to re-roll (if any)
+    previous_rolls = data.get("previous_rolls")  # Previous roll results (for re-roll)
 
     session = get_session()
     try:
@@ -235,17 +238,76 @@ def fire_weapon():
             return jsonify({"error": "Invalid weapon"}), 400
         weapon = player_ship.weapons[weapon_index]
 
-        # Perform the ship-assisted attack roll
-        # Character uses Control + Security, ship assists with Weapons + Security
-        result = assisted_task_roll(
-            attribute=attribute,
-            discipline=discipline,
-            system=player_ship.systems.weapons,
-            department=player_ship.departments.security,
-            difficulty=difficulty,
-            focus=focus,
-            bonus_dice=bonus_dice
+        # Load active effects to check for can_reroll
+        active_effects_data = json.loads(encounter.active_effects_json)
+        active_effects = [ActiveEffect.from_dict(e) for e in active_effects_data]
+        from sta.models.combat import Encounter as EncounterModel
+        encounter_model = EncounterModel(
+            id=encounter.encounter_id,
+            active_effects=active_effects,
         )
+
+        # Check if we can re-roll (Targeting Solution effect)
+        attack_effects = encounter_model.get_effects("attack")
+        can_reroll = any(e.can_reroll for e in attack_effects)
+        can_choose_system = any(e.can_choose_system for e in attack_effects)
+
+        # Handle re-roll if requested
+        rerolled = False
+        if reroll_die_index is not None and previous_rolls is not None and can_reroll:
+            # Re-roll the specified die
+            if 0 <= reroll_die_index < len(previous_rolls):
+                result = assisted_task_roll(
+                    attribute=attribute,
+                    discipline=discipline,
+                    system=player_ship.systems.weapons,
+                    department=player_ship.departments.security,
+                    difficulty=difficulty,
+                    focus=focus,
+                    bonus_dice=bonus_dice
+                )
+                # Use previous rolls but replace one die
+                result.rolls = previous_rolls.copy()
+                result.rolls[reroll_die_index] = random.randint(1, 20)
+
+                # Recalculate successes with the new roll
+                successes = 0
+                complications = 0
+                for roll in result.rolls:
+                    if roll == 1:
+                        successes += 2  # Critical success
+                    elif roll <= result.target_number:
+                        successes += 1
+                    elif focus and roll <= discipline:
+                        successes += 1  # Focus applies
+                    if roll == 20:
+                        complications += 1
+
+                # Ship assist die is not re-rolled
+                if result.ship_successes:
+                    successes += result.ship_successes
+
+                result.successes = successes
+                result.complications = complications
+                result.succeeded = successes >= difficulty
+                result.momentum_generated = max(0, successes - difficulty) if result.succeeded else 0
+
+                # Consume the can_reroll effect
+                encounter_model.clear_effects(applies_to="attack", duration="next_action")
+                rerolled = True
+            else:
+                return jsonify({"error": "Invalid reroll_die_index"}), 400
+        else:
+            # Normal roll (no re-roll)
+            result = assisted_task_roll(
+                attribute=attribute,
+                discipline=discipline,
+                system=player_ship.systems.weapons,
+                department=player_ship.departments.security,
+                difficulty=difficulty,
+                focus=focus,
+                bonus_dice=bonus_dice
+            )
 
         response = {
             "rolls": result.rolls,
@@ -259,6 +321,9 @@ def fire_weapon():
             "ship_target_number": result.ship_target_number,
             "ship_roll": result.ship_roll,
             "ship_successes": result.ship_successes,
+            # Re-roll support
+            "can_reroll": can_reroll and not rerolled,  # Can only re-roll once
+            "rerolled": rerolled,
         }
 
         if result.succeeded:
@@ -271,26 +336,21 @@ def fire_weapon():
 
             base_damage_raw = weapon.damage + player_ship.weapons_damage_bonus()
 
-            # Load active effects from database and apply them
-            active_effects_data = json.loads(encounter.active_effects_json)
-            active_effects = [ActiveEffect.from_dict(e) for e in active_effects_data]
-
-            from sta.models.combat import Encounter as EncounterModel
-            encounter_model = EncounterModel(
-                id=encounter.encounter_id,
-                active_effects=active_effects,
-            )
-
             # Apply active effects to attack
             base_damage, cleared_effects, effect_details = apply_effects_to_attack(
                 encounter_model, base_damage_raw, target_ship.resistance
+            )
+
+            # Apply defensive effects to target's resistance
+            effective_resistance, _, defense_details = apply_effects_to_defense(
+                encounter_model, target_ship.resistance
             )
 
             # Save cleared effects back to database
             encounter.active_effects_json = json.dumps([e.to_dict() for e in encounter_model.active_effects])
 
             # Apply resistance (minimum 1 damage remains)
-            damage_after_resistance = max(1, base_damage - target_ship.resistance)
+            damage_after_resistance = max(1, base_damage - effective_resistance)
 
             # Complications reduce damage by 1 each
             complication_reduction = result.complications
@@ -364,6 +424,9 @@ def fire_weapon():
                 "hull_damage": hull_damage,
                 "target_shields_remaining": target_ship.shields,
                 "target_resistance": target_ship.resistance,
+                "target_resistance_bonus": defense_details.get("total_resistance_bonus", 0),
+                "effective_resistance": effective_resistance,
+                "defense_effects_applied": defense_details.get("effects_applied", []),
                 "breaches_caused": breaches_caused,
                 "systems_hit": systems_hit,
                 "new_momentum": encounter.momentum,
