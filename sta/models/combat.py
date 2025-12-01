@@ -62,6 +62,7 @@ class ShipCombatant:
     major_actions_used: int = 0
     evasive_action_active: bool = False
     attack_pattern_active: bool = False
+    calibrate_weapons_active: bool = False
 
     @property
     def minor_actions_remaining(self) -> int:
