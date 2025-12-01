@@ -13,9 +13,14 @@ The purpose of the alpha release is to test out the core mechanics for firing an
 	- [x] get breaches working right!
 		- [x] make sure warp core breaches are working
 - [ ] finalize core stations (mechanics for each action type, making sure ship states are affected)
-	- [ ] command
-		- [ ] Direct (spend 1 Momentum, ally takes major action, assist with Control + Command)
-		- [ ] Rally (Presence + Command, Difficulty 0, generate Momentum)
+	- [ ] tactical (PRIORITY)
+		- [x] Fire (attack with weapon - DONE)
+		- [ ] Calibrate Weapons (minor - next attack damage +1)
+		- [ ] Prepare (minor - raise/lower shields, arm/disarm weapons)
+		- [ ] Targeting Solution (minor - next attack can re-roll or choose system hit)
+		- [ ] Defensive Fire (opposed roll, spend 2 Momentum to counterattack)
+		- [ ] Modulate Shields (Resistance +2 until next turn)
+		- [ ] Tractor Beam (Control + Security, immobilize target at Close range)
 	- [ ] engineering
 		- [ ] Damage Control (Presence + Engineering, Difficulty 2 + potency, patch breach)
 		- [ ] Regain Power (Control + Engineering, Difficulty 1+, restore Reserve Power)
@@ -29,14 +34,6 @@ The purpose of the alpha release is to test out the core mechanics for firing an
 		- [ ] Maneuver (Control + Conn, generate Momentum for difficult terrain)
 		- [ ] Ram (Daring + Conn, Difficulty 2, collision damage)
 		- [ ] Warp (requires Reserve Power + Prepare, move zones = Engines or leave battlefield)
-	- [ ] tactical
-		- [x] Fire (attack with weapon - DONE)
-		- [ ] Calibrate Weapons (minor - next attack damage +1)
-		- [ ] Prepare (minor - raise/lower shields, arm/disarm weapons)
-		- [ ] Targeting Solution (minor - next attack can re-roll or choose system hit)
-		- [ ] Defensive Fire (opposed roll, spend 2 Momentum to counterattack)
-		- [ ] Modulate Shields (Resistance +2 until next turn)
-		- [ ] Tractor Beam (Control + Security, immobilize target at Close range)
 	- [ ] science/sensors
 		- [ ] Calibrate Sensors (minor - next sensor action ignores trait or re-rolls 1d20)
 		- [ ] Launch Probe (minor - launch to Long range for remote sensing)
@@ -54,6 +51,9 @@ This release brings in multiple players, as well as a console for the game maste
 
 ## Feature List
 
+- [ ] command station
+	- [ ] Direct (spend 1 Momentum, ally takes major action, assist with Control + Command)
+	- [ ] Rally (Presence + Command, Difficulty 0, generate Momentum)
 - [ ] let game master create starships for encounters
 	- [ ] random starship
 	- [ ] bespoke starship
