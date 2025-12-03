@@ -101,6 +101,8 @@ class Starship:
     resistance: Optional[int] = None
     crew_support: int = 0
     has_reserve_power: bool = True
+    shields_raised: bool = False  # Shields start offline
+    weapons_armed: bool = False  # Weapons start unarmed
     registry: Optional[str] = None
 
     def __post_init__(self):

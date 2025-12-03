@@ -16,13 +16,22 @@ The purpose of the alpha release is to test out the core mechanics for firing an
 	- [ ] tactical (PRIORITY)
 		- [x] Fire (attack with weapon - DONE)
 		- [x] Calibrate Weapons (minor - next attack damage +1)
-		- [ ] Prepare (minor - raise/lower shields, arm/disarm weapons)
-		- [RFT] Targeting Solution (minor - next attack can re-roll or choose system hit)
-			- [RFT] BUG: does not actually let the player re-roll any die
+		- [x] Prepare (minor - raise/lower shields, arm/disarm weapons)
+		- [x] Targeting Solution (minor - next attack can re-roll or choose system hit)
+			- [x] BUG: does not actually let the player re-roll any die
 		- [ ] Defensive Fire (opposed roll, spend 2 Momentum to counterattack)
-		- [RFT] Modulate Shields (task roll - Resistance +2 until next turn)
-			- [RFT] BUG: resistance did not take effect
-			- [RFT] tweak: should be a difficulty of 1
+			- **BLOCKED: Requires GM/Player screen separation (see below)**
+			- Implementation notes:
+				- Player activates with energy weapon selection (like Fire)
+				- Creates ActiveEffect with `duration: "next_turn"`, stores weapon index
+				- Shows `[DEFENSIVE FIRE ACTIVE]` status on ship panel
+				- When enemy attacks (GM triggers), check for Defensive Fire effect
+				- If active: Opposed roll (Daring + Security, assisted by Weapons + Security)
+				- If defender wins: Attack misses, offer 2 Momentum counterattack option
+				- Cannot combine with Evasive Action
+		- [x] Modulate Shields (task roll - Resistance +2 until next turn)
+			- [x] BUG: resistance did not take effect
+			- [x] tweak: should be a difficulty of 1
 		- [ ] Tractor Beam (Control + Security, immobilize target at Close range)
 	- [ ] engineering
 		- [RFT] Damage Control (Presence + Engineering, Difficulty 2 + potency, patch breach)
@@ -43,7 +52,24 @@ The purpose of the alpha release is to test out the core mechanics for firing an
 		- [ ] Reveal (Reason + Science, Difficulty 3, reveal cloaked vessel)
 		- [RFT] Scan For Weakness (Control + Science, Difficulty 2, next attack +2 damage or Piercing)
 		- [RFT] Sensor Sweep (Reason + Science, Difficulty 1, get info on zone)
-- [ ] Switch to game master to fire back at the player ship
+- [ ] **GM/Player Screen Separation (PRIORITY - unblocks Defensive Fire, Evasive Action, etc.)**
+	- [ ] Create separate Player interface (current combat.html, but player-focused)
+		- [ ] Player can only act on their turn
+		- [ ] Shows player's available actions based on their station
+	- [ ] Create Game Master interface
+		- [ ] GM can trigger enemy ship attacks against player ship
+		- [ ] GM can see all ships, momentum, threat
+		- [ ] GM controls when turns advance
+	- [ ] Enemy attack resolution
+		- [ ] GM selects attacking enemy ship and weapon
+		- [ ] System checks for Defensive Fire / Evasive Action effects
+		- [ ] If defensive effect active: Run opposed roll, show results
+		- [ ] If defender wins opposed roll: Offer counterattack option (2 Momentum)
+		- [ ] If attacker wins or no defensive effect: Normal damage resolution
+	- [ ] Turn management
+		- [ ] Prevent players from acting when not their turn
+		- [ ] Show whose turn it is on all screens
+		- [ ] GM can advance turns
 - [ ] Move ships and keep track of relative positions
 - [ ] only let people use extra dice based on actual momentum they have (according to buying rules)
 - [ ] allow players to use full momentum spend action table
@@ -64,12 +90,9 @@ This release brings in multiple players, as well as a console for the game maste
 	- [ ] shows momentum / threat
 	- [ ] shows a map of enemy ships
 	- [ ] shows ship's shields and any breaches
-- [ ] turn management
-	- [ ] prevent players from taking a turn until it's their turn
-	- [ ] show whose turn it is
-		- [ ] player screens
-		- [ ] view screen
-	- [ ] gamemaster can see whose turn it is
+- [ ] multiple player support
+	- [ ] each player has their own screen/station
+	- [ ] players can only see their own actions
 
 
 # Version 1.0 (NOT STARTED)

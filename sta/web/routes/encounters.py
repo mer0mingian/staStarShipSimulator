@@ -130,6 +130,17 @@ def combat(encounter_id: str):
         position = Position(encounter.player_position)
         actions = get_actions_for_position(position)
 
+        # Load active effects
+        from sta.models.combat import ActiveEffect
+        active_effects_data = json.loads(encounter.active_effects_json)
+        active_effects = [ActiveEffect.from_dict(e) for e in active_effects_data]
+
+        # Calculate resistance bonus from active effects
+        resistance_bonus = sum(
+            e.resistance_bonus for e in active_effects
+            if e.applies_to in ("defense", "all") and e.resistance_bonus > 0
+        )
+
         return render_template(
             "combat.html",
             encounter=encounter,
@@ -140,6 +151,8 @@ def combat(encounter_id: str):
             enemy_ship_db_ids=enemy_ship_db_ids,
             position=position,
             actions=actions,
+            active_effects=active_effects,
+            resistance_bonus=resistance_bonus,
         )
     finally:
         session.close()

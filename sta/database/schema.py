@@ -119,6 +119,8 @@ class StarshipRecord(Base):
     shields_max: Mapped[int] = mapped_column(Integer, default=0)
     resistance: Mapped[int] = mapped_column(Integer, default=0)
     has_reserve_power: Mapped[bool] = mapped_column(default=True)
+    shields_raised: Mapped[bool] = mapped_column(default=False)
+    weapons_armed: Mapped[bool] = mapped_column(default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -161,6 +163,8 @@ class StarshipRecord(Base):
             shields_max=self.shields_max,
             resistance=self.resistance,
             has_reserve_power=self.has_reserve_power,
+            shields_raised=self.shields_raised,
+            weapons_armed=self.weapons_armed,
             registry=self.registry,
         )
         return ship
@@ -214,6 +218,8 @@ class StarshipRecord(Base):
             shields_max=ship.shields_max,
             resistance=ship.resistance,
             has_reserve_power=ship.has_reserve_power,
+            shields_raised=ship.shields_raised,
+            weapons_armed=ship.weapons_armed,
         )
 
 

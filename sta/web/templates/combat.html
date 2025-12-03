@@ -117,14 +117,21 @@
         </div>
         <div class="stat-row">
             <span>Shields</span>
-            <span class="stat-value" id="player-shields">{{ player_ship.shields }} / {{ player_ship.shields_max }}</span>
+            <span class="stat-value" id="player-shields">
+                {{ player_ship.shields }} / {{ player_ship.shields_max }}
+                <span id="shields-status" style="margin-left: 8px; font-size: 0.8em; {% if player_ship.shields_raised %}color: var(--lcars-green);{% else %}color: var(--lcars-red);{% endif %}">
+                    [{{ 'ONLINE' if player_ship.shields_raised else 'OFFLINE' }}]
+                </span>
+            </span>
         </div>
         <div class="shields-bar">
-            <div class="fill" id="player-shields-bar" style="width: {{ (player_ship.shields / player_ship.shields_max * 100) | int }}%;"></div>
+            <div class="fill" id="player-shields-bar" style="width: {{ (player_ship.shields / player_ship.shields_max * 100) | int }}%;{% if not player_ship.shields_raised %} background: var(--lcars-red);{% endif %}"></div>
         </div>
         <div class="stat-row">
             <span>Resistance</span>
-            <span class="stat-value">{{ player_ship.resistance }}</span>
+            <span class="stat-value" id="player-resistance">
+                {{ player_ship.resistance }}{% if resistance_bonus > 0 %} <span style="color: var(--lcars-green);">(+{{ resistance_bonus }})</span>{% endif %}
+            </span>
         </div>
 
         <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">SYSTEMS</h3>
@@ -152,7 +159,12 @@
             <div class="stat-row"><span>Security</span><span class="stat-value">{{ player_ship.departments.security }}</span></div>
         </div>
 
-        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">WEAPONS</h3>
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">
+            WEAPONS
+            <span id="weapons-status" style="margin-left: 10px; {% if player_ship.weapons_armed %}color: var(--lcars-orange);{% else %}color: var(--lcars-red);{% endif %}">
+                [{{ 'ARMED' if player_ship.weapons_armed else 'STANDBY' }}]
+            </span>
+        </h3>
         {% for weapon in player_ship.weapons %}
         <div class="stat-row">
             <span>{{ weapon.name }}</span>
@@ -219,13 +231,61 @@
 </div>
 
 <!-- Actions Panel -->
+<div style="margin-bottom: 10px; padding: 8px; background: #1a1a1a; border-radius: 5px; font-size: 0.85em;">
+    <strong>Status Legend:</strong>
+    <span class="status-badge status-done">DONE</span> Implemented & Tested
+    <span class="status-badge status-rft">RFT</span> Ready For Testing
+    <span class="status-badge status-not-impl">TODO</span> Not Yet Implemented
+</div>
 <div class="grid">
     <div class="panel">
         <h2>Minor Actions</h2>
+
+        {% if actions.position_minor %}
+        <h3 style="color: var(--lcars-orange); font-size: 0.9em; margin: 10px 0 5px 0;">{{ actions.position_name }} Specific</h3>
         <ul class="action-list">
-            {% for action in actions.minor %}
-            <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})">
+            {% for action in actions.position_minor %}
+            {% if action.name == 'Raise/Lower Shields' %}
+            <li id="shields-action-btn" onclick="toggleShields()" class="">
+                <strong>{{ 'Lower Shields' if player_ship.shields_raised else 'Raise Shields' }}</strong>
+                <span class="status-badge status-done">DONE</span>
+                <div class="action-type">{{ action.description[:80] }}...</div>
+            </li>
+            {% elif action.name == 'Arm/Disarm Weapons' %}
+            <li id="weapons-action-btn" onclick="toggleWeapons()" class="">
+                <strong>{{ 'Disarm Weapons' if player_ship.weapons_armed else 'Arm Weapons' }}</strong>
+                <span class="status-badge status-done">DONE</span>
+                <div class="action-type">{{ action.description[:80] }}...</div>
+            </li>
+            {% else %}
+            <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})" class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                 <strong>{{ action.name }}</strong>
+                {% if action.status == 'DONE' %}
+                <span class="status-badge status-done">DONE</span>
+                {% elif action.status == 'RFT' %}
+                <span class="status-badge status-rft">RFT</span>
+                {% else %}
+                <span class="status-badge status-not-impl">TODO</span>
+                {% endif %}
+                <div class="action-type">{{ action.description[:80] }}...</div>
+            </li>
+            {% endif %}
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        <h3 style="color: var(--lcars-tan); font-size: 0.9em; margin: 10px 0 5px 0;">Standard</h3>
+        <ul class="action-list">
+            {% for action in actions.standard_minor %}
+            <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})" class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
+                <strong>{{ action.name }}</strong>
+                {% if action.status == 'DONE' %}
+                <span class="status-badge status-done">DONE</span>
+                {% elif action.status == 'RFT' %}
+                <span class="status-badge status-rft">RFT</span>
+                {% else %}
+                <span class="status-badge status-not-impl">TODO</span>
+                {% endif %}
                 <div class="action-type">{{ action.description[:80] }}...</div>
             </li>
             {% endfor %}
@@ -234,10 +294,41 @@
 
     <div class="panel">
         <h2>Major Actions</h2>
+
+        {% if actions.position_major %}
+        <h3 style="color: var(--lcars-orange); font-size: 0.9em; margin: 10px 0 5px 0;">{{ actions.position_name }} Specific</h3>
         <ul class="action-list">
-            {% for action in actions.major %}
-            <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})" class="{% if action.name == 'Fire' %}fire-action{% endif %}">
+            {% for action in actions.position_major %}
+            <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})" class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                 <strong>{{ action.name }}</strong>
+                {% if action.status == 'DONE' %}
+                <span class="status-badge status-done">DONE</span>
+                {% elif action.status == 'RFT' %}
+                <span class="status-badge status-rft">RFT</span>
+                {% else %}
+                <span class="status-badge status-not-impl">TODO</span>
+                {% endif %}
+                {% if action.difficulty > 0 %}
+                <span style="color: var(--lcars-tan);">(Diff {{ action.difficulty }})</span>
+                {% endif %}
+                <div class="action-type">{{ action.description[:80] }}...</div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        <h3 style="color: var(--lcars-tan); font-size: 0.9em; margin: 10px 0 5px 0;">Standard</h3>
+        <ul class="action-list">
+            {% for action in actions.standard_major %}
+            <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})" class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
+                <strong>{{ action.name }}</strong>
+                {% if action.status == 'DONE' %}
+                <span class="status-badge status-done">DONE</span>
+                {% elif action.status == 'RFT' %}
+                <span class="status-badge status-rft">RFT</span>
+                {% else %}
+                <span class="status-badge status-not-impl">TODO</span>
+                {% endif %}
                 {% if action.difficulty > 0 %}
                 <span style="color: var(--lcars-tan);">(Diff {{ action.difficulty }})</span>
                 {% endif %}
@@ -248,9 +339,35 @@
     </div>
 </div>
 
+<!-- Selected Actions Summary -->
+<div class="panel" id="selection-summary" style="display: none; border-color: var(--lcars-blue);">
+    <h2 style="color: var(--lcars-blue);">SELECTED ACTIONS</h2>
+    <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div>
+            <strong style="color: var(--lcars-tan);">Minor Action:</strong>
+            <div id="summary-minor" style="padding: 8px; background: #222; border-radius: 5px; margin-top: 5px;">
+                <span style="color: #666;">None selected</span>
+            </div>
+        </div>
+        <div>
+            <strong style="color: var(--lcars-tan);">Major Action:</strong>
+            <div id="summary-major" style="padding: 8px; background: #222; border-radius: 5px; margin-top: 5px;">
+                <span style="color: #666;">None selected</span>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Fire Action Panel (hidden by default) -->
 <div class="panel" id="fire-panel" style="display: none; border-color: var(--lcars-red);">
     <h2 style="color: var(--lcars-red);">FIRE WEAPONS</h2>
+
+    <!-- Active Minor Action Banner -->
+    <div id="fire-minor-action-banner" style="display: none; margin-bottom: 15px; padding: 10px; background: #1a3a3a; border: 2px solid var(--lcars-blue); border-radius: 5px;">
+        <strong style="color: var(--lcars-blue);">MINOR ACTION ACTIVE:</strong>
+        <span id="fire-minor-action-name" style="color: var(--lcars-green);"></span>
+        <div id="fire-minor-action-effects" style="font-size: 0.9em; margin-top: 5px; color: var(--lcars-tan);"></div>
+    </div>
 
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
         <div>
@@ -273,6 +390,21 @@
                 <option value="{{ loop.index0 }}">{{ enemy.name }}</option>
                 {% endfor %}
             </select>
+        </div>
+    </div>
+
+    <!-- Targeting Solution Info (only visible when Targeting Solution is active) -->
+    <div id="targeting-solution-panel" style="display: none; margin-top: 15px; padding: 10px; background: #1a2a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+        <strong style="color: var(--lcars-green);">🎯 TARGETING SOLUTION ACTIVE</strong>
+        <div style="margin-top: 8px; font-size: 0.9em; color: var(--lcars-tan);">
+            After rolling, you may choose ONE benefit:
+            <ul style="margin: 5px 0 0 20px;">
+                <li><strong>Re-roll 1d20</strong> - Click ⟳ on any die to re-roll it</li>
+                <li><strong>Choose System</strong> - If you cause a breach, pick which system is hit</li>
+            </ul>
+            <div style="margin-top: 8px; color: var(--lcars-orange);">
+                ⚠ Using re-roll consumes Targeting Solution (no system choice)
+            </div>
         </div>
     </div>
 
@@ -302,26 +434,26 @@
     <div id="fire-results" style="margin-top: 15px; display: none;"></div>
 </div>
 
-<!-- Generic Dice Roller (for non-Fire actions) -->
-<div class="panel" id="dice-panel">
+<!-- Generic Dice Roller (for non-Fire actions) - hidden until major action selected -->
+<div class="panel" id="dice-panel" style="display: none;">
     <h2>Dice Roller</h2>
     <div id="current-action-display" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px; display: none;">
         <strong>Current Action:</strong> <span id="current-action-name"></span>
     </div>
 
+    <!-- Roll details from action config (read-only) -->
+    <div id="roll-details" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px;">
+        <p><strong>Character Roll (2d20):</strong> <span id="roll-attr-name">Control</span> (<span id="roll-attr-value">9</span>) + <span id="roll-disc-name">Engineering</span> (<span id="roll-disc-value">2</span>) = Target <span id="roll-target">11</span></p>
+        <p id="ship-assist-row" style="display: none;"><strong>Ship Assist (1d20):</strong> <span id="ship-assist-system-name">Structure</span> (<span id="ship-assist-system-value">7</span>) + <span id="ship-assist-dept-name">Engineering</span> (<span id="ship-assist-dept-value">2</span>) = Target <span id="ship-assist-target">9</span></p>
+        <p><strong>Difficulty:</strong> <span id="roll-diff-display">1</span></p>
+    </div>
+
+    <!-- Hidden inputs to store actual values -->
+    <input type="hidden" id="roll-attr" value="9">
+    <input type="hidden" id="roll-disc" value="2">
+    <input type="hidden" id="roll-diff" value="1">
+
     <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
-        <div>
-            <label for="roll-attr">Attribute</label>
-            <input type="number" id="roll-attr" value="{{ player_char.attributes.control if player_char else 9 }}" min="1" max="15" style="width: 100%;">
-        </div>
-        <div>
-            <label for="roll-disc">Discipline</label>
-            <input type="number" id="roll-disc" value="{{ player_char.disciplines.security if player_char else 3 }}" min="0" max="5" style="width: 100%;">
-        </div>
-        <div>
-            <label for="roll-diff">Difficulty</label>
-            <input type="number" id="roll-diff" value="2" min="0" max="5" style="width: 100%;">
-        </div>
         <div>
             <label for="roll-bonus">Bonus Dice</label>
             <input type="number" id="roll-bonus" value="0" min="0" max="3" style="width: 100%;">
@@ -332,7 +464,7 @@
             </label>
         </div>
     </div>
-    <button class="btn" onclick="rollDice()" style="margin-top: 15px;">Roll 2d20</button>
+    <button class="btn" onclick="rollDice()" style="margin-top: 15px;">Roll Dice</button>
 
     <div id="dice-results" style="margin-top: 15px; display: none;">
         <h3>Results</h3>
@@ -358,6 +490,58 @@
     .fire-action {
         border-left: 3px solid var(--lcars-red) !important;
     }
+    .fire-action-highlighted {
+        background: rgba(255, 100, 100, 0.2) !important;
+        border: 2px solid var(--lcars-red) !important;
+        animation: pulse-fire 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-fire {
+        0%, 100% { box-shadow: 0 0 5px var(--lcars-red); }
+        50% { box-shadow: 0 0 15px var(--lcars-red); }
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translateY(0); }
+        to { opacity: 0; transform: translateY(-10px); }
+    }
+    /* Selected action highlighting */
+    .action-selected {
+        background: rgba(153, 204, 255, 0.3) !important;
+        border: 2px solid var(--lcars-blue) !important;
+        box-shadow: 0 0 10px var(--lcars-blue);
+    }
+    .action-selected::before {
+        content: "✓ ";
+        color: var(--lcars-green);
+    }
+    /* Action status badges */
+    .status-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.7em;
+        font-weight: bold;
+        margin-left: 8px;
+        vertical-align: middle;
+    }
+    .status-done {
+        background: var(--lcars-green);
+        color: #000;
+    }
+    .status-rft {
+        background: var(--lcars-orange);
+        color: #000;
+    }
+    .status-not-impl {
+        background: #666;
+        color: #ccc;
+    }
+    .action-not-impl {
+        opacity: 0.5;
+    }
     .damage-report {
         padding: 15px;
         background: #222;
@@ -378,6 +562,107 @@
     const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
     const weaponsBonus = {{ player_ship.weapons_damage_bonus() if player_ship else 0 }};
 
+    // Resistance tracking
+    const baseResistance = {{ player_ship.resistance if player_ship else 4 }};
+    let currentResistanceBonus = {{ resistance_bonus if resistance_bonus else 0 }};
+
+    function updateResistanceDisplay() {
+        const el = document.getElementById('player-resistance');
+        if (currentResistanceBonus > 0) {
+            el.innerHTML = `${baseResistance} <span style="color: var(--lcars-green);">(+${currentResistanceBonus})</span>`;
+        } else {
+            el.innerHTML = `${baseResistance}`;
+        }
+    }
+
+    // Shields tracking
+    let shieldsRaised = {{ 'true' if player_ship.shields_raised else 'false' }};
+    const shieldsMax = {{ player_ship.shields_max if player_ship else 9 }};
+
+    function updateShieldsDisplay(shields, raised) {
+        shieldsRaised = raised;
+
+        // Update shields value
+        const shieldsEl = document.getElementById('player-shields');
+        const statusEl = document.getElementById('shields-status');
+        const barEl = document.getElementById('player-shields-bar');
+
+        // Update text
+        shieldsEl.innerHTML = `${shields} / ${shieldsMax} <span id="shields-status" style="margin-left: 8px; font-size: 0.8em; color: var(--lcars-${raised ? 'green' : 'red'});">[${raised ? 'ONLINE' : 'OFFLINE'}]</span>`;
+
+        // Update bar
+        barEl.style.width = `${(shields / shieldsMax) * 100}%`;
+        barEl.style.background = raised ? '' : 'var(--lcars-red)';
+
+        // Update action button text
+        updateShieldActionButton();
+    }
+
+    function updateShieldActionButton() {
+        const btn = document.getElementById('shields-action-btn');
+        if (btn) {
+            btn.querySelector('strong').textContent = shieldsRaised ? 'Lower Shields' : 'Raise Shields';
+        }
+    }
+
+    async function toggleShields() {
+        const actionName = shieldsRaised ? 'Lower Shields' : 'Raise Shields';
+        const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action_name: actionName })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            updateShieldsDisplay(data.shields, data.shields_raised);
+            // Update selection summary to show minor action taken
+            selectedMinorAction = actionName;
+            highlightAction(actionName, 'minor');
+            updateSelectionSummary();
+            showMinorActionResult(data.message);
+        }
+    }
+
+    // Weapons tracking
+    let weaponsArmed = {{ 'true' if player_ship.weapons_armed else 'false' }};
+
+    function updateWeaponsDisplay(armed) {
+        weaponsArmed = armed;
+        const statusEl = document.getElementById('weapons-status');
+        statusEl.textContent = `[${armed ? 'ARMED' : 'STANDBY'}]`;
+        statusEl.style.color = armed ? 'var(--lcars-orange)' : 'var(--lcars-red)';
+
+        // Update action button text
+        updateWeaponsActionButton();
+    }
+
+    function updateWeaponsActionButton() {
+        const btn = document.getElementById('weapons-action-btn');
+        if (btn) {
+            btn.querySelector('strong').textContent = weaponsArmed ? 'Disarm Weapons' : 'Arm Weapons';
+        }
+    }
+
+    async function toggleWeapons() {
+        const actionName = weaponsArmed ? 'Disarm Weapons' : 'Arm Weapons';
+        const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action_name: actionName })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            updateWeaponsDisplay(data.weapons_armed);
+            // Update selection summary to show minor action taken
+            selectedMinorAction = actionName;
+            highlightAction(actionName, 'minor');
+            updateSelectionSummary();
+            showMinorActionResult(data.message);
+        }
+    }
+
     // Player stats for reference
     const playerAttrs = {
         control: {{ player_char.attributes.control if player_char else 9 }},
@@ -396,7 +681,136 @@
         security: {{ player_char.disciplines.security if player_char else 2 }}
     };
 
+    // Ship stats for assist rolls
+    const shipSystems = {
+        comms: {{ player_ship.systems.comms if player_ship else 7 }},
+        computers: {{ player_ship.systems.computers if player_ship else 7 }},
+        engines: {{ player_ship.systems.engines if player_ship else 7 }},
+        sensors: {{ player_ship.systems.sensors if player_ship else 7 }},
+        structure: {{ player_ship.systems.structure if player_ship else 7 }},
+        weapons: {{ player_ship.systems.weapons if player_ship else 7 }}
+    };
+    const shipDepts = {
+        command: {{ player_ship.departments.command if player_ship else 2 }},
+        conn: {{ player_ship.departments.conn if player_ship else 2 }},
+        engineering: {{ player_ship.departments.engineering if player_ship else 2 }},
+        medicine: {{ player_ship.departments.medicine if player_ship else 2 }},
+        science: {{ player_ship.departments.science if player_ship else 2 }},
+        security: {{ player_ship.departments.security if player_ship else 2 }}
+    };
+
+    // Current action config (for task roll actions)
+    let currentActionConfig = null;
+
     let currentAction = null;
+    let activeMinorAction = null;  // Track the currently active minor action
+    let selectedMajorAction = null;  // Track the selected major action
+    let selectedMinorAction = null;  // Track the selected minor action (for toggle actions)
+
+    // Show a brief result message for minor actions that don't need dice
+    function showMinorActionResult(message) {
+        // Create a toast notification
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #1a3a1a;
+            border: 2px solid var(--lcars-green);
+            border-radius: 5px;
+            color: var(--lcars-green);
+            font-weight: bold;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in;
+        `;
+        toast.textContent = `✓ ${message}`;
+        document.body.appendChild(toast);
+        // Remove after 2 seconds
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
+    }
+
+    // Show an error toast notification
+    function showErrorToast(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #3a1a1a;
+            border: 2px solid var(--lcars-red);
+            border-radius: 5px;
+            color: var(--lcars-red);
+            font-weight: bold;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in;
+        `;
+        toast.textContent = `✗ ${message}`;
+        document.body.appendChild(toast);
+        // Remove after 3 seconds
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // Minor action effect descriptions for display
+    const MINOR_ACTION_EFFECTS = {
+        'Calibrate Weapons': ['+1 damage on next attack'],
+        'Targeting Solution': ['Re-roll 1d20 OR choose system on breach (pick one!)'],
+        'Calibrate Sensors': ['Re-roll 1d20 on next sensor task'],
+    };
+
+    // Helper to clear all action selections visually
+    function clearActionSelections(type) {
+        const selector = type === 'minor'
+            ? '.action-list li:not(.fire-action)'  // Minor actions panel
+            : '.action-list .fire-action, .action-list li';  // For now, clear all in major
+
+        // Clear from the appropriate panel
+        const panels = document.querySelectorAll('.panel');
+        panels.forEach(panel => {
+            const h2 = panel.querySelector('h2');
+            if (h2) {
+                if (type === 'minor' && h2.textContent === 'Minor Actions') {
+                    panel.querySelectorAll('.action-list li').forEach(li => {
+                        li.classList.remove('action-selected');
+                    });
+                } else if (type === 'major' && h2.textContent === 'Major Actions') {
+                    panel.querySelectorAll('.action-list li').forEach(li => {
+                        li.classList.remove('action-selected');
+                    });
+                }
+            }
+        });
+    }
+
+    // Highlight selected action
+    function highlightAction(actionName, type) {
+        clearActionSelections(type);
+
+        // Find and highlight the selected action
+        const panels = document.querySelectorAll('.panel');
+        panels.forEach(panel => {
+            const h2 = panel.querySelector('h2');
+            if (h2) {
+                const panelType = h2.textContent.includes('Minor') ? 'minor' :
+                                  h2.textContent.includes('Major') ? 'major' : null;
+                if (panelType === type) {
+                    panel.querySelectorAll('.action-list li').forEach(li => {
+                        const strongEl = li.querySelector('strong');
+                        if (strongEl && strongEl.textContent === actionName) {
+                            li.classList.add('action-selected');
+                        }
+                    });
+                }
+            }
+        });
+    }
 
     async function updateMomentum(change) {
         const response = await fetch(`/api/encounter/${encounterId}/momentum`, {
@@ -432,40 +846,212 @@
             document.querySelector('header h1').textContent =
                 `{{ encounter.name }} - Round ${data.round}`;
         }
+
+        // Clear active minor action when turn ends
+        activeMinorAction = null;
+        selectedMajorAction = null;
+        updateFireMinorActionBanner();
+        updateMajorActionHighlights();
+        updateSelectionSummary();
+
+        // Clear all action highlights
+        clearActionSelections('minor');
+        clearActionSelections('major');
+
+        // Hide all panels for new turn
+        document.getElementById('fire-panel').style.display = 'none';
+        document.getElementById('fire-results').style.display = 'none';
+        document.getElementById('dice-panel').style.display = 'none';
+        document.getElementById('dice-results').style.display = 'none';
+        document.getElementById('selection-summary').style.display = 'none';
     }
 
     // List of buff actions that execute immediately (no roll required)
     const BUFF_ACTIONS = ['Calibrate Weapons', 'Calibrate Sensors', 'Targeting Solution'];
 
-    function selectAction(name, type, difficulty) {
+    // Minor actions that only work with Fire
+    const FIRE_ONLY_MINOR_ACTIONS = ['Targeting Solution', 'Calibrate Weapons'];
+
+    async function selectAction(name, type, difficulty) {
         currentAction = {name, type, difficulty};
 
+        if (type === 'minor') {
+            // Minor action selected
+            if (BUFF_ACTIONS.includes(name)) {
+                // Execute buff action immediately (no roll required)
+                executeBuffAction(name);
+                // Highlight the minor action
+                highlightAction(name, 'minor');
+                // Update summary (will be called again in executeBuffAction on success)
+            }
+            // Don't show rolling UI yet - wait for major action
+            return;
+        }
+
+        // Major action selected
+        selectedMajorAction = name;
+        highlightAction(name, 'major');
+        updateSelectionSummary();
+
         if (name === 'Fire') {
+            // Check if weapons are armed first
+            if (!weaponsArmed) {
+                showErrorToast("Weapons are not armed! Use Arm Weapons first.");
+                return;
+            }
             // Show fire panel, hide dice panel
             document.getElementById('fire-panel').style.display = 'block';
             document.getElementById('dice-panel').style.display = 'none';
             document.getElementById('fire-results').style.display = 'none';
             updateFireDetails();
-        } else if (BUFF_ACTIONS.includes(name)) {
-            // Execute buff action immediately (no roll required)
-            executeBuffAction(name);
+            updateFireMinorActionBanner();
+            // Scroll to fire panel
+            document.getElementById('fire-panel').scrollIntoView({behavior: 'smooth'});
         } else {
-            // Show dice panel for task roll actions
+            // Fetch action config to get correct attribute/discipline
+            try {
+                const configResponse = await fetch(`/api/action-config/${encodeURIComponent(name)}`);
+                const config = await configResponse.json();
+                currentActionConfig = config;
+
+                if (config.roll) {
+                    // Get attribute and discipline values from config
+                    const attrName = config.roll.attribute;
+                    const discName = config.roll.discipline;
+                    const attrValue = playerAttrs[attrName] || 9;
+                    const discValue = playerDiscs[discName] || 2;
+                    const targetNum = attrValue + discValue;
+
+                    // Update display
+                    document.getElementById('roll-attr-name').textContent = attrName.charAt(0).toUpperCase() + attrName.slice(1);
+                    document.getElementById('roll-attr-value').textContent = attrValue;
+                    document.getElementById('roll-disc-name').textContent = discName.charAt(0).toUpperCase() + discName.slice(1);
+                    document.getElementById('roll-disc-value').textContent = discValue;
+                    document.getElementById('roll-target').textContent = targetNum;
+                    document.getElementById('roll-diff-display').textContent = config.roll.difficulty;
+
+                    // Update hidden inputs
+                    document.getElementById('roll-attr').value = attrValue;
+                    document.getElementById('roll-disc').value = discValue;
+                    document.getElementById('roll-diff').value = config.roll.difficulty;
+
+                    // Ship assist
+                    const assistRow = document.getElementById('ship-assist-row');
+                    if (config.roll.ship_assist_system && config.roll.ship_assist_department) {
+                        const sysName = config.roll.ship_assist_system;
+                        const deptName = config.roll.ship_assist_department;
+                        const sysValue = shipSystems[sysName] || 7;
+                        const deptValue = shipDepts[deptName] || 2;
+                        const assistTarget = sysValue + deptValue;
+
+                        document.getElementById('ship-assist-system-name').textContent = sysName.charAt(0).toUpperCase() + sysName.slice(1);
+                        document.getElementById('ship-assist-system-value').textContent = sysValue;
+                        document.getElementById('ship-assist-dept-name').textContent = deptName.charAt(0).toUpperCase() + deptName.slice(1);
+                        document.getElementById('ship-assist-dept-value').textContent = deptValue;
+                        document.getElementById('ship-assist-target').textContent = assistTarget;
+                        assistRow.style.display = 'block';
+                    } else {
+                        assistRow.style.display = 'none';
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch action config:', err);
+                // Fallback to passed difficulty
+                document.getElementById('roll-diff').value = difficulty;
+                document.getElementById('roll-diff-display').textContent = difficulty;
+            }
+
+            // Show dice panel for task roll major actions
             document.getElementById('fire-panel').style.display = 'none';
             document.getElementById('dice-panel').style.display = 'block';
             document.getElementById('current-action-display').style.display = 'block';
-            document.getElementById('current-action-name').textContent = `${name} (${type}, Difficulty ${difficulty})`;
-            document.getElementById('roll-diff').value = difficulty;
+            document.getElementById('current-action-name').textContent = name;
+            // Scroll to dice panel
+            document.getElementById('dice-panel').scrollIntoView({behavior: 'smooth'});
+        }
+    }
+
+    function updateFireMinorActionBanner() {
+        const banner = document.getElementById('fire-minor-action-banner');
+        const nameSpan = document.getElementById('fire-minor-action-name');
+        const effectsDiv = document.getElementById('fire-minor-action-effects');
+        const targetingSolutionPanel = document.getElementById('targeting-solution-panel');
+
+        if (activeMinorAction) {
+            banner.style.display = 'block';
+            nameSpan.textContent = activeMinorAction;
+            const effects = MINOR_ACTION_EFFECTS[activeMinorAction] || [];
+            effectsDiv.innerHTML = effects.map(e => `• ${e}`).join('<br>');
+
+            // Show targeting solution panel if Targeting Solution is active
+            if (activeMinorAction === 'Targeting Solution') {
+                targetingSolutionPanel.style.display = 'block';
+            } else {
+                targetingSolutionPanel.style.display = 'none';
+            }
+        } else {
+            banner.style.display = 'none';
+            targetingSolutionPanel.style.display = 'none';
+        }
+    }
+
+
+    function updateMajorActionHighlights() {
+        // Highlight Fire action when a fire-related minor action is active
+        const fireAction = document.querySelector('.fire-action');
+        if (fireAction) {
+            if (activeMinorAction && FIRE_ONLY_MINOR_ACTIONS.includes(activeMinorAction)) {
+                fireAction.classList.add('fire-action-highlighted');
+            } else {
+                fireAction.classList.remove('fire-action-highlighted');
+            }
+        }
+    }
+
+    function updateSelectionSummary() {
+        const summaryPanel = document.getElementById('selection-summary');
+        const summaryMinor = document.getElementById('summary-minor');
+        const summaryMajor = document.getElementById('summary-major');
+
+        // Show panel if either action is selected
+        if (activeMinorAction || selectedMajorAction) {
+            summaryPanel.style.display = 'block';
+        } else {
+            summaryPanel.style.display = 'none';
         }
 
-        // Scroll to action panel
-        document.getElementById('fire-panel').scrollIntoView({behavior: 'smooth'});
+        // Update minor action display
+        if (activeMinorAction) {
+            const effects = MINOR_ACTION_EFFECTS[activeMinorAction] || [];
+            summaryMinor.innerHTML = `
+                <strong style="color: var(--lcars-green);">✓ ${activeMinorAction}</strong>
+                <div style="font-size: 0.85em; color: var(--lcars-tan); margin-top: 4px;">
+                    ${effects.map(e => `• ${e}`).join('<br>')}
+                </div>
+            `;
+        } else {
+            summaryMinor.innerHTML = '<span style="color: #666;">None selected (optional)</span>';
+        }
+
+        // Update major action display
+        if (selectedMajorAction) {
+            summaryMajor.innerHTML = `<strong style="color: var(--lcars-green);">✓ ${selectedMajorAction}</strong>`;
+        } else {
+            summaryMajor.innerHTML = '<span style="color: #888;">← Select a major action to proceed</span>';
+        }
     }
 
     function cancelAction() {
         currentAction = null;
+        selectedMajorAction = null;
+
+        // Clear major action highlight
+        clearActionSelections('major');
+        updateSelectionSummary();
+
+        // Hide rolling panels
         document.getElementById('fire-panel').style.display = 'none';
-        document.getElementById('dice-panel').style.display = 'block';
+        document.getElementById('dice-panel').style.display = 'none';
         document.getElementById('current-action-display').style.display = 'none';
     }
 
@@ -486,13 +1072,22 @@
         resultsDiv.style.display = 'block';
 
         if (data.success) {
-            displayDiv.innerHTML = `
-                <div class="alert alert-success" style="padding: 15px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
-                    <strong>${data.message.toUpperCase()}</strong>
-                </div>
-            `;
-            document.getElementById('dice-summary').innerHTML = '';
+            // Track the active minor action
+            activeMinorAction = actionName;
+
+            // Highlight Fire action if applicable
+            updateMajorActionHighlights();
+
+            // Update the selection summary
+            updateSelectionSummary();
+
+            // No need to show in dice panel - the summary panel shows the selection
+            // Just scroll to selection summary
+            document.getElementById('selection-summary').scrollIntoView({behavior: 'smooth'});
         } else {
+            // Show error in dice panel
+            document.getElementById('dice-panel').style.display = 'block';
+            resultsDiv.style.display = 'block';
             displayDiv.innerHTML = `
                 <div class="alert alert-error" style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
                     <strong>ERROR:</strong> ${data.error || 'Action failed'}
@@ -525,6 +1120,81 @@
     // Store last fire action data for re-rolls
     let lastFireData = null;
 
+    // System breach table (matches backend)
+    function getSystemFromRoll(roll) {
+        if (roll === 1) return "comms";
+        if (roll === 2) return "computers";
+        if (roll <= 6) return "engines";
+        if (roll <= 9) return "sensors";
+        if (roll <= 17) return "structure";
+        return "weapons";
+    }
+
+    function rollForBreach(breachIndex) {
+        if (!window.pendingBreaches) return;
+
+        const resultSpan = document.getElementById(`breach-result-${breachIndex}`);
+        const system = window.pendingBreaches.systems[breachIndex];
+
+        // Animate rolling effect
+        let rollCount = 0;
+        const systems = ['COMMS', 'COMPUTERS', 'ENGINES', 'SENSORS', 'STRUCTURE', 'WEAPONS'];
+        const rollInterval = setInterval(() => {
+            const randomSys = systems[Math.floor(Math.random() * systems.length)];
+            resultSpan.innerHTML = `<span style="color: var(--lcars-orange);">🎲 ${randomSys}...</span>`;
+            rollCount++;
+
+            if (rollCount >= 10) {
+                clearInterval(rollInterval);
+                // Show final result with the roll number
+                const roll = Math.floor(Math.random() * 20) + 1; // Visual roll (actual system pre-determined)
+                resultSpan.innerHTML = `
+                    <span style="color: var(--lcars-tan);">Rolled ${roll} → </span>
+                    <span style="color: var(--lcars-red); font-weight: bold;">${system.toUpperCase()}</span>
+                `;
+                window.pendingBreaches.revealed.push(breachIndex);
+            }
+        }, 80);
+    }
+
+    async function chooseBreachSystem(breachIndex) {
+        if (!window.pendingBreaches) return;
+
+        const select = document.getElementById(`breach-choose-${breachIndex}`);
+        const newSystem = select.value;
+        const resultSpan = document.getElementById(`breach-result-${breachIndex}`);
+        const targetIndex = window.pendingBreaches.targetIndex;
+
+        // Call API to change the breach system
+        const response = await fetch(`/api/encounter/${encounterId}/change-breach-system`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                target_index: targetIndex,
+                breach_index: breachIndex,
+                new_system: newSystem
+            })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            resultSpan.innerHTML = `
+                <span style="color: var(--lcars-green); font-weight: bold;">🎯 ${newSystem.toUpperCase()}</span>
+                <span style="color: var(--lcars-green);"> (TARGETED)</span>
+            `;
+            window.pendingBreaches.revealed.push(breachIndex);
+            window.pendingBreaches.canChooseSystem = false; // Consumed
+
+            // Clear the minor action since TS is consumed
+            activeMinorAction = null;
+            updateFireMinorActionBanner();
+            updateMajorActionHighlights();
+            updateSelectionSummary();
+        } else {
+            alert('Failed to choose breach system: ' + (data.error || 'Unknown error'));
+        }
+    }
+
     async function rerollDie(dieIndex) {
         if (!lastFireData) {
             alert('No previous roll to re-roll!');
@@ -544,10 +1214,23 @@
         const data = await response.json();
 
         // Display the new results (same as executeFireAction)
-        displayFireResults(data, lastFireData.targetIndex, lastFireData.focus, lastFireData.bonusDice);
+        displayFireResults(data, lastFireData.targetIndex, lastFireData.focus, lastFireData.bonusDice, lastFireData.difficulty);
     }
 
     async function executeFireAction() {
+        // Check if weapons are armed
+        if (!weaponsArmed) {
+            const resultsDiv = document.getElementById('fire-results');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = `
+                <div class="alert alert-danger" style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                    <strong>ERROR: Weapons are not armed!</strong><br>
+                    Use the <em>Arm Weapons</em> minor action first.
+                </div>
+            `;
+            return;
+        }
+
         const weaponSelect = document.getElementById('weapon-select');
         const targetSelect = document.getElementById('target-select');
         const selectedWeapon = weaponSelect.options[weaponSelect.selectedIndex];
@@ -594,12 +1277,21 @@
         lastFireData.previous_rolls = data.rolls;
 
         // Display results
-        displayFireResults(data, targetIndex, focus, bonusDice);
+        displayFireResults(data, targetIndex, focus, bonusDice, difficulty);
     }
 
-    function displayFireResults(data, targetIndex, focus, bonusDice) {
+    function displayFireResults(data, targetIndex, focus, bonusDice, difficulty) {
         const resultsDiv = document.getElementById('fire-results');
         resultsDiv.style.display = 'block';
+
+        // Clear active minor action after Fire (effect was consumed by backend)
+        // But keep it if we can still re-roll (effect not yet used)
+        if (!data.can_reroll) {
+            activeMinorAction = null;
+            updateFireMinorActionBanner();
+            updateMajorActionHighlights();
+            updateSelectionSummary();
+        }
 
         // Build dice display - character dice first, then ship assist die
         const charDiceCount = 2 + bonusDice;
@@ -689,7 +1381,43 @@
             }
             html += `<p>Target Shields: ${data.target_shields_remaining}</p>`;
             if (data.breaches_caused > 0) {
-                html += `<p style="color: var(--lcars-red); font-weight: bold;">${data.breaches_caused} BREACH(ES)! Systems hit: ${data.systems_hit.map(s => s.toUpperCase()).join(', ')}</p>`;
+                // Store breach data for rolling
+                window.pendingBreaches = {
+                    systems: data.systems_hit,
+                    targetIndex: targetIndex,
+                    canChooseSystem: data.can_choose_system,
+                    revealed: []
+                };
+
+                html += `<div id="breach-resolution" style="margin-top: 10px; padding: 10px; background: #2a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">`;
+                html += `<p style="color: var(--lcars-red); font-weight: bold; margin-bottom: 10px;">⚠ ${data.breaches_caused} BREACH(ES) CAUSED!</p>`;
+                html += `<p style="margin-bottom: 10px; color: var(--lcars-tan);">Roll to determine which systems are hit:</p>`;
+
+                // Show each breach with roll button (system hidden until rolled)
+                data.systems_hit.forEach((system, index) => {
+                    html += `<div id="breach-${index}" style="padding: 8px; background: #333; border-radius: 4px; margin-bottom: 5px;">`;
+                    html += `<strong>Breach ${index + 1}:</strong> `;
+                    html += `<span id="breach-result-${index}">`;
+
+                    if (data.can_choose_system && index === 0) {
+                        // First breach - can roll OR choose with Targeting Solution
+                        html += `<button class="btn" onclick="rollForBreach(${index})" style="padding: 5px 15px; margin-right: 10px;">🎲 Roll for System</button>`;
+                        html += `<span style="color: var(--lcars-green);">or 🎯 </span>`;
+                        html += `<select id="breach-choose-${index}" style="margin-right: 5px;">`;
+                        ['comms', 'computers', 'engines', 'sensors', 'structure', 'weapons'].forEach(s => {
+                            html += `<option value="${s}">${s.toUpperCase()}</option>`;
+                        });
+                        html += `</select>`;
+                        html += `<button class="btn" onclick="chooseBreachSystem(${index})" style="padding: 5px 10px;">Choose</button>`;
+                    } else {
+                        // Other breaches - must roll
+                        html += `<button class="btn" onclick="rollForBreach(${index})" style="padding: 5px 15px;">🎲 Roll for System</button>`;
+                    }
+
+                    html += `</span>`;
+                    html += `</div>`;
+                });
+                html += `</div>`;
             }
 
             // Show ship status warnings
@@ -783,42 +1511,118 @@
         const bonus = parseInt(document.getElementById('roll-bonus').value);
         const focus = document.getElementById('roll-focus').checked;
 
-        const response = await fetch('/api/roll', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                attribute: attr,
-                discipline: disc,
-                difficulty: diff,
-                bonus_dice: bonus,
-                focus: focus
-            })
-        });
+        // Check if this action has ship assist configured
+        const hasShipAssist = currentActionConfig?.roll?.ship_assist_system && currentActionConfig?.roll?.ship_assist_department;
+
+        let response;
+        if (hasShipAssist) {
+            const sysName = currentActionConfig.roll.ship_assist_system;
+            const deptName = currentActionConfig.roll.ship_assist_department;
+            const sysValue = shipSystems[sysName] || 7;
+            const deptValue = shipDepts[deptName] || 2;
+
+            response = await fetch('/api/roll-assisted', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    attribute: attr,
+                    discipline: disc,
+                    system: sysValue,
+                    department: deptValue,
+                    difficulty: diff,
+                    bonus_dice: bonus,
+                    focus: focus
+                })
+            });
+        } else {
+            response = await fetch('/api/roll', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    attribute: attr,
+                    discipline: disc,
+                    difficulty: diff,
+                    bonus_dice: bonus,
+                    focus: focus
+                })
+            });
+        }
         const data = await response.json();
 
         document.getElementById('dice-results').style.display = 'block';
 
+        // For assisted rolls, the last die is the ship assist die
+        const charDiceCount = hasShipAssist ? data.rolls.length - 1 : data.rolls.length;
+        const shipAssistTarget = hasShipAssist ?
+            (shipSystems[currentActionConfig.roll.ship_assist_system] || 7) + (shipDepts[currentActionConfig.roll.ship_assist_department] || 2) : 0;
+
         const diceDisplay = document.getElementById('dice-display');
-        diceDisplay.innerHTML = data.rolls.map(roll => {
+        diceDisplay.innerHTML = data.rolls.map((roll, index) => {
+            const isShipDie = hasShipAssist && index === data.rolls.length - 1;
+            const targetNum = isShipDie ? shipAssistTarget : data.target_number;
+
             let cls = 'dice-fail';
-            if (roll === 1 || (focus && roll <= disc)) {
+            if (roll === 1) {
                 cls = 'dice-crit';
-            } else if (roll <= data.target_number) {
+            } else if (!isShipDie && focus && roll <= disc) {
+                cls = 'dice-crit';  // Focus only applies to character dice
+            } else if (roll <= targetNum) {
                 cls = 'dice-success';
             } else if (roll === 20) {
                 cls = 'dice-complication';
             }
-            return `<span class="dice-result ${cls}">${roll}</span>`;
+
+            const label = isShipDie ? '<span style="font-size: 0.7em; display: block; color: var(--lcars-tan);">Ship</span>' : '';
+            return `<span class="dice-result ${cls}">${roll}${label}</span>`;
         }).join('');
 
         const summary = document.getElementById('dice-summary');
         const resultClass = data.succeeded ? 'alert-success' : 'alert-danger';
+
+        let effectMessage = '';
+
+        // If the roll succeeded and we have an action, execute it to apply the effect
+        if (data.succeeded && currentAction?.name) {
+            try {
+                const execResponse = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action_name: currentAction.name,
+                        attribute: attr,
+                        discipline: disc,
+                        difficulty: diff,
+                        focus: focus,
+                        bonus_dice: bonus,
+                        // Pass the roll result so it doesn't re-roll
+                        roll_succeeded: true,
+                        roll_successes: data.successes,
+                        roll_momentum: data.momentum_generated
+                    })
+                });
+                const execData = await execResponse.json();
+
+                if (execData.success && execData.effect_applied) {
+                    effectMessage = `<br><span style="color: var(--lcars-green);">Effect applied: ${execData.effect_applied}</span>`;
+
+                    // Update resistance display if this action grants resistance bonus
+                    if (execData.resistance_bonus) {
+                        currentResistanceBonus += execData.resistance_bonus;
+                        updateResistanceDisplay();
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to execute action:', err);
+            }
+        }
+
         summary.innerHTML = `
             <div class="alert ${resultClass}">
                 <strong>${data.succeeded ? 'SUCCESS!' : 'FAILURE'}</strong><br>
                 ${data.successes} successes vs Difficulty ${data.difficulty}<br>
                 ${data.complications > 0 ? `<span style="color: darkred;">${data.complications} complication(s)!</span><br>` : ''}
                 ${data.succeeded && data.momentum_generated > 0 ? `+${data.momentum_generated} Momentum generated` : ''}
+                ${effectMessage}
             </div>
         `;
     }
