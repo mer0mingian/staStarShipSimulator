@@ -1,8 +1,15 @@
 """Action definitions for starship combat by bridge position."""
 
 from dataclasses import dataclass, field
-from typing import Optional, Callable
+from typing import Optional, Callable, Literal
 from sta.models.enums import Position, ActionType
+
+
+# Implementation status for actions
+# DONE = fully implemented and tested
+# RFT = Ready For Testing (implemented but may have bugs)
+# NOT_IMPL = not yet implemented
+ActionStatus = Literal["DONE", "RFT", "NOT_IMPL"]
 
 
 @dataclass
@@ -30,6 +37,9 @@ class Action:
 
     # Effects
     effect_notes: str = ""
+
+    # Implementation status
+    status: ActionStatus = "NOT_IMPL"
 
 
 # Standard Minor Actions (available to all positions)
@@ -108,6 +118,7 @@ COMMAND_ACTIONS = [
         discipline="command",
         momentum_cost=1,
         effect_notes="Assisted ally takes immediate major action.",
+        status="NOT_IMPL",
     ),
     Action(
         name="Rally",
@@ -118,6 +129,7 @@ COMMAND_ACTIONS = [
         attribute="presence",
         discipline="command",
         effect_notes="Successes beyond difficulty become Momentum.",
+        status="RFT",
     ),
 ]
 
@@ -128,12 +140,14 @@ HELM_MINOR_ACTIONS = [
         action_type=ActionType.MINOR,
         positions=[Position.HELM],
         description="Move up to 2 zones using impulse engines. Moving only 1 zone reduces terrain cost by 1.",
+        status="NOT_IMPL",
     ),
     Action(
         name="Thrusters",
         action_type=ActionType.MINOR,
         positions=[Position.HELM],
         description="Fine adjustments within current zone. Can safely move into Contact.",
+        status="NOT_IMPL",
     ),
 ]
 
@@ -146,6 +160,7 @@ HELM_MAJOR_ACTIONS = [
         attribute="control",
         discipline="conn",
         effect_notes="Ship attacks assisted. Enemy attacks vs this ship are easier.",
+        status="RFT",
     ),
     Action(
         name="Evasive Action",
@@ -157,6 +172,7 @@ HELM_MAJOR_ACTIONS = [
         assisted_by_system="structure",
         assisted_by_department="conn",
         effect_notes="If you win opposed roll, move 1 zone. Cannot combine with Defensive Fire.",
+        status="RFT",
     ),
     Action(
         name="Maneuver",
@@ -168,6 +184,7 @@ HELM_MAJOR_ACTIONS = [
         discipline="conn",
         assisted_by_system="engines",
         assisted_by_department="conn",
+        status="RFT",
     ),
     Action(
         name="Ram",
@@ -180,6 +197,7 @@ HELM_MAJOR_ACTIONS = [
         assisted_by_system="engines",
         assisted_by_department="conn",
         effect_notes="Both ships take each other's collision damage. Ramming adds Intense quality.",
+        status="NOT_IMPL",
     ),
     Action(
         name="Warp",
@@ -193,6 +211,7 @@ HELM_MAJOR_ACTIONS = [
         assisted_by_department="conn",
         requires_reserve_power=True,
         requires_prepare=True,
+        status="NOT_IMPL",
     ),
 ]
 
@@ -207,6 +226,7 @@ OPERATIONS_MAJOR_ACTIONS = [
         attribute="presence",
         discipline="engineering",
         effect_notes="Success patches breach (removes penalties) but doesn't fully repair.",
+        status="RFT",
     ),
     Action(
         name="Regain Power",
@@ -217,6 +237,7 @@ OPERATIONS_MAJOR_ACTIONS = [
         attribute="control",
         discipline="engineering",
         effect_notes="May Succeed at Cost.",
+        status="RFT",
     ),
     Action(
         name="Regenerate Shields",
@@ -229,6 +250,7 @@ OPERATIONS_MAJOR_ACTIONS = [
         assisted_by_system="structure",
         assisted_by_department="engineering",
         requires_reserve_power=True,
+        status="RFT",
     ),
     Action(
         name="Reroute Power",
@@ -236,6 +258,7 @@ OPERATIONS_MAJOR_ACTIONS = [
         positions=[Position.OPERATIONS, Position.ENGINEERING],
         description="Reroute Reserve Power to boost a specific system for next action.",
         requires_reserve_power=True,
+        status="NOT_IMPL",
     ),
     Action(
         name="Transport",
@@ -243,6 +266,7 @@ OPERATIONS_MAJOR_ACTIONS = [
         positions=[Position.OPERATIONS, Position.ENGINEERING],
         description="Operate transporters remotely. Difficulty +1 if from bridge.",
         effect_notes="From bridge: +1 Difficulty",
+        status="NOT_IMPL",
     ),
 ]
 
@@ -253,12 +277,14 @@ SCIENCE_MINOR_ACTIONS = [
         action_type=ActionType.MINOR,
         positions=[Position.SCIENCE],
         description="Fine-tune sensors. Next Sensor action: ignore one trait OR re-roll 1d20.",
+        status="RFT",
     ),
     Action(
         name="Launch Probe",
         action_type=ActionType.MINOR,
         positions=[Position.SCIENCE],
         description="Launch probe to any zone within Long range. Sensor actions may use probe's location.",
+        status="NOT_IMPL",
     ),
 ]
 
@@ -274,6 +300,7 @@ SCIENCE_MAJOR_ACTIONS = [
         assisted_by_system="sensors",
         assisted_by_department="science",
         effect_notes="Revealed vessel: attacks vs it at +2 Difficulty until it moves.",
+        status="NOT_IMPL",
     ),
     Action(
         name="Scan For Weakness",
@@ -286,6 +313,7 @@ SCIENCE_MAJOR_ACTIONS = [
         assisted_by_system="sensors",
         assisted_by_department="security",
         effect_notes="Next attack vs that ship: damage +2 OR gains Piercing.",
+        status="RFT",
     ),
     Action(
         name="Sensor Sweep",
@@ -298,6 +326,7 @@ SCIENCE_MAJOR_ACTIONS = [
         assisted_by_system="sensors",
         assisted_by_department="science",
         effect_notes="Spend Momentum for additional details.",
+        status="RFT",
     ),
 ]
 
@@ -307,25 +336,29 @@ TACTICAL_MINOR_ACTIONS = [
         name="Calibrate Weapons",
         action_type=ActionType.MINOR,
         positions=[Position.TACTICAL],
-        description="Fine-tune weapons. Next attack: damage +1.",
+        description="Fine-tune weapons. Next attack: +1 damage.",
+        status="DONE",
+    ),
+    Action(
+        name="Targeting Solution",
+        action_type=ActionType.MINOR,
+        positions=[Position.TACTICAL],
+        description="Lock onto enemy within Long range. Next attack: re-roll 1d20 OR choose which system is hit on breach.",
+        status="DONE",
     ),
     Action(
         name="Raise/Lower Shields",
         action_type=ActionType.MINOR,
         positions=[Position.TACTICAL],
         description="Raise shields to max or lower to 0. Raised shields required for protection.",
+        status="DONE",
     ),
     Action(
         name="Arm/Disarm Weapons",
         action_type=ActionType.MINOR,
         positions=[Position.TACTICAL],
         description="Arm weapons for attacks (detectable) or disarm them.",
-    ),
-    Action(
-        name="Targeting Solution",
-        action_type=ActionType.MINOR,
-        positions=[Position.TACTICAL],
-        description="Lock onto enemy within Long range. Next attack: re-roll d20 OR choose system hit.",
+        status="DONE",
     ),
 ]
 
@@ -341,6 +374,7 @@ TACTICAL_MAJOR_ACTIONS = [
         assisted_by_system="weapons",
         assisted_by_department="security",
         effect_notes="Torpedoes: Difficulty 3, add 1 Threat. See weapon damage and qualities.",
+        status="DONE",
     ),
     Action(
         name="Defensive Fire",
@@ -352,6 +386,7 @@ TACTICAL_MAJOR_ACTIONS = [
         assisted_by_system="weapons",
         assisted_by_department="security",
         effect_notes="Success: spend 2 Momentum to counterattack. Cannot combine with Evasive Action.",
+        status="NOT_IMPL",
     ),
     Action(
         name="Modulate Shields",
@@ -359,6 +394,7 @@ TACTICAL_MAJOR_ACTIONS = [
         positions=[Position.TACTICAL],
         description="Increase Resistance by 2 until next turn. Cannot use if shields at 0.",
         effect_notes="Resistance +2 until your next turn.",
+        status="DONE",
     ),
     Action(
         name="Tractor Beam",
@@ -371,6 +407,7 @@ TACTICAL_MAJOR_ACTIONS = [
         assisted_by_system="structure",
         assisted_by_department="security",
         effect_notes="Target must succeed at task (Difficulty = tractor strength) to break free.",
+        status="NOT_IMPL",
     ),
 ]
 
@@ -409,37 +446,62 @@ MEDICAL_MAJOR_ACTIONS = [
 
 
 def get_actions_for_position(position: Position) -> dict[str, list[Action]]:
-    """Get all available actions for a bridge position."""
+    """Get all available actions for a bridge position.
+
+    Returns dict with keys:
+        - minor: all minor actions (standard + position-specific)
+        - major: all major actions (standard + position-specific)
+        - standard_minor: standard minor actions only
+        - standard_major: standard major actions only
+        - position_minor: position-specific minor actions
+        - position_major: position-specific major actions
+        - position_name: human-readable position name
+    """
     actions = {
         "minor": list(STANDARD_MINOR_ACTIONS),
         "major": list(STANDARD_MAJOR_ACTIONS),
+        "standard_minor": list(STANDARD_MINOR_ACTIONS),
+        "standard_major": list(STANDARD_MAJOR_ACTIONS),
+        "position_minor": [],
+        "position_major": [],
+        "position_name": position.value.title(),
     }
 
     # Add position-specific actions
     if position == Position.CAPTAIN:
-        actions["major"].extend(COMMAND_ACTIONS)
+        actions["position_major"] = list(COMMAND_ACTIONS)
+        actions["position_name"] = "Command"
 
     elif position == Position.HELM:
-        actions["minor"].extend(HELM_MINOR_ACTIONS)
-        actions["major"].extend(HELM_MAJOR_ACTIONS)
+        actions["position_minor"] = list(HELM_MINOR_ACTIONS)
+        actions["position_major"] = list(HELM_MAJOR_ACTIONS)
+        actions["position_name"] = "Helm"
 
     elif position == Position.TACTICAL:
-        actions["minor"].extend(TACTICAL_MINOR_ACTIONS)
-        actions["major"].extend(TACTICAL_MAJOR_ACTIONS)
+        actions["position_minor"] = list(TACTICAL_MINOR_ACTIONS)
+        actions["position_major"] = list(TACTICAL_MAJOR_ACTIONS)
+        actions["position_name"] = "Tactical"
 
     elif position == Position.OPERATIONS:
-        actions["major"].extend(OPERATIONS_MAJOR_ACTIONS)
-        actions["major"].extend(COMMS_MAJOR_ACTIONS)
+        actions["position_major"] = list(OPERATIONS_MAJOR_ACTIONS) + list(COMMS_MAJOR_ACTIONS)
+        actions["position_name"] = "Operations"
 
     elif position == Position.ENGINEERING:
-        actions["major"].extend(OPERATIONS_MAJOR_ACTIONS)
+        actions["position_major"] = list(OPERATIONS_MAJOR_ACTIONS)
+        actions["position_name"] = "Engineering"
 
     elif position == Position.SCIENCE:
-        actions["minor"].extend(SCIENCE_MINOR_ACTIONS)
-        actions["major"].extend(SCIENCE_MAJOR_ACTIONS)
+        actions["position_minor"] = list(SCIENCE_MINOR_ACTIONS)
+        actions["position_major"] = list(SCIENCE_MAJOR_ACTIONS)
+        actions["position_name"] = "Science"
 
     elif position == Position.MEDICAL:
-        actions["major"].extend(MEDICAL_MAJOR_ACTIONS)
+        actions["position_major"] = list(MEDICAL_MAJOR_ACTIONS)
+        actions["position_name"] = "Medical"
+
+    # Combine for backwards compatibility
+    actions["minor"].extend(actions["position_minor"])
+    actions["major"].extend(actions["position_major"])
 
     return actions
 

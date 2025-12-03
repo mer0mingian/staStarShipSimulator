@@ -26,6 +26,8 @@ class TaskRollConfig(TypedDict, total=False):
     discipline: str  # e.g., "security", "command", "science"
     difficulty: int
     focus_eligible: bool
+    ship_assist_system: str  # e.g., "structure", "weapons" - ship system for assist die
+    ship_assist_department: str  # e.g., "engineering", "security" - ship department for assist die
 
 
 class ActionSuccessConfig(TypedDict, total=False):
@@ -38,7 +40,7 @@ class ActionSuccessConfig(TypedDict, total=False):
 
 class ActionConfig(TypedDict, total=False):
     """Configuration for a complete action."""
-    type: Literal["buff", "task_roll", "resource_action", "special"]
+    type: Literal["buff", "task_roll", "resource_action", "toggle", "special"]
 
     # For buff actions
     effect: Optional[EffectConfig]
@@ -47,6 +49,9 @@ class ActionConfig(TypedDict, total=False):
     roll: Optional[TaskRollConfig]
     on_success: Optional[ActionSuccessConfig]
     on_failure: Optional[dict]
+
+    # For toggle actions
+    toggles: Optional[str]  # e.g., "shields_raised" - which ship property to toggle
 
     # Resource requirements
     requires_reserve_power: bool
@@ -86,9 +91,11 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         "type": "task_roll",
         "roll": {
             "attribute": "control",
-            "discipline": "security",
+            "discipline": "engineering",
             "difficulty": 1,
             "focus_eligible": True,
+            "ship_assist_system": "structure",
+            "ship_assist_department": "engineering",
         },
         "on_success": {
             "create_effect": {
@@ -231,6 +238,28 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
             "generate_momentum": True,
         }
     },
+
+    # ===== TOGGLE ACTIONS =====
+
+    "Raise Shields": {
+        "type": "toggle",
+        "toggles": "shields_raised",
+    },
+
+    "Lower Shields": {
+        "type": "toggle",
+        "toggles": "shields_raised",
+    },
+
+    "Arm Weapons": {
+        "type": "toggle",
+        "toggles": "weapons_armed",
+    },
+
+    "Disarm Weapons": {
+        "type": "toggle",
+        "toggles": "weapons_armed",
+    },
 }
 
 
@@ -249,3 +278,9 @@ def is_task_roll_action(action_name: str) -> bool:
     """Check if an action requires a task roll."""
     config = get_action_config(action_name)
     return config is not None and config.get("type") == "task_roll"
+
+
+def is_toggle_action(action_name: str) -> bool:
+    """Check if an action is a toggle action."""
+    config = get_action_config(action_name)
+    return config is not None and config.get("type") == "toggle"

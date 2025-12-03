@@ -9,11 +9,12 @@ from sta.models.combat import ActiveEffect
 from sta.mechanics.action_handlers import (
     execute_buff_action,
     execute_task_roll_action,
+    apply_task_roll_success,
     check_action_requirements,
     apply_effects_to_attack,
     apply_effects_to_defense,
 )
-from sta.mechanics.action_config import get_action_config, is_buff_action, is_task_roll_action
+from sta.mechanics.action_config import get_action_config, is_buff_action, is_task_roll_action, is_toggle_action
 
 api_bp = Blueprint("api", __name__)
 
@@ -45,6 +46,66 @@ def roll_dice():
         "succeeded": result.succeeded,
         "momentum_generated": result.momentum_generated,
     })
+
+
+@api_bp.route("/roll-assisted", methods=["POST"])
+def roll_assisted_dice():
+    """Perform an assisted task roll (character + ship assist die)."""
+    data = request.json
+    attribute = data.get("attribute", 7)
+    discipline = data.get("discipline", 1)
+    system = data.get("system", 7)
+    department = data.get("department", 1)
+    difficulty = data.get("difficulty", 1)
+    focus = data.get("focus", False)
+    bonus_dice = data.get("bonus_dice", 0)
+
+    result = assisted_task_roll(
+        attribute=attribute,
+        discipline=discipline,
+        system=system,
+        department=department,
+        difficulty=difficulty,
+        focus=focus,
+        bonus_dice=bonus_dice
+    )
+
+    return jsonify({
+        "rolls": result.rolls,
+        "target_number": result.target_number,
+        "successes": result.successes,
+        "complications": result.complications,
+        "difficulty": result.difficulty,
+        "succeeded": result.succeeded,
+        "momentum_generated": result.momentum_generated,
+    })
+
+
+@api_bp.route("/action-config/<action_name>", methods=["GET"])
+def get_action_config_endpoint(action_name: str):
+    """Get the configuration for an action, including roll requirements."""
+    config = get_action_config(action_name)
+    if not config:
+        return jsonify({"error": f"Unknown action: {action_name}"}), 404
+
+    # Return just the relevant info for the frontend
+    result = {
+        "name": action_name,
+        "type": config.get("type"),
+    }
+
+    if is_task_roll_action(action_name):
+        roll_config = config.get("roll", {})
+        result["roll"] = {
+            "attribute": roll_config.get("attribute"),
+            "discipline": roll_config.get("discipline"),
+            "difficulty": roll_config.get("difficulty", 1),
+            "focus_eligible": roll_config.get("focus_eligible", True),
+            "ship_assist_system": roll_config.get("ship_assist_system"),
+            "ship_assist_department": roll_config.get("ship_assist_department"),
+        }
+
+    return jsonify(result)
 
 
 @api_bp.route("/encounter/<encounter_id>/momentum", methods=["POST"])
@@ -222,6 +283,10 @@ def fire_weapon():
             return jsonify({"error": "Player ship not found"}), 404
         player_ship = player_ship_record.to_model()
 
+        # Check if weapons are armed
+        if not player_ship.weapons_armed:
+            return jsonify({"error": "Weapons are not armed! Use Arm Weapons first."}), 400
+
         # Load target ship
         enemy_ids = json.loads(encounter.enemy_ship_ids_json)
         if target_index >= len(enemy_ids):
@@ -247,14 +312,17 @@ def fire_weapon():
             active_effects=active_effects,
         )
 
-        # Check if we can re-roll (Targeting Solution effect)
+        # Check Targeting Solution effects
         attack_effects = encounter_model.get_effects("attack")
-        can_reroll = any(e.can_reroll for e in attack_effects)
-        can_choose_system = any(e.can_choose_system for e in attack_effects)
+        has_targeting_solution = any(e.can_reroll or e.can_choose_system for e in attack_effects)
+
+        # Targeting Solution allows: re-roll OR choose system (not both)
+        # Check if this is a re-roll request
+        is_reroll_request = reroll_die_index is not None and previous_rolls is not None
 
         # Handle re-roll if requested
         rerolled = False
-        if reroll_die_index is not None and previous_rolls is not None and can_reroll:
+        if is_reroll_request and has_targeting_solution:
             # Re-roll the specified die
             if 0 <= reroll_die_index < len(previous_rolls):
                 result = assisted_task_roll(
@@ -309,6 +377,12 @@ def fire_weapon():
                 bonus_dice=bonus_dice
             )
 
+        # Targeting Solution: can re-roll OR choose system, but not both
+        # - First roll: can_reroll=True, can_choose_system=True (both available)
+        # - After re-roll: can_reroll=False, can_choose_system=False (TS consumed for re-roll)
+        can_reroll = has_targeting_solution and not rerolled
+        can_choose_system = has_targeting_solution and not rerolled  # Available until re-roll is used
+
         response = {
             "rolls": result.rolls,
             "target_number": result.target_number,
@@ -321,8 +395,9 @@ def fire_weapon():
             "ship_target_number": result.ship_target_number,
             "ship_roll": result.ship_roll,
             "ship_successes": result.ship_successes,
-            # Re-roll support
-            "can_reroll": can_reroll and not rerolled,  # Can only re-roll once
+            # Targeting Solution support
+            "can_reroll": can_reroll,
+            "can_choose_system": can_choose_system,
             "rerolled": rerolled,
         }
 
@@ -376,7 +451,8 @@ def fire_weapon():
                     breaches_caused = 1
 
                 # Roll for each breach - which system is hit
-                for _ in range(breaches_caused):
+                # Systems are randomly determined; player can change via Targeting Solution after seeing results
+                for i in range(breaches_caused):
                     system_roll = random.randint(1, 20)
                     if system_roll == 1:
                         system_hit = "comms"
@@ -447,6 +523,81 @@ def fire_weapon():
             })
 
         return jsonify(response)
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/change-breach-system", methods=["POST"])
+def change_breach_system(encounter_id: str):
+    """
+    Change which system a breach affects (Targeting Solution ability).
+
+    This allows a player who used Targeting Solution to change
+    the randomly-rolled system to one of their choice.
+    """
+    data = request.json
+    target_index = data.get("target_index", 0)
+    breach_index = data.get("breach_index", 0)
+    new_system = data.get("new_system")
+
+    if not new_system:
+        return jsonify({"error": "new_system required"}), 400
+
+    # Validate system name
+    valid_systems = ["comms", "computers", "engines", "sensors", "structure", "weapons"]
+    if new_system not in valid_systems:
+        return jsonify({"error": f"Invalid system: {new_system}"}), 400
+
+    session = get_session()
+    try:
+        # Load encounter
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Load target ship
+        enemy_ids = json.loads(encounter.enemy_ship_ids_json)
+        if target_index >= len(enemy_ids):
+            return jsonify({"error": "Invalid target"}), 400
+
+        target_id = enemy_ids[target_index]
+        target_record = session.query(StarshipRecord).filter_by(id=target_id).first()
+        if not target_record:
+            return jsonify({"error": "Target ship not found"}), 404
+
+        # Load breaches
+        breaches_data = json.loads(target_record.breaches_json)
+        if breach_index >= len(breaches_data):
+            return jsonify({"error": "Invalid breach index"}), 400
+
+        # Get the old system
+        old_system = breaches_data[breach_index]["system"]
+
+        # Change the system
+        breaches_data[breach_index]["system"] = new_system
+
+        # Save back to database
+        target_record.breaches_json = json.dumps(breaches_data)
+
+        # Clear the Targeting Solution effect (consumed)
+        active_effects_data = json.loads(encounter.active_effects_json)
+        # Remove attack effects with can_choose_system
+        active_effects_data = [
+            e for e in active_effects_data
+            if not (e.get("applies_to") == "attack" and e.get("can_choose_system"))
+        ]
+        encounter.active_effects_json = json.dumps(active_effects_data)
+
+        session.commit()
+
+        return jsonify({
+            "success": True,
+            "old_system": old_system,
+            "new_system": new_system,
+            "message": f"Breach changed from {old_system.upper()} to {new_system.upper()}"
+        })
     finally:
         session.close()
 
@@ -531,25 +682,76 @@ def execute_action(encounter_id: str):
             result = execute_buff_action(action_name, encounter, config)
 
         elif is_task_roll_action(action_name):
-            if not character:
-                return jsonify({"error": "Character required for task roll"}), 400
+            # Check if roll was already done by the frontend
+            if data.get("roll_succeeded"):
+                # Apply success effects without re-rolling
+                momentum_generated = data.get("roll_momentum", 0)
+                result = apply_task_roll_success(
+                    action_name,
+                    encounter,
+                    player_ship,
+                    momentum_generated,
+                    config
+                )
+            else:
+                # Do the full roll
+                if not character:
+                    return jsonify({"error": "Character required for task roll"}), 400
 
-            attribute_value = data.get("attribute", 9)
-            discipline_value = data.get("discipline", 2)
-            focus = data.get("focus", False)
-            bonus_dice = data.get("bonus_dice", 0)
+                attribute_value = data.get("attribute", 9)
+                discipline_value = data.get("discipline", 2)
+                focus = data.get("focus", False)
+                bonus_dice = data.get("bonus_dice", 0)
 
-            result = execute_task_roll_action(
-                action_name,
-                encounter,
-                character,
-                player_ship,
-                attribute_value,
-                discipline_value,
-                focus,
-                bonus_dice,
-                config
-            )
+                result = execute_task_roll_action(
+                    action_name,
+                    encounter,
+                    character,
+                    player_ship,
+                    attribute_value,
+                    discipline_value,
+                    focus,
+                    bonus_dice,
+                    config
+                )
+
+        elif is_toggle_action(action_name):
+            # Toggle action - update ship state
+            toggle_property = config.get("toggles")
+            from sta.mechanics.action_handlers import ActionExecutionResult
+
+            if toggle_property == "shields_raised":
+                # Toggle shields
+                new_state = not player_ship.shields_raised
+                player_ship_record.shields_raised = new_state
+
+                # If raising shields, set to max; if lowering, set to 0
+                if new_state:
+                    player_ship_record.shields = player_ship_record.shields_max
+                else:
+                    player_ship_record.shields = 0
+
+                result = ActionExecutionResult(
+                    True,
+                    f"Shields {'raised' if new_state else 'lowered'}!"
+                )
+                result.data["shields_raised"] = new_state
+                result.data["shields"] = player_ship_record.shields
+                result.data["shields_max"] = player_ship_record.shields_max
+
+            elif toggle_property == "weapons_armed":
+                # Toggle weapons
+                new_state = not player_ship.weapons_armed
+                player_ship_record.weapons_armed = new_state
+
+                result = ActionExecutionResult(
+                    True,
+                    f"Weapons {'armed' if new_state else 'disarmed'}!"
+                )
+                result.data["weapons_armed"] = new_state
+
+            else:
+                return jsonify({"error": f"Unknown toggle property: {toggle_property}"}), 400
 
         else:
             return jsonify({"error": f"Action type not implemented: {config.get('type')}"}), 400

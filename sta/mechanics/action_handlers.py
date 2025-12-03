@@ -45,6 +45,9 @@ class ActionExecutionResult:
 
         if self.effect_created:
             result["effect_created"] = self.effect_created.to_dict()
+            result["effect_applied"] = self.effect_created.source_action
+            if self.effect_created.resistance_bonus > 0:
+                result["resistance_bonus"] = self.effect_created.resistance_bonus
 
         result.update(self.data)
         return result
@@ -212,6 +215,78 @@ def execute_task_roll_action(
 
     else:
         result.message += f" {task_result.complications} complication(s)." if task_result.complications > 0 else ""
+
+    return result
+
+
+def apply_task_roll_success(
+    action_name: str,
+    encounter: Encounter,
+    ship: Starship,
+    momentum_generated: int = 0,
+    config: Optional[ActionConfig] = None
+) -> ActionExecutionResult:
+    """
+    Apply the success effects of a task roll action (when roll was already done).
+
+    Args:
+        action_name: Name of the action
+        encounter: The combat encounter
+        ship: The ship
+        momentum_generated: Momentum from the successful roll
+        config: Action configuration (will be looked up if not provided)
+
+    Returns:
+        ActionExecutionResult with applied effects
+    """
+    if config is None:
+        config = get_action_config(action_name)
+
+    if not config or config.get("type") != "task_roll":
+        return ActionExecutionResult(False, f"Invalid task roll action: {action_name}")
+
+    on_success = config.get("on_success", {})
+
+    result = ActionExecutionResult(True, f"{action_name} succeeded!")
+
+    # Generate momentum
+    if on_success.get("generate_momentum", False) and momentum_generated > 0:
+        added = encounter.add_momentum(momentum_generated)
+        result.momentum_generated = added
+        result.message += f" +{added} Momentum."
+
+    # Create effect
+    effect_config = on_success.get("create_effect")
+    if effect_config:
+        effect = ActiveEffect(
+            source_action=action_name,
+            applies_to=effect_config.get("applies_to", "all"),
+            duration=effect_config.get("duration", "next_action"),
+            damage_bonus=effect_config.get("damage_bonus", 0),
+            resistance_bonus=effect_config.get("resistance_bonus", 0),
+            difficulty_modifier=effect_config.get("difficulty_modifier", 0),
+            can_reroll=effect_config.get("can_reroll", False),
+            can_choose_system=effect_config.get("can_choose_system", False),
+            piercing=effect_config.get("piercing", False),
+        )
+        encounter.add_effect(effect)
+        result.effect_created = effect
+
+        # Add descriptive message
+        messages = []
+        if effect.resistance_bonus > 0:
+            messages.append(f"+{effect.resistance_bonus} Resistance")
+        if effect.damage_bonus > 0:
+            messages.append(f"+{effect.damage_bonus} damage")
+        if effect.piercing:
+            messages.append("Piercing")
+        if messages:
+            result.message += " " + ", ".join(messages) + "."
+
+    # Restore power
+    if on_success.get("restore_power", False):
+        ship.has_reserve_power = True
+        result.message += " Reserve Power restored!"
 
     return result
 
