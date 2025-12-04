@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  sta-simulator:
+    build: .
+    container_name: sta-starship-simulator
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_ENV=production
+      - STA_DATABASE_URL=sqlite:////app/data/sta_simulator.db
+    volumes:
+      # Persist SQLite database
+      - sta-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Development service with hot reload
+  sta-simulator-dev:
+    build: .
+    container_name: sta-starship-simulator-dev
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - STA_DATABASE_URL=sqlite:////app/data/sta_simulator.db
+    volumes:
+      # Mount source code for hot reload
+      - ./sta:/app/sta:ro
+      # Persist SQLite database
+      - sta-data-dev:/app/data
+    command: ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5001", "--reload"]
+    profiles:
+      - dev
+
+volumes:
+  sta-data:
+    name: sta-simulator-data
+  sta-data-dev:
+    name: sta-simulator-data-dev

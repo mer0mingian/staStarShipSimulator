@@ -62,7 +62,9 @@ def new_encounter():
             session.add(encounter)
             session.commit()
 
-            return redirect(url_for("encounters.combat", encounter_id=encounter.encounter_id))
+            # Get selected role and redirect with it
+            role = request.form.get("role", "player")
+            return redirect(url_for("encounters.combat", encounter_id=encounter.encounter_id, role=role))
         finally:
             session.close()
 
@@ -85,6 +87,11 @@ def new_encounter():
 @encounters_bp.route("/<encounter_id>")
 def combat(encounter_id: str):
     """Main combat view."""
+    # Get role from query parameter (default to player)
+    role = request.args.get("role", "player")
+    if role not in ("player", "gm"):
+        role = "player"
+
     session = get_session()
     try:
         encounter = session.query(EncounterRecord).filter_by(
@@ -141,8 +148,11 @@ def combat(encounter_id: str):
             if e.applies_to in ("defense", "all") and e.resistance_bonus > 0
         )
 
+        # Select template based on role
+        template = "combat_gm.html" if role == "gm" else "combat_player.html"
+
         return render_template(
-            "combat.html",
+            template,
             encounter=encounter,
             player_char=player_char,
             player_ship=player_ship,
@@ -153,6 +163,7 @@ def combat(encounter_id: str):
             actions=actions,
             active_effects=active_effects,
             resistance_bonus=resistance_bonus,
+            role=role,
         )
     finally:
         session.close()
