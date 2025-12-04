@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+
+{% block title %}{{ encounter.name }} - Game Master View{% endblock %}
+{% block header %}{{ encounter.name }} - Round {{ encounter.round }} [GM]{% endblock %}
+
+{% block content %}
+<!-- Turn Indicator Banner -->
+<div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'enemy' %}your-turn{% else %}player-turn{% endif %}">
+    <div class="turn-text">
+        {% if encounter.current_turn == 'enemy' %}
+        YOUR TURN (GM) - Control enemy vessels
+        {% else %}
+        PLAYER'S TURN - Waiting for player actions...
+        {% endif %}
+    </div>
+    <div style="margin-top: 10px;">
+        <button class="btn" onclick="nextTurn()" id="end-turn-btn">
+            {% if encounter.current_turn == 'enemy' %}End Enemy Turn{% else %}End Player Turn{% endif %}
+        </button>
+    </div>
+</div>
+
+<div class="grid">
+    <!-- Resource Pools (GM can modify both) -->
+    <div class="panel">
+        <h2>Resources</h2>
+        <div class="resource-pool momentum">
+            <span>Momentum</span>
+            <button class="btn btn-small" onclick="updateMomentum(-1)">-</button>
+            <span class="value" id="momentum">{{ encounter.momentum }}</span>
+            <button class="btn btn-small" onclick="updateMomentum(1)">+</button>
+            <span style="color: #666;">/ 6</span>
+        </div>
+        <div class="resource-pool threat">
+            <span>Threat</span>
+            <button class="btn btn-small" onclick="updateThreat(-1)">-</button>
+            <span class="value" id="threat">{{ encounter.threat }}</span>
+            <button class="btn btn-small" onclick="updateThreat(1)">+</button>
+        </div>
+    </div>
+
+    <!-- Player Character (visible to GM) -->
+    {% if player_char %}
+    <div class="panel" style="border-color: var(--lcars-green);">
+        <h2 style="color: var(--lcars-green);">PLAYER: {{ player_char.name }}</h2>
+        <div class="stat-row">
+            <span>Rank / Position</span>
+            <span class="stat-value">{{ player_char.rank }} - {{ position.value.title() }}</span>
+        </div>
+        <div class="stat-row">
+            <span>Stress</span>
+            <span class="stat-value">{{ player_char.stress }} / {{ player_char.stress_max }}</span>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">ATTRIBUTES</h3>
+        <div class="stats-grid">
+            <div class="stat-row">
+                <span>Control</span>
+                <span class="stat-value">{{ player_char.attributes.control }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Daring</span>
+                <span class="stat-value">{{ player_char.attributes.daring }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Fitness</span>
+                <span class="stat-value">{{ player_char.attributes.fitness }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Insight</span>
+                <span class="stat-value">{{ player_char.attributes.insight }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Presence</span>
+                <span class="stat-value">{{ player_char.attributes.presence }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Reason</span>
+                <span class="stat-value">{{ player_char.attributes.reason }}</span>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">DISCIPLINES</h3>
+        <div class="stats-grid">
+            <div class="stat-row">
+                <span>Command</span>
+                <span class="stat-value">{{ player_char.disciplines.command }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Conn</span>
+                <span class="stat-value">{{ player_char.disciplines.conn }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Engineering</span>
+                <span class="stat-value">{{ player_char.disciplines.engineering }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Medicine</span>
+                <span class="stat-value">{{ player_char.disciplines.medicine }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Science</span>
+                <span class="stat-value">{{ player_char.disciplines.science }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Security</span>
+                <span class="stat-value">{{ player_char.disciplines.security }}</span>
+            </div>
+        </div>
+
+        <div style="margin-top: 10px; font-size: 0.9em; color: var(--lcars-tan);">
+            <strong>Focuses:</strong> {{ player_char.focuses | join(', ') }}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="grid">
+    <!-- Player Ship (visible to GM with full details) -->
+    {% if player_ship %}
+    <div class="panel" style="border-color: var(--lcars-green);">
+        <h2 style="color: var(--lcars-green);">PLAYER SHIP: {{ player_ship.name }}</h2>
+        <div class="stat-row">
+            <span>Class</span>
+            <span class="stat-value">{{ player_ship.ship_class }}-class (Scale {{ player_ship.scale }})</span>
+        </div>
+        <div class="stat-row">
+            <span>Shields</span>
+            <span class="stat-value" id="player-shields">
+                {{ player_ship.shields }} / {{ player_ship.shields_max }}
+                <span id="shields-status" style="margin-left: 8px; font-size: 0.8em; {% if player_ship.shields_raised %}color: var(--lcars-green);{% else %}color: var(--lcars-red);{% endif %}">
+                    [{{ 'ONLINE' if player_ship.shields_raised else 'OFFLINE' }}]
+                </span>
+            </span>
+        </div>
+        <div class="shields-bar">
+            <div class="fill" id="player-shields-bar" style="width: {{ (player_ship.shields / player_ship.shields_max * 100) | int }}%; background: var(--lcars-green);{% if not player_ship.shields_raised %} background: var(--lcars-red);{% endif %}"></div>
+        </div>
+        <div class="stat-row">
+            <span>Resistance</span>
+            <span class="stat-value" id="player-resistance">
+                {{ player_ship.resistance }}{% if resistance_bonus > 0 %} <span style="color: var(--lcars-green);">(+{{ resistance_bonus }})</span>{% endif %}
+            </span>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">SYSTEMS</h3>
+        <div class="stats-grid">
+            {% set systems = [('Comms', player_ship.systems.comms, 'comms'), ('Computers', player_ship.systems.computers, 'computers'), ('Engines', player_ship.systems.engines, 'engines'), ('Sensors', player_ship.systems.sensors, 'sensors'), ('Structure', player_ship.systems.structure, 'structure'), ('Weapons', player_ship.systems.weapons, 'weapons')] %}
+            {% for name, value, key in systems %}
+            {% set breach_potency = player_ship.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
+            <div class="stat-row {% if breach_potency > 0 %}breached{% endif %}" data-system="{{ key }}">
+                <span>{{ name }}</span>
+                <span class="stat-value">
+                    {{ value }}
+                    <span class="breach-indicator" style="{% if breach_potency == 0 %}display:none{% endif %}">[Breach <span class="breach-count">{{ breach_potency }}</span>]</span>
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">DEPARTMENTS</h3>
+        <div class="stats-grid">
+            <div class="stat-row"><span>Command</span><span class="stat-value">{{ player_ship.departments.command }}</span></div>
+            <div class="stat-row"><span>Conn</span><span class="stat-value">{{ player_ship.departments.conn }}</span></div>
+            <div class="stat-row"><span>Engineering</span><span class="stat-value">{{ player_ship.departments.engineering }}</span></div>
+            <div class="stat-row"><span>Medicine</span><span class="stat-value">{{ player_ship.departments.medicine }}</span></div>
+            <div class="stat-row"><span>Science</span><span class="stat-value">{{ player_ship.departments.science }}</span></div>
+            <div class="stat-row"><span>Security</span><span class="stat-value">{{ player_ship.departments.security }}</span></div>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">
+            WEAPONS
+            <span id="weapons-status" style="margin-left: 10px; {% if player_ship.weapons_armed %}color: var(--lcars-orange);{% else %}color: var(--lcars-red);{% endif %}">
+                [{{ 'ARMED' if player_ship.weapons_armed else 'STANDBY' }}]
+            </span>
+        </h3>
+        {% for weapon in player_ship.weapons %}
+        <div class="stat-row">
+            <span>{{ weapon.name }}</span>
+            <span class="stat-value">Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }} | {{ weapon.range.value.title() }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Enemy Ships (full details for GM) -->
+    {% for enemy in enemy_ships %}
+    <div class="panel enemy-ship" style="border-color: var(--lcars-red);" data-ship-id="{{ loop.index0 }}">
+        <h2 style="color: var(--lcars-red);">ENEMY: {{ enemy.name }}</h2>
+        <div class="stat-row">
+            <span>Class</span>
+            <span class="stat-value">{{ enemy.ship_class }}-class (Scale {{ enemy.scale }})</span>
+        </div>
+        <div class="stat-row">
+            <span>Shields</span>
+            <span class="stat-value enemy-shields">{{ enemy.shields }} / {{ enemy.shields_max }}</span>
+        </div>
+        <div class="shields-bar">
+            <div class="fill enemy-shields-bar" style="width: {{ (enemy.shields / enemy.shields_max * 100) | int }}%; background: var(--lcars-red);"></div>
+        </div>
+        <div class="stat-row">
+            <span>Resistance</span>
+            <span class="stat-value">{{ enemy.resistance }}</span>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">SYSTEMS</h3>
+        <div class="stats-grid">
+            {% set systems = [('Comms', enemy.systems.comms, 'comms'), ('Computers', enemy.systems.computers, 'computers'), ('Engines', enemy.systems.engines, 'engines'), ('Sensors', enemy.systems.sensors, 'sensors'), ('Structure', enemy.systems.structure, 'structure'), ('Weapons', enemy.systems.weapons, 'weapons')] %}
+            {% for name, value, key in systems %}
+            {% set breach_potency = enemy.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
+            <div class="stat-row {% if breach_potency > 0 %}breached{% endif %}" data-system="{{ key }}">
+                <span>{{ name }}</span>
+                <span class="stat-value">
+                    {{ value }}
+                    <span class="breach-indicator" style="{% if breach_potency == 0 %}display:none{% endif %}">[Breach <span class="breach-count">{{ breach_potency }}</span>]</span>
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">DEPARTMENTS</h3>
+        <div class="stats-grid">
+            <div class="stat-row"><span>Command</span><span class="stat-value">{{ enemy.departments.command }}</span></div>
+            <div class="stat-row"><span>Conn</span><span class="stat-value">{{ enemy.departments.conn }}</span></div>
+            <div class="stat-row"><span>Engineering</span><span class="stat-value">{{ enemy.departments.engineering }}</span></div>
+            <div class="stat-row"><span>Medicine</span><span class="stat-value">{{ enemy.departments.medicine }}</span></div>
+            <div class="stat-row"><span>Science</span><span class="stat-value">{{ enemy.departments.science }}</span></div>
+            <div class="stat-row"><span>Security</span><span class="stat-value">{{ enemy.departments.security }}</span></div>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">WEAPONS</h3>
+        {% for weapon in enemy.weapons %}
+        <div class="stat-row">
+            <span>{{ weapon.name }}</span>
+            <span class="stat-value">Dmg {{ weapon.damage }}+{{ enemy.weapons_damage_bonus() }} | {{ weapon.range.value.title() }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- GM Controls Panel (only visible on enemy turn) -->
+<div id="gm-controls" class="panel" style="border-color: var(--lcars-purple); {% if encounter.current_turn != 'enemy' %}opacity: 0.5;{% endif %}">
+    <h2 style="color: var(--lcars-purple);">GM CONTROLS</h2>
+
+    <div id="gm-turn-message" style="padding: 10px; background: #222; border-radius: 5px; margin-bottom: 15px;">
+        {% if encounter.current_turn == 'enemy' %}
+        <span style="color: var(--lcars-green);">It's the enemy's turn. You can control enemy actions.</span>
+        {% else %}
+        <span style="color: var(--lcars-tan);">Waiting for the player to complete their turn...</span>
+        {% endif %}
+    </div>
+
+    <div class="grid" style="grid-template-columns: 1fr 1fr;">
+        <div>
+            <h3 style="color: var(--lcars-tan); font-size: 0.9em;">Quick Damage</h3>
+            <div style="margin-top: 10px;">
+                <label for="damage-target">Target</label>
+                <select id="damage-target" style="width: 100%;">
+                    <option value="player">Player Ship</option>
+                    {% for enemy in enemy_ships %}
+                    <option value="enemy-{{ loop.index0 }}">{{ enemy.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="margin-top: 10px;">
+                <label for="damage-amount">Damage Amount</label>
+                <input type="number" id="damage-amount" value="5" min="0" style="width: 100px;">
+                <button class="btn btn-small" onclick="applyQuickDamage()">Apply</button>
+            </div>
+        </div>
+        <div>
+            <h3 style="color: var(--lcars-tan); font-size: 0.9em;">Quick Breach</h3>
+            <div style="margin-top: 10px;">
+                <label for="breach-target">Target</label>
+                <select id="breach-target" style="width: 100%;">
+                    <option value="player">Player Ship</option>
+                    {% for enemy in enemy_ships %}
+                    <option value="enemy-{{ loop.index0 }}">{{ enemy.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="margin-top: 10px;">
+                <label for="breach-system">System</label>
+                <select id="breach-system" style="width: 100%;">
+                    <option value="comms">Comms</option>
+                    <option value="computers">Computers</option>
+                    <option value="engines">Engines</option>
+                    <option value="sensors">Sensors</option>
+                    <option value="structure">Structure</option>
+                    <option value="weapons">Weapons</option>
+                </select>
+                <button class="btn btn-small" onclick="addQuickBreach()">Add</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Effects Panel -->
+<div class="panel" style="border-color: var(--lcars-blue);">
+    <h2 style="color: var(--lcars-blue);">ACTIVE EFFECTS</h2>
+    <div id="active-effects-list">
+        {% if active_effects %}
+            {% for effect in active_effects %}
+            <div style="padding: 8px; background: #222; border-radius: 5px; margin: 5px 0;">
+                <strong>{{ effect.source_action }}</strong>
+                <span style="color: var(--lcars-tan);">({{ effect.applies_to }} - {{ effect.duration }})</span>
+                <div style="font-size: 0.85em; color: var(--lcars-green);">
+                    {% if effect.damage_bonus > 0 %}+{{ effect.damage_bonus }} damage{% endif %}
+                    {% if effect.resistance_bonus > 0 %}+{{ effect.resistance_bonus }} resistance{% endif %}
+                    {% if effect.can_reroll %}can re-roll{% endif %}
+                    {% if effect.can_choose_system %}can choose system{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p style="color: #666;">No active effects</p>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+    .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 15px;
+    }
+    .breached {
+        color: var(--lcars-red) !important;
+    }
+    .breach-indicator {
+        color: var(--lcars-red);
+        font-size: 0.8em;
+        margin-left: 5px;
+    }
+    /* Turn banner styles */
+    .turn-banner {
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 20px;
+        font-size: 1.3em;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+    .turn-banner.your-turn {
+        background: linear-gradient(135deg, #2a1a3a, #4a2a5a);
+        border: 3px solid var(--lcars-purple);
+        color: var(--lcars-purple);
+        animation: pulse-purple 2s ease-in-out infinite;
+    }
+    .turn-banner.player-turn {
+        background: linear-gradient(135deg, #1a3a1a, #2a5a2a);
+        border: 3px solid var(--lcars-green);
+        color: var(--lcars-green);
+    }
+    @keyframes pulse-purple {
+        0%, 100% { box-shadow: 0 0 10px var(--lcars-purple); }
+        50% { box-shadow: 0 0 25px var(--lcars-purple); }
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translateY(0); }
+        to { opacity: 0; transform: translateY(-10px); }
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const encounterId = '{{ encounter.encounter_id }}';
+    const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
+    const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
+    const role = 'gm';
+    let currentTurn = '{{ encounter.current_turn }}';
+
+    // Update turn display
+    function updateTurnDisplay(newTurn, newRound) {
+        currentTurn = newTurn;
+        const banner = document.getElementById('turn-banner');
+        const gmControls = document.getElementById('gm-controls');
+        const gmMessage = document.getElementById('gm-turn-message');
+        const endTurnBtn = document.getElementById('end-turn-btn');
+
+        if (newTurn === 'enemy') {
+            banner.className = 'turn-banner your-turn';
+            banner.querySelector('.turn-text').textContent = "YOUR TURN (GM) - Control enemy vessels";
+            endTurnBtn.textContent = 'End Enemy Turn';
+            gmControls.style.opacity = '1';
+            gmMessage.innerHTML = '<span style="color: var(--lcars-green);">It\'s the enemy\'s turn. You can control enemy actions.</span>';
+        } else {
+            banner.className = 'turn-banner player-turn';
+            banner.querySelector('.turn-text').textContent = "PLAYER'S TURN - Waiting for player actions...";
+            endTurnBtn.textContent = 'End Player Turn';
+            gmControls.style.opacity = '0.5';
+            gmMessage.innerHTML = '<span style="color: var(--lcars-tan);">Waiting for the player to complete their turn...</span>';
+        }
+
+        // Update round in header
+        document.querySelector('header h1').textContent = `{{ encounter.name }} - Round ${newRound} [GM]`;
+    }
+
+    async function updateMomentum(change) {
+        const response = await fetch(`/api/encounter/${encounterId}/momentum`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({change})
+        });
+        const data = await response.json();
+        document.getElementById('momentum').textContent = data.momentum;
+    }
+
+    async function updateThreat(change) {
+        const response = await fetch(`/api/encounter/${encounterId}/threat`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({change})
+        });
+        const data = await response.json();
+        document.getElementById('threat').textContent = data.threat;
+    }
+
+    async function nextTurn() {
+        const response = await fetch(`/api/encounter/${encounterId}/next-turn`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        const data = await response.json();
+
+        updateTurnDisplay(data.current_turn, data.round);
+    }
+
+    async function applyQuickDamage() {
+        const target = document.getElementById('damage-target').value;
+        const damage = parseInt(document.getElementById('damage-amount').value) || 0;
+
+        let shipId;
+        if (target === 'player') {
+            shipId = playerShipId;
+        } else {
+            const enemyIndex = parseInt(target.replace('enemy-', ''));
+            shipId = enemyShipIds[enemyIndex];
+        }
+
+        if (!shipId) {
+            alert('Invalid target');
+            return;
+        }
+
+        const response = await fetch(`/api/ship/${shipId}/damage`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({damage})
+        });
+        const data = await response.json();
+
+        showToast(`Applied ${damage} damage. Shield damage: ${data.shield_damage}, Hull damage: ${data.hull_damage}`);
+
+        // Refresh the page to show updated values
+        setTimeout(() => location.reload(), 1500);
+    }
+
+    async function addQuickBreach() {
+        const target = document.getElementById('breach-target').value;
+        const system = document.getElementById('breach-system').value;
+
+        let shipId;
+        if (target === 'player') {
+            shipId = playerShipId;
+        } else {
+            const enemyIndex = parseInt(target.replace('enemy-', ''));
+            shipId = enemyShipIds[enemyIndex];
+        }
+
+        if (!shipId) {
+            alert('Invalid target');
+            return;
+        }
+
+        const response = await fetch(`/api/ship/${shipId}/breach`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({system})
+        });
+        const data = await response.json();
+
+        showToast(`Added breach to ${system.toUpperCase()}`);
+
+        // Refresh the page to show updated values
+        setTimeout(() => location.reload(), 1500);
+    }
+
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #1a3a3a;
+            border: 2px solid var(--lcars-blue);
+            border-radius: 5px;
+            color: var(--lcars-blue);
+            font-weight: bold;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in;
+        `;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
+    }
+
+    // Poll for turn changes and updates
+    setInterval(async () => {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/status`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.current_turn !== currentTurn) {
+                    updateTurnDisplay(data.current_turn, data.round);
+                }
+                document.getElementById('momentum').textContent = data.momentum;
+                document.getElementById('threat').textContent = data.threat;
+            }
+        } catch (e) {
+            // Ignore errors during polling
+        }
+    }, 3000);
+</script>
+{% endblock %}

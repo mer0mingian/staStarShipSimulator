@@ -70,6 +70,27 @@
         <p>A random enemy ship will be generated for this encounter.</p>
     </div>
 
+    <div class="panel" style="border-color: var(--lcars-purple);">
+        <h2 style="color: var(--lcars-purple);">Your Role</h2>
+        <p style="color: var(--lcars-tan); margin-bottom: 15px;">Select how you want to join this encounter:</p>
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: #222; border-radius: 5px; flex: 1; min-width: 150px;">
+                <input type="radio" name="role" value="player" checked>
+                <div>
+                    <strong style="color: var(--lcars-orange);">Player</strong>
+                    <div style="font-size: 0.85em; color: var(--lcars-tan);">Control your character and ship</div>
+                </div>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: #222; border-radius: 5px; flex: 1; min-width: 150px;">
+                <input type="radio" name="role" value="gm">
+                <div>
+                    <strong style="color: var(--lcars-purple);">Game Master</strong>
+                    <div style="font-size: 0.85em; color: var(--lcars-tan);">Oversee encounter and control enemies</div>
+                </div>
+            </label>
+        </div>
+    </div>
+
     <button type="submit" class="btn">Start Encounter</button>
     <a href="{{ url_for('main.index') }}" class="btn" style="background: #666;">Cancel</a>
 </form>

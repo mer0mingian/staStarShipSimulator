@@ -244,6 +244,28 @@ def next_turn(encounter_id: str):
         session.close()
 
 
+@api_bp.route("/encounter/<encounter_id>/status", methods=["GET"])
+def get_encounter_status(encounter_id: str):
+    """Get current encounter status (for polling)."""
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        return jsonify({
+            "current_turn": encounter.current_turn,
+            "round": encounter.round,
+            "momentum": encounter.momentum,
+            "threat": encounter.threat,
+        })
+    finally:
+        session.close()
+
+
 @api_bp.route("/fire", methods=["POST"])
 def fire_weapon():
     """Execute a Fire action with full damage resolution.
@@ -265,6 +287,17 @@ def fire_weapon():
     bonus_dice = data.get("bonus_dice", 0)
     reroll_die_index = data.get("reroll_die_index")  # Index of die to re-roll (if any)
     previous_rolls = data.get("previous_rolls")  # Previous roll results (for re-roll)
+    role = data.get("role", "player")  # Default to player
+
+    # Check turn ownership for player fire actions
+    if role == "player":
+        session = get_session()
+        try:
+            enc = session.query(EncounterRecord).filter_by(encounter_id=encounter_id).first()
+            if enc and enc.current_turn != "player":
+                return jsonify({"error": "It's not the player's turn!"}), 403
+        finally:
+            session.close()
 
     session = get_session()
     try:
@@ -617,12 +650,24 @@ def execute_action(encounter_id: str):
         difficulty: int - (Optional) Override difficulty
         focus: bool - (Optional) Whether focus applies
         bonus_dice: int - (Optional) Number of bonus dice
+        role: str - (Optional) Role making the request (player/gm)
 
     Returns:
         JSON with success, message, and action results
     """
     data = request.json
     action_name = data.get("action_name")
+    role = data.get("role", "player")  # Default to player for backward compatibility
+
+    # Check turn ownership for player actions
+    if role == "player":
+        session = get_session()
+        try:
+            enc = session.query(EncounterRecord).filter_by(encounter_id=encounter_id).first()
+            if enc and enc.current_turn != "player":
+                return jsonify({"error": "It's not the player's turn!"}), 403
+        finally:
+            session.close()
 
     if not action_name:
         return jsonify({"error": "action_name required"}), 400

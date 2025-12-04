@@ -1,0 +1,48 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+.eggs
+dist
+build
+*.egg
+
+# Virtual environments
+venv
+.venv
+env
+.env
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local database (will be created in container)
+*.db
+sta_simulator.db
+
+# Documentation and reference files (not needed at runtime)
+referenceFiles/
+*.md
+!requirements.txt
+
+# Development scripts
+scripts/
+migrate_*.py
+dev.sh
+
+# Claude config
+.claude/
