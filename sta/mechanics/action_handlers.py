@@ -368,6 +368,66 @@ def apply_effects_to_attack(
     return modified_damage, cleared, effect_details
 
 
+def execute_defensive_fire(
+    encounter: Encounter,
+    ship: Starship,
+    weapon_index: int,
+) -> ActionExecutionResult:
+    """
+    Execute the Defensive Fire action.
+
+    Args:
+        encounter: The combat encounter
+        ship: The player ship
+        weapon_index: Index of the energy weapon to use
+
+    Returns:
+        ActionExecutionResult with the created effect
+    """
+    # Check for Evasive Action conflict
+    defense_effects = encounter.get_effects("defense")
+    for effect in defense_effects:
+        if effect.source_action == "Evasive Action":
+            return ActionExecutionResult(
+                False,
+                "Cannot use Defensive Fire while Evasive Action is active!"
+            )
+
+    # Validate weapon index
+    if weapon_index < 0 or weapon_index >= len(ship.weapons):
+        return ActionExecutionResult(False, "Invalid weapon selection!")
+
+    weapon = ship.weapons[weapon_index]
+
+    # Check that it's an energy weapon (not torpedo)
+    if weapon.weapon_type.value == "torpedo":
+        return ActionExecutionResult(
+            False,
+            "Defensive Fire requires an energy weapon, not torpedoes!"
+        )
+
+    # Create the Defensive Fire effect
+    effect = ActiveEffect(
+        source_action="Defensive Fire",
+        applies_to="defense",
+        duration="next_turn",  # Lasts until player's next turn
+        is_opposed=True,  # Enemy attacks become opposed rolls
+        weapon_index=weapon_index,  # Store weapon for counterattack
+    )
+
+    encounter.add_effect(effect)
+
+    result = ActionExecutionResult(
+        True,
+        f"Defensive Fire activated with {weapon.name}! Enemy attacks will become opposed rolls."
+    )
+    result.effect_created = effect
+    result.data["weapon_name"] = weapon.name
+    result.data["weapon_index"] = weapon_index
+
+    return result
+
+
 def apply_effects_to_defense(
     encounter: Encounter,
     base_resistance: int

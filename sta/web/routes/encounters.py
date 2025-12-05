@@ -7,7 +7,7 @@ from sta.database import (
 )
 from sta.generators import generate_character, generate_starship
 from sta.generators.starship import generate_enemy_ship
-from sta.models.enums import Position
+from sta.models.enums import Position, CrewQuality
 
 encounters_bp = Blueprint("encounters", __name__)
 
@@ -40,8 +40,14 @@ def new_encounter():
             else:
                 ship_id = int(request.form.get("ship_id", 0))
 
-            # Generate enemy ship
-            enemy = generate_enemy_ship(difficulty="standard")
+            # Generate enemy ship with selected crew quality
+            crew_quality_str = request.form.get("crew_quality", "talented")
+            try:
+                crew_quality = CrewQuality(crew_quality_str)
+            except ValueError:
+                crew_quality = CrewQuality.TALENTED
+
+            enemy = generate_enemy_ship(difficulty="standard", crew_quality=crew_quality)
             enemy_record = StarshipRecord.from_model(enemy)
             session.add(enemy_record)
             session.flush()
