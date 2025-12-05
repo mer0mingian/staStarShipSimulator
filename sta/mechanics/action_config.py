@@ -169,6 +169,20 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         }
     },
 
+    "Defensive Fire": {
+        "type": "special",  # Special because it requires weapon selection and stores weapon_index
+        "effect": {
+            "applies_to": "defense",
+            "duration": "next_turn",  # Lasts until player's next turn
+            # When active, enemy attacks become opposed rolls
+            # Uses Daring + Security, assisted by Weapons + Security
+            # If defender wins: attack misses, can spend 2 Momentum to counterattack
+        },
+        # Cannot be used if Evasive Action is active
+        "blocks": ["Evasive Action"],
+        "blocked_by": ["Evasive Action"],
+    },
+
     "Maneuver": {
         "type": "task_roll",
         "roll": {
@@ -284,3 +298,59 @@ def is_toggle_action(action_name: str) -> bool:
     """Check if an action is a toggle action."""
     config = get_action_config(action_name)
     return config is not None and config.get("type") == "toggle"
+
+
+# ===== NPC ACTIONS =====
+# Actions that NPC ships can perform. NPCs cannot use actions that:
+# - Require individual crew members (Assist, Direct, Rally)
+# - Require Reserve Power (NPCs don't have Reserve Power per rules)
+#   - Regain Power, Regenerate Shields, Reroute Power, Warp
+
+NPC_ACTIONS: dict[str, list[str]] = {
+    "tactical_minor": [
+        "Calibrate Weapons",
+        "Targeting Solution",
+        "Raise Shields",
+        "Lower Shields",
+        "Arm Weapons",
+        "Disarm Weapons",
+    ],
+    "tactical_major": [
+        "Fire",  # Special - handled separately
+        "Modulate Shields",
+        "Defensive Fire",
+    ],
+    "conn_minor": [],
+    "conn_major": [
+        "Attack Pattern",
+        "Evasive Action",
+        "Maneuver",
+    ],
+    "engineering_minor": [],
+    "engineering_major": [
+        "Damage Control",
+        # Note: No Regain Power, Regenerate Shields (require Reserve Power)
+    ],
+    "science_minor": [
+        "Calibrate Sensors",
+    ],
+    "science_major": [
+        "Scan For Weakness",
+        "Sensor Sweep",
+    ],
+}
+
+# Flat list of all NPC actions
+ALL_NPC_ACTIONS = []
+for category in NPC_ACTIONS.values():
+    ALL_NPC_ACTIONS.extend(category)
+
+
+def is_npc_action(action_name: str) -> bool:
+    """Check if an action is available to NPC ships."""
+    return action_name in ALL_NPC_ACTIONS or action_name == "Fire"
+
+
+def get_npc_actions_by_category() -> dict[str, list[str]]:
+    """Get NPC actions organized by category."""
+    return NPC_ACTIONS

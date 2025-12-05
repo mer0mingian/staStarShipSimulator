@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from typing import Optional
-from .enums import DamageType, WeaponDelivery, Range, SystemType
+from .enums import DamageType, WeaponDelivery, Range, SystemType, CrewQuality
 
 
 @dataclass
@@ -104,6 +104,9 @@ class Starship:
     shields_raised: bool = False  # Shields start offline
     weapons_armed: bool = False  # Weapons start unarmed
     registry: Optional[str] = None
+    # NPC ships have a crew quality instead of individual crew members
+    # None means this is a player ship (uses character stats for rolls)
+    crew_quality: Optional[CrewQuality] = None
 
     def __post_init__(self):
         """Calculate derived values only if not explicitly set."""
@@ -127,6 +130,31 @@ class Starship:
         elif weapons <= 12:
             return 3
         return 4
+
+    def is_npc_ship(self) -> bool:
+        """Check if this is an NPC ship (has crew quality instead of player crew)."""
+        return self.crew_quality is not None
+
+    def get_npc_target_number(self) -> Optional[int]:
+        """
+        Get the target number for NPC task rolls.
+        Returns None if this is a player ship.
+        """
+        if self.crew_quality is None:
+            return None
+        return self.crew_quality.target_number
+
+    def get_npc_attribute(self) -> Optional[int]:
+        """Get the NPC crew attribute rating. Returns None for player ships."""
+        if self.crew_quality is None:
+            return None
+        return self.crew_quality.attribute
+
+    def get_npc_department(self) -> Optional[int]:
+        """Get the NPC crew department rating. Returns None for player ships."""
+        if self.crew_quality is None:
+            return None
+        return self.crew_quality.department
 
     def get_breach_potency(self, system: SystemType) -> int:
         """Get total breach potency for a system."""

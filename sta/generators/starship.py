@@ -1,8 +1,9 @@
 """Random starship generator for STA."""
 
 import random
+from typing import Optional
 from sta.models.starship import Starship, Systems, Departments, Weapon
-from sta.models.enums import DamageType, Range
+from sta.models.enums import DamageType, Range, CrewQuality
 from .data import (
     SHIP_CLASSES, SHIP_TALENTS, WEAPON_TEMPLATES,
     SHIP_NAMES_FEDERATION, SHIP_NAMES_KLINGON, SHIP_NAMES_ROMULAN
@@ -53,6 +54,7 @@ def generate_starship(
     registry: str | None = None,
     talent_count: int = 2,
     faction: str = "Federation",
+    crew_quality: Optional[CrewQuality] = None,
 ) -> Starship:
     """
     Generate a fully random starship.
@@ -63,6 +65,7 @@ def generate_starship(
         registry: Registry number (random if None)
         talent_count: Number of talents to assign
         faction: Ship faction (Federation, Klingon, Romulan)
+        crew_quality: NPC crew quality (None for player ships)
 
     Returns:
         A randomly generated Starship
@@ -132,12 +135,14 @@ def generate_starship(
         talents=talents,
         traits=traits,
         registry=registry,
+        crew_quality=crew_quality,
     )
 
 
 def generate_enemy_ship(
     difficulty: str = "standard",
     faction: str | None = None,
+    crew_quality: Optional[CrewQuality] = None,
 ) -> Starship:
     """
     Generate an enemy ship appropriate for combat.
@@ -145,9 +150,10 @@ def generate_enemy_ship(
     Args:
         difficulty: "easy", "standard", or "hard"
         faction: Enemy faction (random if None)
+        crew_quality: NPC crew quality (defaults based on difficulty if None)
 
     Returns:
-        An enemy Starship
+        An enemy Starship (with crew_quality set for NPC rolls)
     """
     if faction is None:
         faction = random.choice(["Klingon", "Romulan"])
@@ -166,8 +172,17 @@ def generate_enemy_ship(
         # Generic enemy
         ship_class = random.choice(["Bird-of-Prey", "D7 Battlecruiser", "Warbird"])
 
+    # Default crew quality based on difficulty if not specified
+    if crew_quality is None:
+        crew_quality = {
+            "easy": CrewQuality.PROFICIENT,
+            "standard": CrewQuality.TALENTED,
+            "hard": CrewQuality.EXCEPTIONAL,
+        }.get(difficulty, CrewQuality.TALENTED)
+
     return generate_starship(
         ship_class=ship_class,
         faction=faction,
         talent_count=1 if difficulty == "easy" else 2,
+        crew_quality=crew_quality,
     )

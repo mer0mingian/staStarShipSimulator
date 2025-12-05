@@ -66,8 +66,19 @@
     </div>
 
     <div class="panel">
-        <h2>Enemy</h2>
-        <p>A random enemy ship will be generated for this encounter.</p>
+        <h2>Enemy Ship</h2>
+        <p style="margin-bottom: 15px;">A random enemy ship will be generated for this encounter.</p>
+
+        <label for="crew_quality">Crew Quality</label>
+        <select name="crew_quality" id="crew_quality" style="width: 100%; margin-bottom: 10px;">
+            <option value="basic">Basic (Attribute 8, Department 1) - Green crew</option>
+            <option value="proficient">Proficient (Attribute 9, Department 2) - Competent crew</option>
+            <option value="talented" selected>Talented (Attribute 10, Department 3) - Skilled crew</option>
+            <option value="exceptional">Exceptional (Attribute 11, Department 4) - Elite crew</option>
+        </select>
+        <p style="font-size: 0.85em; color: var(--lcars-tan);">
+            NPC ships use Crew Quality for all task rolls. Higher quality = more dangerous enemy.
+        </p>
     </div>
 
     <div class="panel" style="border-color: var(--lcars-purple);">

@@ -22,6 +22,7 @@ class ActiveEffect:
     source_action: str  # Name of the action that created this effect
     applies_to: str  # What this effect applies to: "attack", "defense", "sensor", "all"
     duration: Literal["next_action", "end_of_turn", "end_of_round"]  # How long it lasts
+    source_ship: Optional[str] = None  # Name of the ship that created this effect (for NPC effects)
 
     # Effect modifiers (at least one should be set)
     damage_bonus: int = 0
@@ -30,6 +31,10 @@ class ActiveEffect:
     can_reroll: bool = False
     can_choose_system: bool = False  # For targeted attacks
     piercing: bool = False  # Ignore resistance
+
+    # Special data for specific actions
+    weapon_index: Optional[int] = None  # For Defensive Fire - which weapon to use for counterattack
+    is_opposed: bool = False  # For Defensive Fire / Evasive Action - attacks become opposed rolls
 
     # Metadata
     created_round: int = 1
@@ -44,6 +49,7 @@ class ActiveEffect:
         return {
             "id": self.id,
             "source_action": self.source_action,
+            "source_ship": self.source_ship,
             "applies_to": self.applies_to,
             "duration": self.duration,
             "damage_bonus": self.damage_bonus,
@@ -52,6 +58,8 @@ class ActiveEffect:
             "can_reroll": self.can_reroll,
             "can_choose_system": self.can_choose_system,
             "piercing": self.piercing,
+            "weapon_index": self.weapon_index,
+            "is_opposed": self.is_opposed,
             "created_round": self.created_round,
         }
 
@@ -61,6 +69,7 @@ class ActiveEffect:
         return cls(
             id=data.get("id", str(uuid.uuid4())),
             source_action=data["source_action"],
+            source_ship=data.get("source_ship"),
             applies_to=data["applies_to"],
             duration=data["duration"],
             damage_bonus=data.get("damage_bonus", 0),
@@ -69,6 +78,8 @@ class ActiveEffect:
             can_reroll=data.get("can_reroll", False),
             can_choose_system=data.get("can_choose_system", False),
             piercing=data.get("piercing", False),
+            weapon_index=data.get("weapon_index"),
+            is_opposed=data.get("is_opposed", False),
             created_round=data.get("created_round", 1),
         )
 

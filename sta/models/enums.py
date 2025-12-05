@@ -62,3 +62,48 @@ class DepartmentType(Enum):
     MEDICINE = "medicine"
     SCIENCE = "science"
     SECURITY = "security"
+
+
+class CrewQuality(Enum):
+    """
+    NPC ship crew quality levels.
+
+    Per STA 2e rules, NPC ships don't have individual crew members.
+    Instead, they have a Crew Quality that provides attribute and
+    department ratings for all tasks. NPC crew are always considered
+    to have an applicable Focus (crits on 1s AND 2s).
+    """
+    BASIC = "basic"           # Attribute 8, Department 1
+    PROFICIENT = "proficient" # Attribute 9, Department 2
+    TALENTED = "talented"     # Attribute 10, Department 3
+    EXCEPTIONAL = "exceptional"  # Attribute 11, Department 4
+
+    @property
+    def attribute(self) -> int:
+        """Get the attribute rating for this crew quality."""
+        return {
+            CrewQuality.BASIC: 8,
+            CrewQuality.PROFICIENT: 9,
+            CrewQuality.TALENTED: 10,
+            CrewQuality.EXCEPTIONAL: 11,
+        }[self]
+
+    @property
+    def department(self) -> int:
+        """Get the department rating for this crew quality."""
+        return {
+            CrewQuality.BASIC: 1,
+            CrewQuality.PROFICIENT: 2,
+            CrewQuality.TALENTED: 3,
+            CrewQuality.EXCEPTIONAL: 4,
+        }[self]
+
+    @property
+    def target_number(self) -> int:
+        """Get the target number (attribute + department) for task rolls."""
+        return self.attribute + self.department
+
+    @property
+    def has_focus(self) -> bool:
+        """NPC crew always have an applicable focus."""
+        return True

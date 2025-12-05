@@ -386,7 +386,7 @@ TACTICAL_MAJOR_ACTIONS = [
         assisted_by_system="weapons",
         assisted_by_department="security",
         effect_notes="Success: spend 2 Momentum to counterattack. Cannot combine with Evasive Action.",
-        status="NOT_IMPL",
+        status="RFT",
     ),
     Action(
         name="Modulate Shields",

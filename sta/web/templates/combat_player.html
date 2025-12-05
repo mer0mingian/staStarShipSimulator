@@ -405,6 +405,45 @@
     <div id="fire-results" style="margin-top: 15px; display: none;"></div>
 </div>
 
+<!-- Defensive Fire Action Panel (hidden by default) -->
+<div class="panel" id="defensive-fire-panel" style="display: none; border-color: var(--lcars-purple);">
+    <h2 style="color: var(--lcars-purple);">DEFENSIVE FIRE</h2>
+
+    <div style="padding: 10px; background: #2a1a3a; border: 2px solid var(--lcars-purple); border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: var(--lcars-tan);">
+            Choose an <strong>energy weapon</strong> to use defensively. Until your next turn,
+            enemy attacks against this ship become <strong>opposed rolls</strong>.
+        </p>
+        <p style="margin: 10px 0 0 0; color: var(--lcars-orange);">
+            If you win the opposed roll, you may spend <strong>2 Momentum</strong> to counterattack with this weapon.
+        </p>
+    </div>
+
+    <div>
+        <label for="defensive-fire-weapon-select">Select Energy Weapon</label>
+        <select id="defensive-fire-weapon-select" style="width: 100%;">
+            {% for weapon in player_ship.weapons %}
+            {% if weapon.weapon_type.value != 'torpedo' %}
+            <option value="{{ loop.index0 }}" data-damage="{{ weapon.damage }}">
+                {{ weapon.name }} (Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }}, {{ weapon.range.value.title() }})
+            </option>
+            {% endif %}
+            {% endfor %}
+        </select>
+    </div>
+
+    <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+        <strong>Opposed Roll Details:</strong>
+        <p><strong>Your Roll:</strong> Daring ({{ player_char.attributes.daring if player_char else 9 }}) + Security ({{ player_char.disciplines.security if player_char else 3 }}) = Target {{ (player_char.attributes.daring + player_char.disciplines.security) if player_char else 12 }}</p>
+        <p><strong>Ship Assist:</strong> Weapons ({{ player_ship.systems.weapons if player_ship else 7 }}) + Security ({{ player_ship.departments.security if player_ship else 2 }}) = Target {{ (player_ship.systems.weapons + player_ship.departments.security) if player_ship else 9 }}</p>
+    </div>
+
+    <button class="btn" onclick="executeDefensiveFire()" style="margin-top: 15px; background: var(--lcars-purple);">ACTIVATE DEFENSIVE FIRE</button>
+    <button class="btn" onclick="cancelAction()" style="margin-top: 15px; background: #666;">Cancel</button>
+
+    <div id="defensive-fire-results" style="margin-top: 15px; display: none;"></div>
+</div>
+
 <!-- Generic Dice Roller (for non-Fire actions) - hidden until major action selected -->
 <div class="panel" id="dice-panel" style="display: none;">
     <h2>Dice Roller</h2>
@@ -782,6 +821,30 @@
         }, 3000);
     }
 
+    // Show a success toast notification
+    function showSuccessToast(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #1a3a1a;
+            border: 2px solid var(--lcars-green);
+            border-radius: 5px;
+            color: var(--lcars-green);
+            font-weight: bold;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in;
+        `;
+        toast.textContent = `✓ ${message}`;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
+    }
+
     // Minor action effect descriptions for display
     const MINOR_ACTION_EFFECTS = {
         'Calibrate Weapons': ['+1 damage on next attack'],
@@ -891,11 +954,19 @@
                 return;
             }
             document.getElementById('fire-panel').style.display = 'block';
+            document.getElementById('defensive-fire-panel').style.display = 'none';
             document.getElementById('dice-panel').style.display = 'none';
             document.getElementById('fire-results').style.display = 'none';
             updateFireDetails();
             updateFireMinorActionBanner();
             document.getElementById('fire-panel').scrollIntoView({behavior: 'smooth'});
+        } else if (name === 'Defensive Fire') {
+            // Check for Evasive Action conflict (handled server-side, but we can warn)
+            document.getElementById('fire-panel').style.display = 'none';
+            document.getElementById('defensive-fire-panel').style.display = 'block';
+            document.getElementById('dice-panel').style.display = 'none';
+            document.getElementById('defensive-fire-results').style.display = 'none';
+            document.getElementById('defensive-fire-panel').scrollIntoView({behavior: 'smooth'});
         } else {
             try {
                 const configResponse = await fetch(`/api/action-config/${encodeURIComponent(name)}`);
@@ -1024,6 +1095,7 @@
         updateSelectionSummary();
 
         document.getElementById('fire-panel').style.display = 'none';
+        document.getElementById('defensive-fire-panel').style.display = 'none';
         document.getElementById('dice-panel').style.display = 'none';
         document.getElementById('current-action-display').style.display = 'none';
     }
@@ -1230,6 +1302,69 @@
         lastFireData.previous_rolls = data.rolls;
 
         displayFireResults(data, targetIndex, focus, bonusDice, difficulty);
+    }
+
+    async function executeDefensiveFire() {
+        if (currentTurn !== 'player') {
+            showErrorToast("It's not your turn!");
+            return;
+        }
+
+        const weaponSelect = document.getElementById('defensive-fire-weapon-select');
+        const weaponIndex = parseInt(weaponSelect.value);
+        const weaponName = weaponSelect.options[weaponSelect.selectedIndex].text;
+
+        const resultsDiv = document.getElementById('defensive-fire-results');
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    action_name: 'Defensive Fire',
+                    weapon_index: weaponIndex,
+                    role: 'player'
+                })
+            });
+            const data = await response.json();
+
+            resultsDiv.style.display = 'block';
+
+            if (data.success) {
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-success" style="padding: 15px; background: #1a2a3a; border: 2px solid var(--lcars-purple); border-radius: 5px;">
+                        <strong style="color: var(--lcars-purple);">DEFENSIVE FIRE ACTIVATED!</strong><br><br>
+                        <div style="color: var(--lcars-tan);">
+                            ${data.message}<br><br>
+                            <strong>Weapon:</strong> ${data.weapon_name || weaponName}<br>
+                            <strong>Duration:</strong> Until your next turn
+                        </div>
+                        <div style="margin-top: 10px; padding: 10px; background: #222; border-radius: 5px;">
+                            <em style="color: var(--lcars-orange);">
+                                When enemies attack, you will make an opposed roll.<br>
+                                If you win, you may spend 2 Momentum to counterattack.
+                            </em>
+                        </div>
+                    </div>
+                `;
+                showSuccessToast('Defensive Fire activated!');
+            } else {
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-error" style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                        <strong style="color: var(--lcars-red);">ERROR:</strong> ${data.error}
+                    </div>
+                `;
+                showErrorToast(data.error);
+            }
+        } catch (err) {
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = `
+                <div class="alert alert-error" style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                    <strong style="color: var(--lcars-red);">ERROR:</strong> ${err.message}
+                </div>
+            `;
+            showErrorToast('Failed to activate Defensive Fire');
+        }
     }
 
     function displayFireResults(data, targetIndex, focus, bonusDice, difficulty) {

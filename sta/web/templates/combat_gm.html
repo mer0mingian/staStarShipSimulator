@@ -191,6 +191,15 @@
             <span>Class</span>
             <span class="stat-value">{{ enemy.ship_class }}-class (Scale {{ enemy.scale }})</span>
         </div>
+        {% if enemy.crew_quality %}
+        <div class="stat-row" style="background: rgba(255,100,100,0.1);">
+            <span>Crew Quality</span>
+            <span class="stat-value" style="color: var(--lcars-orange);">
+                {{ enemy.crew_quality.value.title() }}
+                (Target {{ enemy.crew_quality.target_number }})
+            </span>
+        </div>
+        {% endif %}
         <div class="stat-row">
             <span>Shields</span>
             <span class="stat-value enemy-shields">{{ enemy.shields }} / {{ enemy.shields_max }}</span>
@@ -249,6 +258,126 @@
         {% else %}
         <span style="color: var(--lcars-tan);">Waiting for the player to complete their turn...</span>
         {% endif %}
+    </div>
+
+    <!-- Enemy Attack Section -->
+    <div style="margin-bottom: 20px; padding: 15px; background: #2a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+        <h3 style="color: var(--lcars-red); font-size: 1em; margin-bottom: 15px;">ENEMY ATTACK</h3>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div>
+                <label for="attack-enemy">Attacking Ship</label>
+                <select id="attack-enemy" style="width: 100%;" onchange="updateAttackWeapons()">
+                    {% for enemy in enemy_ships %}
+                    <option value="{{ loop.index0 }}">{{ enemy.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="attack-weapon">Weapon</label>
+                <select id="attack-weapon" style="width: 100%;">
+                    {% if enemy_ships %}
+                    {% for weapon in enemy_ships[0].weapons %}
+                    <option value="{{ loop.index0 }}" data-damage="{{ weapon.damage }}">
+                        {{ weapon.name }} (Dmg {{ weapon.damage }})
+                    </option>
+                    {% endfor %}
+                    {% endif %}
+                </select>
+            </div>
+        </div>
+        <div style="margin-top: 15px;">
+            <button class="btn" onclick="executeEnemyAttack()" style="background: var(--lcars-red); width: 100%;">
+                ATTACK PLAYER SHIP
+            </button>
+        </div>
+    </div>
+
+    <!-- Attack Results -->
+    <div id="attack-results" style="display: none; margin-bottom: 20px; padding: 15px; border-radius: 5px;"></div>
+
+    <!-- NPC Actions Section (NEW!) -->
+    <div style="margin-bottom: 20px; padding: 15px; background: #1a2a3a; border: 2px solid var(--lcars-blue); border-radius: 5px;">
+        <h3 style="color: var(--lcars-blue); font-size: 1em; margin-bottom: 15px;">NPC ACTIONS</h3>
+        <p style="color: var(--lcars-tan); font-size: 0.85em; margin-bottom: 15px;">
+            Execute actions for enemy ships using their Crew Quality for rolls.
+        </p>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+            <div>
+                <label for="npc-action-ship">Acting Ship</label>
+                <select id="npc-action-ship" style="width: 100%;" onchange="updateNpcActionShipInfo()">
+                    {% for enemy in enemy_ships %}
+                    <option value="{{ loop.index0 }}"
+                            data-crew-quality="{{ enemy.crew_quality.value if enemy.crew_quality else 'talented' }}"
+                            data-crew-attr="{{ enemy.crew_quality.attribute if enemy.crew_quality else 10 }}"
+                            data-crew-dept="{{ enemy.crew_quality.department if enemy.crew_quality else 3 }}"
+                            data-crew-target="{{ enemy.crew_quality.target_number if enemy.crew_quality else 13 }}">
+                        {{ enemy.name }}
+                        {% if enemy.crew_quality %}({{ enemy.crew_quality.value.title() }}){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="npc-action-category">Action Category</label>
+                <select id="npc-action-category" style="width: 100%;" onchange="updateNpcActionList()">
+                    <option value="tactical_minor">Tactical (Minor)</option>
+                    <option value="tactical_major">Tactical (Major)</option>
+                    <option value="conn_major">Conn/Helm (Major)</option>
+                    <option value="engineering_major">Engineering (Major)</option>
+                    <option value="science_minor">Science (Minor)</option>
+                    <option value="science_major">Science (Major)</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <label for="npc-action-select">Select Action</label>
+            <select id="npc-action-select" style="width: 100%;" onchange="updateNpcActionDetails()">
+                <!-- Populated by JavaScript -->
+            </select>
+        </div>
+
+        <!-- NPC Ship Stats Display -->
+        <div id="npc-ship-stats" style="padding: 10px; background: #222; border-radius: 5px; margin-bottom: 15px;">
+            <strong style="color: var(--lcars-orange);">Crew Quality:</strong>
+            <span id="npc-crew-quality-display">Talented</span>
+            <span style="color: var(--lcars-tan);">
+                (Attribute <span id="npc-attr-display">10</span> + Department <span id="npc-dept-display">3</span> = Target <span id="npc-target-display">13</span>)
+            </span>
+            <div style="margin-top: 5px; font-size: 0.85em; color: var(--lcars-green);">
+                ✓ NPC crew always have Focus (crits on 1s and 2s)
+            </div>
+        </div>
+
+        <!-- Action Details -->
+        <div id="npc-action-details" style="padding: 10px; background: #222; border-radius: 5px; margin-bottom: 15px; display: none;">
+            <strong id="npc-action-name" style="color: var(--lcars-blue);"></strong>
+            <div id="npc-action-type" style="font-size: 0.85em; color: var(--lcars-tan);"></div>
+            <div id="npc-action-desc" style="margin-top: 5px;"></div>
+        </div>
+
+        <!-- Dice Roll Panel (for task roll actions) -->
+        <div id="npc-dice-panel" style="display: none; padding: 10px; background: #1a1a2a; border: 1px solid var(--lcars-purple); border-radius: 5px; margin-bottom: 15px;">
+            <h4 style="color: var(--lcars-purple); margin-bottom: 10px;">TASK ROLL</h4>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <label for="npc-roll-bonus">Bonus Dice (from Threat)</label>
+                    <input type="number" id="npc-roll-bonus" value="0" min="0" max="3" style="width: 80px;">
+                </div>
+                <div>
+                    <label for="npc-roll-difficulty">Difficulty</label>
+                    <input type="number" id="npc-roll-difficulty" value="2" min="0" max="5" style="width: 80px;">
+                </div>
+            </div>
+            <div id="npc-roll-results" style="display: none; margin-top: 10px; padding: 10px; background: #222; border-radius: 5px;"></div>
+        </div>
+
+        <button id="npc-action-execute-btn" class="btn" onclick="executeNpcAction()" style="background: var(--lcars-blue); width: 100%;">
+            EXECUTE ACTION
+        </button>
+
+        <div id="npc-action-results" style="display: none; margin-top: 15px; padding: 10px; border-radius: 5px;"></div>
     </div>
 
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
@@ -494,17 +623,19 @@
         setTimeout(() => location.reload(), 1500);
     }
 
-    function showToast(message) {
+    function showToast(message, type = 'info') {
         const toast = document.createElement('div');
+        const borderColor = type === 'error' ? 'var(--lcars-red)' : type === 'success' ? 'var(--lcars-green)' : 'var(--lcars-blue)';
+        const bgColor = type === 'error' ? '#3a1a1a' : type === 'success' ? '#1a3a1a' : '#1a3a3a';
         toast.style.cssText = `
             position: fixed;
             top: 20px;
             right: 20px;
             padding: 15px 25px;
-            background: #1a3a3a;
-            border: 2px solid var(--lcars-blue);
+            background: ${bgColor};
+            border: 2px solid ${borderColor};
             border-radius: 5px;
-            color: var(--lcars-blue);
+            color: ${borderColor};
             font-weight: bold;
             z-index: 1000;
             animation: fadeIn 0.3s ease-in;
@@ -516,6 +647,496 @@
             setTimeout(() => toast.remove(), 300);
         }, 2000);
     }
+
+    // Enemy ship weapons data for dynamic dropdown
+    const enemyShipsWeapons = [
+        {% for enemy in enemy_ships %}
+        [
+            {% for weapon in enemy.weapons %}
+            { name: "{{ weapon.name }}", damage: {{ weapon.damage }}, range: "{{ weapon.range.value }}" }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ]{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    function updateAttackWeapons() {
+        const enemySelect = document.getElementById('attack-enemy');
+        const weaponSelect = document.getElementById('attack-weapon');
+        const enemyIndex = parseInt(enemySelect.value);
+
+        // Clear current options
+        weaponSelect.innerHTML = '';
+
+        // Add weapons for selected enemy
+        const weapons = enemyShipsWeapons[enemyIndex] || [];
+        weapons.forEach((weapon, idx) => {
+            const option = document.createElement('option');
+            option.value = idx;
+            option.dataset.damage = weapon.damage;
+            option.textContent = `${weapon.name} (Dmg ${weapon.damage})`;
+            weaponSelect.appendChild(option);
+        });
+    }
+
+    async function executeEnemyAttack() {
+        if (currentTurn !== 'enemy') {
+            showToast("It's not the enemy's turn!", 'error');
+            return;
+        }
+
+        const enemyIndex = parseInt(document.getElementById('attack-enemy').value);
+        const weaponIndex = parseInt(document.getElementById('attack-weapon').value);
+        const resultsDiv = document.getElementById('attack-results');
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/gm-attack`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    enemy_index: enemyIndex,
+                    weapon_index: weaponIndex
+                })
+            });
+            const data = await response.json();
+
+            resultsDiv.style.display = 'block';
+
+            if (data.error) {
+                resultsDiv.style.background = '#3a1a1a';
+                resultsDiv.style.border = '2px solid var(--lcars-red)';
+                resultsDiv.innerHTML = `<strong style="color: var(--lcars-red);">ERROR:</strong> ${data.error}`;
+                return;
+            }
+
+            // Build results display
+            let html = '';
+
+            if (data.has_defensive_effect) {
+                // Opposed roll results
+                html += `
+                    <div style="margin-bottom: 15px; padding: 10px; background: #1a2a3a; border-radius: 5px;">
+                        <strong style="color: var(--lcars-purple);">OPPOSED ROLL - ${data.defense_effect_name}</strong>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
+                            <div>
+                                <strong style="color: var(--lcars-green);">Defender (${data.defender})</strong><br>
+                                Rolls: ${data.defender_rolls.join(', ')} (Target: ${data.defender_target})<br>
+                                Ship Assist: ${data.defender_ship_roll} (Target: ${data.defender_ship_target})<br>
+                                <strong>Successes: ${data.defender_successes}</strong>
+                            </div>
+                            <div>
+                                <strong style="color: var(--lcars-red);">Attacker (${data.attacker})</strong><br>
+                                Rolls: ${data.attacker_rolls.join(', ')} (Target: ${data.attacker_target})<br>
+                                Ship Assist: ${data.attacker_ship_roll} (Target: ${data.attacker_ship_target})<br>
+                                <strong>Successes: ${data.attacker_successes}</strong>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (data.attack_result === 'missed') {
+                resultsDiv.style.background = '#1a3a1a';
+                resultsDiv.style.border = '2px solid var(--lcars-green)';
+                html += `
+                    <div style="font-size: 1.2em; color: var(--lcars-green); margin-bottom: 10px;">
+                        <strong>ATTACK MISSED!</strong>
+                    </div>
+                    <p>${data.message}</p>
+                `;
+
+                if (data.can_counterattack) {
+                    html += `
+                        <div style="margin-top: 15px; padding: 10px; background: #2a2a1a; border: 2px solid var(--lcars-orange); border-radius: 5px;">
+                            <strong style="color: var(--lcars-orange);">COUNTERATTACK AVAILABLE</strong>
+                            <p style="margin: 10px 0;">Cost: 2 Momentum (Current: ${data.current_momentum})</p>
+                            <p>Weapon: ${data.counterattack_weapon}</p>
+                            <button class="btn" onclick="executeCounterattack(${data.counterattack_weapon_index}, ${enemyIndex})"
+                                    style="background: var(--lcars-orange);"
+                                    ${data.current_momentum < 2 ? 'disabled' : ''}>
+                                COUNTERATTACK (2 Momentum)
+                            </button>
+                        </div>
+                    `;
+                }
+            } else {
+                // Attack hit
+                resultsDiv.style.background = '#3a1a1a';
+                resultsDiv.style.border = '2px solid var(--lcars-red)';
+                html += `
+                    <div style="font-size: 1.2em; color: var(--lcars-red); margin-bottom: 10px;">
+                        <strong>ATTACK HIT!</strong>
+                    </div>
+                    <p>${data.message}</p>
+                    <div style="margin-top: 10px;">
+                        <strong>Damage Breakdown:</strong><br>
+                        Base Damage: ${data.base_damage}<br>
+                        After Resistance (${data.effective_resistance}): ${data.damage_after_resistance}<br>
+                        ${data.complication_reduction > 0 ? `Complication Reduction: -${data.complication_reduction}<br>` : ''}
+                        <strong>Total Damage: ${data.total_damage}</strong>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        Shield Damage: ${data.shield_damage}<br>
+                        Hull Damage: ${data.hull_damage}<br>
+                        ${data.breaches_caused > 0 ? `<strong style="color: var(--lcars-orange);">Breaches: ${data.breaches_caused} (${data.systems_hit.join(', ')})</strong>` : ''}
+                    </div>
+                `;
+            }
+
+            resultsDiv.innerHTML = html;
+
+            // Only auto-reload if no counterattack is available
+            // If counterattack is available, wait for user to decide
+            if (!data.can_counterattack) {
+                setTimeout(() => location.reload(), 3000);
+            }
+
+        } catch (err) {
+            resultsDiv.style.display = 'block';
+            resultsDiv.style.background = '#3a1a1a';
+            resultsDiv.style.border = '2px solid var(--lcars-red)';
+            resultsDiv.innerHTML = `<strong style="color: var(--lcars-red);">ERROR:</strong> ${err.message}`;
+        }
+    }
+
+    async function executeCounterattack(weaponIndex, targetIndex) {
+        const resultsDiv = document.getElementById('attack-results');
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/counterattack`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    weapon_index: weaponIndex,
+                    target_index: targetIndex
+                })
+            });
+            const data = await response.json();
+
+            if (data.error) {
+                showToast(data.error, 'error');
+                return;
+            }
+
+            let html = `
+                <div style="margin-bottom: 15px; padding: 10px; background: #2a2a1a; border-radius: 5px;">
+                    <strong style="color: var(--lcars-orange);">COUNTERATTACK</strong>
+                    <div style="margin-top: 10px;">
+                        Rolls: ${data.rolls.join(', ')} (Target: ${data.target_number})<br>
+                        Ship Assist: ${data.ship_roll} (Target: ${data.ship_target})<br>
+                        <strong>Successes: ${data.successes}</strong> vs Difficulty ${data.difficulty}
+                    </div>
+                </div>
+            `;
+
+            if (data.succeeded) {
+                html += `
+                    <div style="font-size: 1.2em; color: var(--lcars-green); margin-bottom: 10px;">
+                        <strong>COUNTERATTACK HIT!</strong>
+                    </div>
+                    <p>${data.message}</p>
+                    <div style="margin-top: 10px;">
+                        Total Damage: ${data.total_damage}<br>
+                        Shield Damage: ${data.shield_damage}<br>
+                        Hull Damage: ${data.hull_damage}<br>
+                        ${data.breaches_caused > 0 ? `<strong style="color: var(--lcars-orange);">Breaches: ${data.breaches_caused} (${data.systems_hit.join(', ')})</strong>` : ''}
+                    </div>
+                `;
+                resultsDiv.style.background = '#1a3a1a';
+                resultsDiv.style.border = '2px solid var(--lcars-green)';
+            } else {
+                html += `
+                    <div style="font-size: 1.2em; color: var(--lcars-tan); margin-bottom: 10px;">
+                        <strong>COUNTERATTACK MISSED</strong>
+                    </div>
+                    <p>${data.message}</p>
+                `;
+                resultsDiv.style.background = '#2a2a2a';
+                resultsDiv.style.border = '2px solid var(--lcars-tan)';
+            }
+
+            html += `<p style="margin-top: 10px;">Momentum spent: ${data.momentum_spent} (Remaining: ${data.momentum_remaining})</p>`;
+            resultsDiv.innerHTML = html;
+
+            // Update momentum display
+            document.getElementById('momentum').textContent = data.momentum_remaining;
+
+            // Refresh page after a delay
+            setTimeout(() => location.reload(), 3000);
+
+        } catch (err) {
+            showToast('Counterattack failed: ' + err.message, 'error');
+        }
+    }
+
+    // ===== NPC ACTIONS SYSTEM =====
+
+    // NPC Actions by category (must match action_config.py NPC_ACTIONS)
+    const NPC_ACTIONS = {
+        tactical_minor: [
+            { name: "Calibrate Weapons", type: "buff", desc: "Next attack: +1 damage" },
+            { name: "Targeting Solution", type: "buff", desc: "Next attack: can re-roll or choose system" },
+            { name: "Raise Shields", type: "toggle", desc: "Raise shields to maximum" },
+            { name: "Lower Shields", type: "toggle", desc: "Lower shields (set to 0)" },
+            { name: "Arm Weapons", type: "toggle", desc: "Arm weapons (can be detected)" },
+            { name: "Disarm Weapons", type: "toggle", desc: "Disarm weapons" },
+        ],
+        tactical_major: [
+            { name: "Modulate Shields", type: "task_roll", difficulty: 1, desc: "Control + Engineering: +2 Resistance until next turn" },
+            { name: "Defensive Fire", type: "special", desc: "Set up counterattack opportunity" },
+        ],
+        conn_minor: [],
+        conn_major: [
+            { name: "Attack Pattern", type: "buff", desc: "Assist ship attacks, but enemies get -1 difficulty vs this ship" },
+            { name: "Evasive Action", type: "buff", desc: "Enemy attacks become opposed rolls" },
+            { name: "Maneuver", type: "task_roll", difficulty: 2, desc: "Control + Conn: Generate Momentum for terrain" },
+        ],
+        engineering_minor: [],
+        engineering_major: [
+            { name: "Damage Control", type: "task_roll", difficulty: 2, desc: "Presence + Engineering: Patch a breach" },
+        ],
+        science_minor: [
+            { name: "Calibrate Sensors", type: "buff", desc: "Next sensor action: ignore trait or re-roll" },
+        ],
+        science_major: [
+            { name: "Scan For Weakness", type: "task_roll", difficulty: 2, desc: "Control + Science: Next attack +2 damage or Piercing" },
+            { name: "Sensor Sweep", type: "task_roll", difficulty: 1, desc: "Reason + Science: Get info, generate Momentum" },
+        ],
+    };
+
+    // Enemy ships data for NPC actions
+    const enemyShipsData = [
+        {% for enemy in enemy_ships %}
+        {
+            name: "{{ enemy.name }}",
+            crew_quality: "{{ enemy.crew_quality.value if enemy.crew_quality else 'talented' }}",
+            crew_attr: {{ enemy.crew_quality.attribute if enemy.crew_quality else 10 }},
+            crew_dept: {{ enemy.crew_quality.department if enemy.crew_quality else 3 }},
+            crew_target: {{ enemy.crew_quality.target_number if enemy.crew_quality else 13 }},
+            systems: {
+                comms: {{ enemy.systems.comms }},
+                computers: {{ enemy.systems.computers }},
+                engines: {{ enemy.systems.engines }},
+                sensors: {{ enemy.systems.sensors }},
+                structure: {{ enemy.systems.structure }},
+                weapons: {{ enemy.systems.weapons }}
+            },
+            departments: {
+                command: {{ enemy.departments.command }},
+                conn: {{ enemy.departments.conn }},
+                engineering: {{ enemy.departments.engineering }},
+                medicine: {{ enemy.departments.medicine }},
+                science: {{ enemy.departments.science }},
+                security: {{ enemy.departments.security }}
+            }
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    let selectedNpcAction = null;
+
+    // Initialize NPC action panel
+    function initNpcActionPanel() {
+        updateNpcActionList();
+        updateNpcActionShipInfo();
+    }
+
+    function updateNpcActionShipInfo() {
+        const shipSelect = document.getElementById('npc-action-ship');
+        const option = shipSelect.options[shipSelect.selectedIndex];
+
+        document.getElementById('npc-crew-quality-display').textContent =
+            option.dataset.crewQuality.charAt(0).toUpperCase() + option.dataset.crewQuality.slice(1);
+        document.getElementById('npc-attr-display').textContent = option.dataset.crewAttr;
+        document.getElementById('npc-dept-display').textContent = option.dataset.crewDept;
+        document.getElementById('npc-target-display').textContent = option.dataset.crewTarget;
+    }
+
+    function updateNpcActionList() {
+        const category = document.getElementById('npc-action-category').value;
+        const actionSelect = document.getElementById('npc-action-select');
+        const actions = NPC_ACTIONS[category] || [];
+
+        actionSelect.innerHTML = '';
+
+        if (actions.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = '(No actions in this category)';
+            actionSelect.appendChild(opt);
+            document.getElementById('npc-action-details').style.display = 'none';
+            document.getElementById('npc-dice-panel').style.display = 'none';
+            return;
+        }
+
+        actions.forEach((action, idx) => {
+            const opt = document.createElement('option');
+            opt.value = action.name;
+            opt.dataset.type = action.type;
+            opt.dataset.difficulty = action.difficulty || 0;
+            opt.dataset.desc = action.desc;
+            opt.textContent = action.name;
+            actionSelect.appendChild(opt);
+        });
+
+        updateNpcActionDetails();
+    }
+
+    function updateNpcActionDetails() {
+        const actionSelect = document.getElementById('npc-action-select');
+        const option = actionSelect.options[actionSelect.selectedIndex];
+
+        if (!option || !option.value) {
+            document.getElementById('npc-action-details').style.display = 'none';
+            document.getElementById('npc-dice-panel').style.display = 'none';
+            selectedNpcAction = null;
+            return;
+        }
+
+        selectedNpcAction = {
+            name: option.value,
+            type: option.dataset.type,
+            difficulty: parseInt(option.dataset.difficulty) || 0,
+            desc: option.dataset.desc
+        };
+
+        // Update action details display
+        document.getElementById('npc-action-name').textContent = selectedNpcAction.name;
+        document.getElementById('npc-action-type').textContent = `Type: ${selectedNpcAction.type}`;
+        document.getElementById('npc-action-desc').textContent = selectedNpcAction.desc;
+        document.getElementById('npc-action-details').style.display = 'block';
+
+        // Show/hide dice panel based on action type
+        if (selectedNpcAction.type === 'task_roll') {
+            document.getElementById('npc-dice-panel').style.display = 'block';
+            document.getElementById('npc-roll-difficulty').value = selectedNpcAction.difficulty;
+            document.getElementById('npc-roll-results').style.display = 'none';
+        } else {
+            document.getElementById('npc-dice-panel').style.display = 'none';
+        }
+
+        // Update button text based on action type
+        const btn = document.getElementById('npc-action-execute-btn');
+        if (selectedNpcAction.type === 'task_roll') {
+            btn.textContent = 'ROLL & EXECUTE ACTION';
+        } else if (selectedNpcAction.type === 'buff') {
+            btn.textContent = 'APPLY BUFF';
+        } else if (selectedNpcAction.type === 'toggle') {
+            btn.textContent = 'TOGGLE';
+        } else {
+            btn.textContent = 'EXECUTE ACTION';
+        }
+    }
+
+    async function executeNpcAction() {
+        if (currentTurn !== 'enemy') {
+            showToast("It's not the enemy's turn!", 'error');
+            return;
+        }
+
+        if (!selectedNpcAction) {
+            showToast("Please select an action first", 'error');
+            return;
+        }
+
+        const shipIndex = parseInt(document.getElementById('npc-action-ship').value);
+        const shipId = enemyShipIds[shipIndex];
+        const shipData = enemyShipsData[shipIndex];
+        const resultsDiv = document.getElementById('npc-action-results');
+
+        const bonusDice = parseInt(document.getElementById('npc-roll-bonus').value) || 0;
+        const difficulty = parseInt(document.getElementById('npc-roll-difficulty').value) || selectedNpcAction.difficulty;
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/npc-action`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    ship_index: shipIndex,
+                    ship_id: shipId,
+                    action_name: selectedNpcAction.name,
+                    action_type: selectedNpcAction.type,
+                    bonus_dice: bonusDice,
+                    difficulty: difficulty,
+                    // NPC uses crew quality for rolls
+                    attribute: shipData.crew_attr,
+                    department: shipData.crew_dept,
+                    focus: true,  // NPCs always have focus
+                })
+            });
+            const data = await response.json();
+
+            resultsDiv.style.display = 'block';
+
+            if (data.error) {
+                resultsDiv.style.background = '#3a1a1a';
+                resultsDiv.style.border = '2px solid var(--lcars-red)';
+                resultsDiv.innerHTML = `<strong style="color: var(--lcars-red);">ERROR:</strong> ${data.error}`;
+                return;
+            }
+
+            // Build results display
+            let html = `<strong style="color: var(--lcars-blue);">${selectedNpcAction.name}</strong><br>`;
+
+            if (data.roll_results) {
+                // Task roll action
+                const rollDiv = document.getElementById('npc-roll-results');
+                rollDiv.style.display = 'block';
+
+                const diceHtml = data.roll_results.rolls.map((r, i) => {
+                    let color = r <= data.roll_results.target ? 'var(--lcars-green)' : 'var(--lcars-red)';
+                    let style = `display:inline-block; width:40px; height:40px; line-height:40px; text-align:center; background:#333; border:2px solid ${color}; border-radius:5px; margin:2px; font-size:1.2em; color:${color};`;
+                    let label = '';
+                    if (r === 1) label = '⭐';
+                    else if (r <= 2 && data.roll_results.has_focus) label = '⭐';
+                    else if (r === 20) label = '💥';
+                    return `<span style="${style}">${r}${label}</span>`;
+                }).join('');
+
+                html += `
+                    <div style="margin: 10px 0;">
+                        <strong>Dice:</strong> ${diceHtml}
+                    </div>
+                    <div>
+                        Target: ${data.roll_results.target} |
+                        Successes: <strong style="color: ${data.roll_results.succeeded ? 'var(--lcars-green)' : 'var(--lcars-red)'};">${data.roll_results.successes}</strong> vs Difficulty ${data.roll_results.difficulty}
+                    </div>
+                `;
+
+                if (data.roll_results.succeeded) {
+                    resultsDiv.style.background = '#1a3a1a';
+                    resultsDiv.style.border = '2px solid var(--lcars-green)';
+                    html += `<div style="margin-top: 10px; color: var(--lcars-green);"><strong>SUCCESS!</strong> ${data.message}</div>`;
+                } else {
+                    resultsDiv.style.background = '#3a1a1a';
+                    resultsDiv.style.border = '2px solid var(--lcars-red)';
+                    html += `<div style="margin-top: 10px; color: var(--lcars-red);"><strong>FAILED!</strong> ${data.message}</div>`;
+                }
+
+                if (data.roll_results.momentum_generated > 0) {
+                    html += `<div style="margin-top: 5px; color: var(--lcars-orange);">Momentum generated: +${data.roll_results.momentum_generated}</div>`;
+                }
+            } else {
+                // Buff or toggle action
+                resultsDiv.style.background = '#1a3a1a';
+                resultsDiv.style.border = '2px solid var(--lcars-green)';
+                html += `<div style="margin-top: 10px; color: var(--lcars-green);"><strong>SUCCESS!</strong> ${data.message}</div>`;
+            }
+
+            resultsDiv.innerHTML = html;
+
+            // Refresh page after a delay to show updated state
+            setTimeout(() => location.reload(), 2500);
+
+        } catch (err) {
+            resultsDiv.style.display = 'block';
+            resultsDiv.style.background = '#3a1a1a';
+            resultsDiv.style.border = '2px solid var(--lcars-red)';
+            resultsDiv.innerHTML = `<strong style="color: var(--lcars-red);">ERROR:</strong> ${err.message}`;
+        }
+    }
+
+    // Initialize NPC action panel on page load
+    document.addEventListener('DOMContentLoaded', initNpcActionPanel);
 
     // Poll for turn changes and updates
     setInterval(async () => {

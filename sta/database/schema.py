@@ -9,7 +9,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sta.models.character import Character, Attributes, Disciplines
 from sta.models.starship import Starship, Systems, Departments, Weapon, Breach
 from sta.models.combat import Encounter, ShipCombatant
-from sta.models.enums import Position, DamageType, Range, SystemType
+from sta.models.enums import Position, DamageType, Range, SystemType, CrewQuality
 
 
 class Base(DeclarativeBase):
@@ -121,6 +121,8 @@ class StarshipRecord(Base):
     has_reserve_power: Mapped[bool] = mapped_column(default=True)
     shields_raised: Mapped[bool] = mapped_column(default=False)
     weapons_armed: Mapped[bool] = mapped_column(default=False)
+    # NPC ships have a crew quality; None/null for player ships
+    crew_quality: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -149,6 +151,11 @@ class StarshipRecord(Base):
             for b in breaches_data
         ]
 
+        # Convert crew_quality string to enum if present
+        crew_quality_enum = None
+        if self.crew_quality:
+            crew_quality_enum = CrewQuality(self.crew_quality)
+
         ship = Starship(
             name=self.name,
             ship_class=self.ship_class,
@@ -166,6 +173,7 @@ class StarshipRecord(Base):
             shields_raised=self.shields_raised,
             weapons_armed=self.weapons_armed,
             registry=self.registry,
+            crew_quality=crew_quality_enum,
         )
         return ship
 
@@ -220,6 +228,7 @@ class StarshipRecord(Base):
             has_reserve_power=ship.has_reserve_power,
             shields_raised=ship.shields_raised,
             weapons_armed=ship.weapons_armed,
+            crew_quality=ship.crew_quality.value if ship.crew_quality else None,
         )
 
 
