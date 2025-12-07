@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Game Master - STA Starship Simulator{% endblock %}
+
+{% block header %}Game Master Station{% endblock %}
+
+{% block content %}
+{% if my_campaigns %}
+<div class="panel" style="border-color: var(--lcars-purple);">
+    <h2 style="color: var(--lcars-purple);">My Campaigns</h2>
+    <p style="color: var(--lcars-tan); margin-bottom: 15px;">Campaigns you are running</p>
+    <ul class="action-list">
+        {% for campaign in my_campaigns %}
+            <li>
+                <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+                   style="color: inherit; text-decoration: none; display: block;">
+                    <strong>{{ campaign.name }}</strong>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        {% if campaign.description %}
+                            <span class="action-type">{{ campaign.description[:40] }}{% if campaign.description|length > 40 %}...{% endif %}</span>
+                        {% else %}
+                            <span class="action-type">&nbsp;</span>
+                        {% endif %}
+                        <span style="color: var(--lcars-tan); font-size: 0.85em;">Code: {{ campaign.campaign_id }}</span>
+                    </div>
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div class="panel">
+    <h2>Create New Campaign</h2>
+    <p style="color: var(--lcars-tan); margin-bottom: 20px;">Start a new adventure for your crew</p>
+
+    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+        <a href="{{ url_for('campaigns.new_campaign') }}" class="btn" style="flex: 1; min-width: 150px; text-align: center;">
+            Custom Campaign
+        </a>
+        <button onclick="generateRandomCampaign()" class="btn" style="flex: 1; min-width: 150px; background: var(--lcars-blue);">
+            Quick Start (Random)
+        </button>
+    </div>
+
+    <p style="color: var(--lcars-tan); font-size: 0.85em; margin-top: 15px;">
+        <strong>Custom:</strong> Set your own campaign name and details<br>
+        <strong>Quick Start:</strong> Generate a random campaign with a ship and encounter ready to go
+    </p>
+</div>
+
+{% if other_campaigns %}
+<div class="panel" style="border-color: var(--lcars-tan);">
+    <h2>Other Active Campaigns</h2>
+    <p style="color: var(--lcars-tan); margin-bottom: 15px;">Campaigns run by other GMs</p>
+    <ul class="action-list">
+        {% for campaign in other_campaigns %}
+            <li style="opacity: 0.7;">
+                <strong>{{ campaign.name }}</strong>
+                <span class="action-type">Code: {{ campaign.campaign_id }}</span>
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('main.index') }}" class="btn btn-small" style="background: #666;">
+        Back to Role Selection
+    </a>
+</div>
+
+<script>
+async function generateRandomCampaign() {
+    try {
+        const response = await fetch('/campaigns/api/generate-random', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            window.location.href = `/campaigns/${data.campaign_id}`;
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error generating campaign: ' + error.message);
+    }
+}
+</script>
+{% endblock %}

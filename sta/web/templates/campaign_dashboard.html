@@ -1,0 +1,632 @@
+{% extends "base.html" %}
+
+{% block title %}{{ campaign.name }} - STA Starship Simulator{% endblock %}
+
+{% block header %}{{ campaign.name }}{% endblock %}
+
+{% block content %}
+<!-- Campaign Info Bar -->
+<div class="panel" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+    <div>
+        <span style="color: var(--lcars-tan);">Campaign Code:</span>
+        <strong>{{ campaign.campaign_id }}</strong>
+        <button class="btn btn-small" onclick="copyJoinLink()" style="margin-left: 10px;">Copy Join Link</button>
+    </div>
+    <div>
+        {% if current_player %}
+            <span style="color: {% if is_gm %}var(--lcars-purple){% else %}var(--lcars-green){% endif %};">
+                {% if is_gm %}
+                    Q (Game Master)
+                {% else %}
+                    {{ current_player.player_name }}
+                {% endif %}
+            </span>
+        {% else %}
+            <a href="{{ url_for('campaigns.join_campaign', campaign_id=campaign.campaign_id) }}" class="btn btn-small">
+                Join Campaign
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid">
+    <!-- Active Encounter -->
+    <div class="panel" style="border-color: {% if active_encounter %}var(--lcars-green){% else %}var(--lcars-tan){% endif %};">
+        <h2>Active Encounter</h2>
+        {% if active_encounter %}
+            <div style="margin-bottom: 15px;">
+                <strong style="font-size: 1.2em;">{{ active_encounter.name }}</strong>
+                <div class="stat-row">
+                    <span>Round</span>
+                    <span class="stat-value">{{ active_encounter.round }}</span>
+                </div>
+                <div class="stat-row">
+                    <span>Turn</span>
+                    <span class="stat-value">{{ active_encounter.current_turn.title() }}</span>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='player') }}"
+                   class="btn btn-small">
+                    Join as Player
+                </a>
+                {% if is_gm %}
+                <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='gm') }}"
+                   class="btn btn-small" style="background: var(--lcars-purple);">
+                    Open GM View
+                </a>
+                {% endif %}
+            </div>
+        {% else %}
+            <p style="color: var(--lcars-tan);">No active encounter</p>
+            {% if is_gm %}
+                {% if active_ship %}
+                    <a href="{{ url_for('encounters.new_encounter') }}?campaign={{ campaign.campaign_id }}" class="btn">
+                        Start New Encounter
+                    </a>
+                {% else %}
+                    <p style="color: var(--lcars-red); margin-top: 10px;">
+                        Add a ship to the campaign before starting an encounter
+                    </p>
+                {% endif %}
+            {% endif %}
+        {% endif %}
+    </div>
+
+    <!-- Active Ship -->
+    <div class="panel" style="border-color: var(--lcars-blue);">
+        <h2>Active Ship</h2>
+        {% if active_ship %}
+            <div class="stat-row">
+                <span>Name</span>
+                <span class="stat-value">{{ active_ship.name }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Class</span>
+                <span class="stat-value">{{ active_ship.ship_class }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Scale</span>
+                <span class="stat-value">{{ active_ship.scale }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Shields</span>
+                <span class="stat-value">{{ active_ship.shields }}/{{ active_ship.shields_max }}</span>
+            </div>
+            <div class="shields-bar">
+                <div class="fill" style="width: {{ (active_ship.shields / active_ship.shields_max * 100) if active_ship.shields_max > 0 else 0 }}%;"></div>
+            </div>
+        {% else %}
+            <p style="color: var(--lcars-tan);">No ship assigned</p>
+            {% if is_gm %}
+                <p style="color: var(--lcars-red);">Add a ship to the pool and assign it below</p>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid">
+    <!-- Crew Roster Panel -->
+    <div class="panel">
+        <h2>Crew Roster</h2>
+        {% if players %}
+            <div class="crew-list">
+                {% for player in players %}
+                    <div class="crew-member" style="background: #222; border-radius: 5px; padding: 10px; margin-bottom: 10px;
+                                {% if player.is_gm %}border-left: 3px solid var(--lcars-purple);{% endif %}">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div>
+                                <strong style="font-size: 1.1em;">{{ player.player_name }}</strong>
+                                {% if player.is_gm %}
+                                    <span style="color: var(--lcars-purple);">(Q)</span>
+                                {% endif %}
+                                {% if player.character %}
+                                    <span style="color: var(--lcars-tan); font-size: 0.85em; margin-left: 5px;">
+                                        {{ player.character.rank or '' }} {{ player.character.species or '' }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div>
+                                {% if player.is_gm %}
+                                    <span class="action-type" style="color: var(--lcars-purple);">Game Master</span>
+                                {% elif is_gm %}
+                                    <button class="btn btn-small btn-danger" onclick="removePlayer({{ player.id }}, '{{ player.player_name }}')" title="Remove player">
+                                        &times;
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if player.character and not player.is_gm %}
+                            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; font-size: 0.75em;">
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">CTL</div>
+                                    <div>{{ player.character.attributes.control }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">DAR</div>
+                                    <div>{{ player.character.attributes.daring }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">FIT</div>
+                                    <div>{{ player.character.attributes.fitness }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">INS</div>
+                                    <div>{{ player.character.attributes.insight }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">PRE</div>
+                                    <div>{{ player.character.attributes.presence }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">REA</div>
+                                    <div>{{ player.character.attributes.reason }}</div>
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; font-size: 0.75em; margin-top: 5px;">
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">CMD</div>
+                                    <div>{{ player.character.disciplines.command }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">CON</div>
+                                    <div>{{ player.character.disciplines.conn }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">ENG</div>
+                                    <div>{{ player.character.disciplines.engineering }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">MED</div>
+                                    <div>{{ player.character.disciplines.medicine }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">SCI</div>
+                                    <div>{{ player.character.disciplines.science }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">SEC</div>
+                                    <div>{{ player.character.disciplines.security }}</div>
+                                </div>
+                            </div>
+                        {% elif not player.is_gm %}
+                            <p style="color: var(--lcars-tan); font-size: 0.85em; font-style: italic;">No character assigned</p>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p style="color: var(--lcars-tan);">No crew members yet</p>
+        {% endif %}
+
+        {% if is_gm %}
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
+            <h3 style="color: var(--lcars-tan); font-size: 0.9em; margin-bottom: 10px;">Add Crew Member</h3>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn btn-small" onclick="showAddPlayerModal()">Create Player</button>
+                <button class="btn btn-small" style="background: var(--lcars-blue);" onclick="generateRandomPlayer()">Random Player</button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Ship Pool Panel (GM Only) -->
+    {% if is_gm %}
+    <div class="panel" style="border-color: var(--lcars-purple);">
+        <h2>Ship Pool (Q)</h2>
+        {% if ships %}
+            <ul class="action-list">
+                {% for ship in ships %}
+                    <li style="display: flex; justify-content: space-between; align-items: center;
+                               {% if ship.is_active %}border-left: 3px solid var(--lcars-green);{% endif %}">
+                        <div>
+                            <strong>{{ ship.name }}</strong>
+                            <span class="action-type">{{ ship.ship_class }}</span>
+                            {% if ship.is_active %}
+                                <span style="color: var(--lcars-green); font-size: 0.8em;">(ACTIVE)</span>
+                            {% endif %}
+                        </div>
+                        <div style="display: flex; gap: 5px;">
+                            {% if not ship.is_active %}
+                                <button class="btn btn-small btn-success" onclick="setActiveShip({{ ship.ship_id }})">
+                                    Set Active
+                                </button>
+                            {% endif %}
+                            <button class="btn btn-small btn-danger" onclick="removeShip({{ ship.id }}, '{{ ship.name }}')">
+                                &times;
+                            </button>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p style="color: var(--lcars-tan);">No ships in pool</p>
+        {% endif %}
+
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
+            <h3 style="color: var(--lcars-tan); font-size: 0.9em; margin-bottom: 10px;">Add Ship</h3>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn btn-small" onclick="showAddShipModal()">Create Ship</button>
+                <button class="btn btn-small" style="background: var(--lcars-blue);" onclick="generateShip()">Random Ship</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Draft Encounters (GM Only) -->
+{% if is_gm and draft_encounters %}
+<div class="panel" style="border-color: var(--lcars-tan);">
+    <h2>Draft Encounters</h2>
+    <ul class="action-list">
+        {% for enc in draft_encounters %}
+            <li style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong>{{ enc.name }}</strong>
+                    <span class="action-type">Draft</span>
+                </div>
+                <div style="display: flex; gap: 5px;">
+                    <button class="btn btn-small btn-success" onclick="activateEncounter('{{ enc.encounter_id }}')">
+                        Activate
+                    </button>
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<!-- Completed Encounters -->
+{% if completed_encounters %}
+<div class="panel" style="border-color: #666;">
+    <h2>Completed Encounters</h2>
+    <ul class="action-list">
+        {% for enc in completed_encounters %}
+            <li>
+                <strong>{{ enc.name }}</strong>
+                <span class="action-type">Completed - {{ enc.round }} rounds</span>
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('campaigns.gm_home') if is_gm else url_for('campaigns.player_home') }}" class="btn btn-small" style="background: #666;">
+        Back
+    </a>
+</div>
+
+<!-- Add Player Modal -->
+<div id="add-player-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+        <h2>Create New Character</h2>
+        <form id="add-player-form" onsubmit="createPlayer(event)">
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <label for="char-name">Character Name</label>
+                    <input type="text" id="char-name" required style="width: 100%;" placeholder="e.g., James Kirk">
+                </div>
+                <div>
+                    <label for="char-rank">Rank</label>
+                    <input type="text" id="char-rank" style="width: 100%;" placeholder="e.g., Captain">
+                </div>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                <div>
+                    <label for="char-species">Species</label>
+                    <input type="text" id="char-species" style="width: 100%;" placeholder="e.g., Human">
+                </div>
+                <div>
+                    <label for="char-role">Role</label>
+                    <input type="text" id="char-role" style="width: 100%;" placeholder="e.g., Commanding Officer">
+                </div>
+            </div>
+
+            <h3 style="color: var(--lcars-orange); margin: 15px 0 10px 0; font-size: 1em;">Attributes (7-12)</h3>
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                <div><label>Control</label><input type="number" id="attr-control" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Daring</label><input type="number" id="attr-daring" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Fitness</label><input type="number" id="attr-fitness" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Insight</label><input type="number" id="attr-insight" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Presence</label><input type="number" id="attr-presence" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Reason</label><input type="number" id="attr-reason" min="7" max="12" value="9" style="width: 100%;"></div>
+            </div>
+
+            <h3 style="color: var(--lcars-blue); margin: 15px 0 10px 0; font-size: 1em;">Disciplines (1-5)</h3>
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                <div><label>Command</label><input type="number" id="disc-command" min="1" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Conn</label><input type="number" id="disc-conn" min="1" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Engineering</label><input type="number" id="disc-engineering" min="1" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Medicine</label><input type="number" id="disc-medicine" min="1" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Science</label><input type="number" id="disc-science" min="1" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Security</label><input type="number" id="disc-security" min="1" max="5" value="2" style="width: 100%;"></div>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-small" style="background: #666;" onclick="hideAddPlayerModal()">Cancel</button>
+                <button type="submit" class="btn btn-small">Create Character</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Add Ship Modal -->
+<div id="add-ship-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+        <h2>Create New Ship</h2>
+        <form id="add-ship-form" onsubmit="createShip(event)">
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <label for="ship-name">Ship Name</label>
+                    <input type="text" id="ship-name" required style="width: 100%;" placeholder="e.g., USS Enterprise">
+                </div>
+                <div>
+                    <label for="ship-class">Ship Class</label>
+                    <input type="text" id="ship-class" required style="width: 100%;" placeholder="e.g., Constitution">
+                </div>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                <div>
+                    <label for="ship-registry">Registry</label>
+                    <input type="text" id="ship-registry" style="width: 100%;" placeholder="e.g., NCC-1701">
+                </div>
+                <div>
+                    <label for="ship-scale">Scale (1-6)</label>
+                    <input type="number" id="ship-scale" min="1" max="6" value="4" style="width: 100%;">
+                </div>
+            </div>
+
+            <h3 style="color: var(--lcars-blue); margin: 15px 0 10px 0; font-size: 1em;">Systems</h3>
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                <div><label>Comms</label><input type="number" id="sys-comms" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Computers</label><input type="number" id="sys-computers" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Engines</label><input type="number" id="sys-engines" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Sensors</label><input type="number" id="sys-sensors" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Structure</label><input type="number" id="sys-structure" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Weapons</label><input type="number" id="sys-weapons" min="7" max="12" value="9" style="width: 100%;"></div>
+            </div>
+
+            <h3 style="color: var(--lcars-tan); margin: 15px 0 10px 0; font-size: 1em;">Departments</h3>
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                <div><label>Command</label><input type="number" id="dept-command" min="0" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Conn</label><input type="number" id="dept-conn" min="0" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Engineering</label><input type="number" id="dept-engineering" min="0" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Medicine</label><input type="number" id="dept-medicine" min="0" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Science</label><input type="number" id="dept-science" min="0" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Security</label><input type="number" id="dept-security" min="0" max="5" value="2" style="width: 100%;"></div>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-small" style="background: #666;" onclick="hideAddShipModal()">Cancel</button>
+                <button type="submit" class="btn btn-small">Create Ship</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const campaignId = '{{ campaign.campaign_id }}';
+
+function copyJoinLink() {
+    const link = `${window.location.origin}/campaigns/${campaignId}/join`;
+    navigator.clipboard.writeText(link).then(() => {
+        alert('Join link copied to clipboard!');
+    });
+}
+
+// Player Modal Functions
+function showAddPlayerModal() {
+    document.getElementById('add-player-modal').style.display = 'flex';
+}
+
+function hideAddPlayerModal() {
+    document.getElementById('add-player-modal').style.display = 'none';
+}
+
+async function createPlayer(event) {
+    event.preventDefault();
+
+    const characterData = {
+        action: 'create',
+        name: document.getElementById('char-name').value,
+        rank: document.getElementById('char-rank').value,
+        species: document.getElementById('char-species').value,
+        role: document.getElementById('char-role').value,
+        attributes: {
+            control: parseInt(document.getElementById('attr-control').value),
+            daring: parseInt(document.getElementById('attr-daring').value),
+            fitness: parseInt(document.getElementById('attr-fitness').value),
+            insight: parseInt(document.getElementById('attr-insight').value),
+            presence: parseInt(document.getElementById('attr-presence').value),
+            reason: parseInt(document.getElementById('attr-reason').value),
+        },
+        disciplines: {
+            command: parseInt(document.getElementById('disc-command').value),
+            conn: parseInt(document.getElementById('disc-conn').value),
+            engineering: parseInt(document.getElementById('disc-engineering').value),
+            medicine: parseInt(document.getElementById('disc-medicine').value),
+            science: parseInt(document.getElementById('disc-science').value),
+            security: parseInt(document.getElementById('disc-security').value),
+        }
+    };
+
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/players`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(characterData)
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error creating player: ' + error.message);
+    }
+}
+
+async function generateRandomPlayer() {
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/players`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'generate' })
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error generating player: ' + error.message);
+    }
+}
+
+async function removePlayer(playerId, playerName) {
+    if (!confirm(`Remove "${playerName}" from the crew?`)) return;
+
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/player/${playerId}`, {
+            method: 'DELETE'
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error removing player: ' + error.message);
+    }
+}
+
+// Ship Modal Functions
+function showAddShipModal() {
+    document.getElementById('add-ship-modal').style.display = 'flex';
+}
+
+function hideAddShipModal() {
+    document.getElementById('add-ship-modal').style.display = 'none';
+}
+
+async function createShip(event) {
+    event.preventDefault();
+
+    const shipData = {
+        action: 'create',
+        name: document.getElementById('ship-name').value,
+        ship_class: document.getElementById('ship-class').value,
+        registry: document.getElementById('ship-registry').value,
+        scale: parseInt(document.getElementById('ship-scale').value),
+        systems: {
+            comms: parseInt(document.getElementById('sys-comms').value),
+            computers: parseInt(document.getElementById('sys-computers').value),
+            engines: parseInt(document.getElementById('sys-engines').value),
+            sensors: parseInt(document.getElementById('sys-sensors').value),
+            structure: parseInt(document.getElementById('sys-structure').value),
+            weapons: parseInt(document.getElementById('sys-weapons').value),
+        },
+        departments: {
+            command: parseInt(document.getElementById('dept-command').value),
+            conn: parseInt(document.getElementById('dept-conn').value),
+            engineering: parseInt(document.getElementById('dept-engineering').value),
+            medicine: parseInt(document.getElementById('dept-medicine').value),
+            science: parseInt(document.getElementById('dept-science').value),
+            security: parseInt(document.getElementById('dept-security').value),
+        }
+    };
+
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/ships`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(shipData)
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error creating ship: ' + error.message);
+    }
+}
+
+async function setActiveShip(shipId) {
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/active-ship`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ship_id: shipId })
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error setting active ship: ' + error.message);
+    }
+}
+
+async function removeShip(campaignShipId, shipName) {
+    if (!confirm(`Remove "${shipName}" from the campaign pool?`)) return;
+
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/ships/${campaignShipId}`, {
+            method: 'DELETE'
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error removing ship: ' + error.message);
+    }
+}
+
+async function generateShip() {
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/ships`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'generate' })
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error generating ship: ' + error.message);
+    }
+}
+
+async function activateEncounter(encounterId) {
+    try {
+        const response = await fetch(`/campaigns/api/encounter/${encounterId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'active' })
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error activating encounter: ' + error.message);
+    }
+}
+</script>
+{% endblock %}

@@ -1,111 +1,74 @@
 {% extends "base.html" %}
 
-{% block title %}Home - STA Starship Simulator{% endblock %}
+{% block title %}STA Starship Simulator{% endblock %}
+
+{% block header %}Welcome to Star Trek Adventures{% endblock %}
 
 {% block content %}
-<div class="panel">
-    <h2>Active Encounters</h2>
-    {% if encounters %}
-        <ul class="action-list">
-            {% for enc in encounters %}
-                <li style="display: flex; justify-content: space-between; align-items: center;">
-                    <div onclick="showRoleSelection('{{ enc.encounter_id }}', '{{ enc.name }}')" style="color: inherit; text-decoration: none; flex-grow: 1; cursor: pointer;">
-                        <strong>{{ enc.name }}</strong>
-                        <span class="action-type">Round {{ enc.round }} - {{ enc.current_turn.title() }}'s Turn</span>
-                    </div>
-                    <button class="btn btn-small btn-danger" onclick="event.stopPropagation(); deleteEncounter('{{ enc.encounter_id }}', '{{ enc.name }}')" title="Delete encounter">
-                        ✕
-                    </button>
-                </li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <p>No active encounters. Start a new one!</p>
-    {% endif %}
-</div>
+<div style="max-width: 600px; margin: 0 auto; text-align: center;">
+    <div class="panel" style="padding: 30px;">
+        <h2 style="margin-bottom: 20px;">Select Your Role</h2>
+        <p style="color: var(--lcars-tan); margin-bottom: 30px;">
+            How would you like to participate in today's session?
+        </p>
 
-<!-- Role Selection Modal -->
-<div id="role-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
-    <div class="panel" style="max-width: 400px; text-align: center;">
-        <h2>Select Your Role</h2>
-        <p id="modal-encounter-name" style="color: var(--lcars-tan); margin-bottom: 20px;"></p>
+        <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+            <a href="{{ url_for('campaigns.player_home') }}" class="role-card" style="flex: 1; min-width: 200px; max-width: 250px;">
+                <div style="font-size: 3em; margin-bottom: 10px;">🎮</div>
+                <div style="font-size: 1.3em; font-weight: bold; color: var(--lcars-orange); margin-bottom: 10px;">
+                    Player
+                </div>
+                <div style="color: var(--lcars-tan); font-size: 0.9em;">
+                    Join a campaign and take your station on the bridge
+                </div>
+            </a>
 
-        <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
-            <button class="btn" onclick="joinAsRole('player')" style="min-width: 150px;">
-                <div style="font-size: 1.5em;">🎮</div>
-                Player
-            </button>
-            <button class="btn" onclick="joinAsRole('gm')" style="min-width: 150px; background: var(--lcars-purple);">
-                <div style="font-size: 1.5em;">🎲</div>
-                Game Master
-            </button>
+            <a href="{{ url_for('campaigns.gm_home') }}" class="role-card" style="flex: 1; min-width: 200px; max-width: 250px;">
+                <div style="font-size: 3em; margin-bottom: 10px;">🎲</div>
+                <div style="font-size: 1.3em; font-weight: bold; color: var(--lcars-purple); margin-bottom: 10px;">
+                    Game Master
+                </div>
+                <div style="color: var(--lcars-tan); font-size: 0.9em;">
+                    Create and run campaigns for your crew
+                </div>
+            </a>
         </div>
+    </div>
 
-        <button class="btn btn-small" onclick="hideRoleSelection()" style="margin-top: 20px; background: #666;">
-            Cancel
-        </button>
+    <div class="panel" style="margin-top: 20px; padding: 15px; border-color: var(--lcars-tan);">
+        <p style="color: var(--lcars-tan); font-size: 0.9em; margin: 0;">
+            Star Trek Adventures 2nd Edition Starship Combat Simulator
+        </p>
     </div>
 </div>
 
-<div class="panel">
-    <h2>Quick Start</h2>
-    <a href="{{ url_for('encounters.new_encounter') }}" class="btn">New Encounter</a>
-</div>
-
 <style>
-    .btn-danger {
-        background: var(--lcars-red);
-        color: white;
-        border: none;
-        padding: 5px 10px;
-        cursor: pointer;
-        border-radius: 3px;
+    .role-card {
+        display: block;
+        padding: 30px 20px;
+        background: #1a1a1a;
+        border: 2px solid var(--lcars-orange);
+        border-radius: 15px;
+        text-decoration: none;
+        transition: all 0.2s ease;
     }
-    .btn-danger:hover {
-        background: #cc0000;
+
+    .role-card:hover {
+        background: #2a2a2a;
+        border-color: var(--lcars-blue);
+        transform: translateY(-3px);
+    }
+
+    .role-card:first-child:hover {
+        border-color: var(--lcars-orange);
+    }
+
+    .role-card:last-child {
+        border-color: var(--lcars-purple);
+    }
+
+    .role-card:last-child:hover {
+        border-color: var(--lcars-blue);
     }
 </style>
-
-<script>
-let selectedEncounterId = null;
-
-function showRoleSelection(encounterId, encounterName) {
-    selectedEncounterId = encounterId;
-    document.getElementById('modal-encounter-name').textContent = encounterName;
-    document.getElementById('role-modal').style.display = 'flex';
-}
-
-function hideRoleSelection() {
-    document.getElementById('role-modal').style.display = 'none';
-    selectedEncounterId = null;
-}
-
-function joinAsRole(role) {
-    if (selectedEncounterId) {
-        window.location.href = `/encounters/${selectedEncounterId}?role=${role}`;
-    }
-}
-
-async function deleteEncounter(encounterId, name) {
-    if (!confirm(`Delete encounter "${name}"? This cannot be undone.`)) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/encounter/${encounterId}`, {
-            method: 'DELETE'
-        });
-
-        if (response.ok) {
-            // Reload the page to refresh the list
-            window.location.reload();
-        } else {
-            const data = await response.json();
-            alert('Error deleting encounter: ' + (data.error || 'Unknown error'));
-        }
-    } catch (error) {
-        alert('Error deleting encounter: ' + error.message);
-    }
-}
-</script>
 {% endblock %}

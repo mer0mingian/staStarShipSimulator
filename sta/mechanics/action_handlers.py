@@ -10,7 +10,13 @@ from sta.models.combat import Encounter, ActiveEffect, TaskResult
 from sta.models.character import Character
 from sta.models.starship import Starship
 from sta.mechanics.dice import task_roll
-from sta.mechanics.action_config import get_action_config, ActionConfig, EffectConfig
+from sta.mechanics.action_config import (
+    get_action_config,
+    ActionConfig,
+    EffectConfig,
+    is_action_available,
+    get_breach_difficulty_modifier,
+)
 
 
 class ActionExecutionResult:
@@ -56,6 +62,7 @@ class ActionExecutionResult:
 def execute_buff_action(
     action_name: str,
     encounter: Encounter,
+    ship: Optional[Starship] = None,
     config: Optional[ActionConfig] = None
 ) -> ActionExecutionResult:
     """
@@ -64,6 +71,7 @@ def execute_buff_action(
     Args:
         action_name: Name of the action
         encounter: The combat encounter
+        ship: The ship executing the action (for breach checks)
         config: Action configuration (will be looked up if not provided)
 
     Returns:
@@ -74,6 +82,12 @@ def execute_buff_action(
 
     if not config or config.get("type") != "buff":
         return ActionExecutionResult(False, f"Invalid buff action: {action_name}")
+
+    # Check if action is available (system not destroyed)
+    if ship:
+        available, reason = is_action_available(action_name, ship)
+        if not available:
+            return ActionExecutionResult(False, f"Cannot use {action_name}: {reason}")
 
     effect_config = config.get("effect")
     if not effect_config:
@@ -154,12 +168,19 @@ def execute_task_roll_action(
     if not roll_config:
         return ActionExecutionResult(False, f"No roll configuration for {action_name}")
 
+    # Check if action is available (system not destroyed)
+    available, reason = is_action_available(action_name, ship)
+    if not available:
+        return ActionExecutionResult(False, f"Cannot use {action_name}: {reason}")
+
     # Check resource requirements
     if config.get("requires_reserve_power", False) and not ship.has_reserve_power:
         return ActionExecutionResult(False, f"{action_name} requires Reserve Power!")
 
-    # Perform the task roll
-    difficulty = roll_config.get("difficulty", 1)
+    # Calculate difficulty with breach modifier
+    base_difficulty = roll_config.get("difficulty", 1)
+    breach_modifier = get_breach_difficulty_modifier(action_name, ship)
+    difficulty = base_difficulty + breach_modifier
     focus_eligible = roll_config.get("focus_eligible", True) and focus
 
     task_result = task_roll(
@@ -170,11 +191,20 @@ def execute_task_roll_action(
         bonus_dice=bonus_dice
     )
 
+    # Build result message with breach info if applicable
+    if breach_modifier > 0:
+        breach_info = f" (Difficulty {base_difficulty}+{breach_modifier} from breaches)"
+    else:
+        breach_info = ""
+
     result = ActionExecutionResult(
         task_result.succeeded,
-        f"{action_name} {'succeeded' if task_result.succeeded else 'failed'}!"
+        f"{action_name} {'succeeded' if task_result.succeeded else 'failed'}!{breach_info}"
     )
     result.task_result = task_result
+    result.data["base_difficulty"] = base_difficulty
+    result.data["breach_modifier"] = breach_modifier
+    result.data["final_difficulty"] = difficulty
 
     # Process success effects
     if task_result.succeeded:
@@ -212,6 +242,12 @@ def execute_task_roll_action(
         if on_success.get("restore_power", False):
             ship.has_reserve_power = True
             result.message += " Reserve Power restored!"
+            result.data["reserve_power_restored"] = True
+
+        # Consume Reserve Power if action required it (and didn't restore it)
+        if config.get("requires_reserve_power", False) and not on_success.get("restore_power", False):
+            ship.has_reserve_power = False
+            result.data["reserve_power_consumed"] = True
 
     else:
         result.message += f" {task_result.complications} complication(s)." if task_result.complications > 0 else ""
@@ -287,6 +323,12 @@ def apply_task_roll_success(
     if on_success.get("restore_power", False):
         ship.has_reserve_power = True
         result.message += " Reserve Power restored!"
+        result.data["reserve_power_restored"] = True
+
+    # Consume Reserve Power if action required it (and didn't restore it)
+    if config.get("requires_reserve_power", False) and not on_success.get("restore_power", False):
+        ship.has_reserve_power = False
+        result.data["reserve_power_consumed"] = True
 
     return result
 
@@ -308,6 +350,11 @@ def check_action_requirements(
 
     if not config:
         return False, f"Unknown action: {action_name}"
+
+    # Check if required system is destroyed
+    available, reason = is_action_available(action_name, ship)
+    if not available:
+        return False, f"Cannot use {action_name}: {reason}"
 
     # Check reserve power requirement
     if config.get("requires_reserve_power", False) and not ship.has_reserve_power:
@@ -426,6 +473,114 @@ def execute_defensive_fire(
     result.data["weapon_index"] = weapon_index
 
     return result
+
+
+def execute_reroute_power(
+    encounter: Encounter,
+    ship: Starship,
+    target_system: str,
+) -> ActionExecutionResult:
+    """
+    Execute the Reroute Power action.
+
+    Args:
+        encounter: The combat encounter
+        ship: The player ship
+        target_system: Which system to boost (comms, computers, engines, sensors, structure, weapons)
+
+    Returns:
+        ActionExecutionResult with the created effect
+    """
+    # Valid systems
+    valid_systems = ["comms", "computers", "engines", "sensors", "structure", "weapons"]
+    target_system = target_system.lower()
+
+    if target_system not in valid_systems:
+        return ActionExecutionResult(False, f"Invalid system: {target_system}")
+
+    # Check Reserve Power
+    if not ship.has_reserve_power:
+        return ActionExecutionResult(False, "Reroute Power requires Reserve Power!")
+
+    # Consume Reserve Power
+    ship.has_reserve_power = False
+
+    # Create the Reroute Power effect
+    # The effect gives -1 Difficulty to the next action using that system
+    effect = ActiveEffect(
+        source_action="Reroute Power",
+        applies_to=f"system:{target_system}",  # Custom applies_to for system-specific
+        duration="next_action",
+        difficulty_modifier=-1,  # -1 Difficulty (easier)
+        target_system=target_system,
+    )
+
+    encounter.add_effect(effect)
+
+    # Map system to what it affects for the message
+    system_uses = {
+        "weapons": "Fire and Defensive Fire actions",
+        "sensors": "Scan and Sensor tasks",
+        "engines": "Maneuver, Impulse, and Warp actions",
+        "structure": "Regenerate Shields and Tractor Beam",
+        "comms": "Hail and Communications tasks",
+        "computers": "Computer-assisted tasks",
+    }
+
+    result = ActionExecutionResult(
+        True,
+        f"Power rerouted to {target_system.upper()}! Next {system_uses.get(target_system, 'action using ' + target_system)} gets -1 Difficulty."
+    )
+    result.effect_created = effect
+    result.data["target_system"] = target_system
+    result.data["reserve_power_consumed"] = True
+
+    return result
+
+
+def get_reroute_power_bonus(encounter: Encounter, system: str) -> tuple[int, Optional[ActiveEffect]]:
+    """
+    Check for Reroute Power effect affecting a specific system.
+
+    Args:
+        encounter: The combat encounter
+        system: The ship system being used (weapons, sensors, engines, structure, comms, computers)
+
+    Returns:
+        Tuple of (difficulty_modifier, effect) - the modifier is negative (easier) if effect found
+        Returns (0, None) if no applicable effect
+    """
+    system = system.lower()
+
+    for effect in encounter.active_effects:
+        if effect.source_action == "Reroute Power" and effect.target_system == system:
+            # Found a matching Reroute Power effect
+            return (effect.difficulty_modifier, effect)
+
+    return (0, None)
+
+
+def consume_reroute_power_effect(encounter: Encounter, system: str) -> Optional[ActiveEffect]:
+    """
+    Consume (remove) a Reroute Power effect for a specific system.
+
+    Used when an action is taken that uses the boosted system.
+
+    Args:
+        encounter: The combat encounter
+        system: The ship system being used
+
+    Returns:
+        The consumed effect, or None if no effect was found
+    """
+    system = system.lower()
+
+    for i, effect in enumerate(encounter.active_effects):
+        if effect.source_action == "Reroute Power" and effect.target_system == system:
+            # Remove and return this effect
+            return encounter.active_effects.pop(i)
+
+    return None
 
 
 def apply_effects_to_defense(

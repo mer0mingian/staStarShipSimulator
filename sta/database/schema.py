@@ -240,6 +240,11 @@ class EncounterRecord(Base):
     encounter_id: Mapped[str] = mapped_column(String(50), unique=True)
     name: Mapped[str] = mapped_column(String(100))
 
+    # Campaign association (nullable for backward compatibility)
+    campaign_id: Mapped[Optional[int]] = mapped_column(ForeignKey("campaigns.id"), nullable=True)
+    # Encounter lifecycle status: draft, active, completed
+    status: Mapped[str] = mapped_column(String(20), default="active")
+
     # Foreign keys
     player_ship_id: Mapped[Optional[int]] = mapped_column(ForeignKey("starships.id"))
     player_character_id: Mapped[Optional[int]] = mapped_column(ForeignKey("characters.id"))
@@ -255,8 +260,18 @@ class EncounterRecord(Base):
     current_turn: Mapped[str] = mapped_column(String(20), default="player")
     is_active: Mapped[bool] = mapped_column(default=True)
 
+    # Turn tracking - ships_turns_used is JSON dict: {"ship_id": turns_used}
+    # Each ship gets Scale turns per round
+    ships_turns_used_json: Mapped[str] = mapped_column(Text, default="{}")
+    player_turns_used: Mapped[int] = mapped_column(Integer, default=0)
+    player_turns_total: Mapped[int] = mapped_column(Integer, default=1)  # 1 turn for now, expand later
+
     # Active effects stored as JSON
     active_effects_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    # Pending attack waiting for player defensive roll (JSON or null)
+    # Structure: {"attacker_index": int, "weapon_index": int, "bonus_dice": int, "timestamp": str}
+    pending_attack_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -286,3 +301,57 @@ class CombatLogRecord(Base):
     threat_spent: Mapped[int] = mapped_column(Integer, default=0)
 
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class CampaignRecord(Base):
+    """Database record for a campaign."""
+    __tablename__ = "campaigns"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[str] = mapped_column(String(50), unique=True)  # UUID for URLs
+    name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Active ship assignment (FK to starships)
+    active_ship_id: Mapped[Optional[int]] = mapped_column(ForeignKey("starships.id"), nullable=True)
+
+    # Campaign state
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class CampaignPlayerRecord(Base):
+    """A player in a campaign (session-based, no auth)."""
+    __tablename__ = "campaign_players"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"))
+    character_id: Mapped[Optional[int]] = mapped_column(ForeignKey("characters.id"), nullable=True)
+
+    # Player identity (session-based)
+    player_name: Mapped[str] = mapped_column(String(50))  # Display name
+    session_token: Mapped[str] = mapped_column(String(100), unique=True)  # For identifying returning players
+
+    # Bridge position assignment
+    position: Mapped[str] = mapped_column(String(20), default="captain")
+
+    is_gm: Mapped[bool] = mapped_column(default=False)
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+    last_seen: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class CampaignShipRecord(Base):
+    """A ship available to a campaign (ship pool)."""
+    __tablename__ = "campaign_ships"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"))
+    ship_id: Mapped[int] = mapped_column(ForeignKey("starships.id"))
+
+    # Metadata
+    is_available: Mapped[bool] = mapped_column(default=True)  # Can be assigned as active
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

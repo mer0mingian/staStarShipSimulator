@@ -34,6 +34,21 @@ def run_migrations():
             conn.commit()
             print("Migration: Added weapons_armed column to starships table")
 
+        # Campaign feature migrations
+        # Check existing columns in encounters table
+        result = conn.execute(text("PRAGMA table_info(encounters)"))
+        encounter_columns = [row[1] for row in result.fetchall()]
+
+        if 'campaign_id' not in encounter_columns:
+            conn.execute(text("ALTER TABLE encounters ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id)"))
+            conn.commit()
+            print("Migration: Added campaign_id column to encounters table")
+
+        if 'status' not in encounter_columns:
+            conn.execute(text("ALTER TABLE encounters ADD COLUMN status VARCHAR(20) DEFAULT 'active'"))
+            conn.commit()
+            print("Migration: Added status column to encounters table")
+
 
 def init_db():
     """Initialize the database, creating all tables."""

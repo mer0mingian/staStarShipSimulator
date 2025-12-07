@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Player - STA Starship Simulator{% endblock %}
+
+{% block header %}Player Station{% endblock %}
+
+{% block content %}
+{% if my_campaigns %}
+<div class="panel" style="border-color: var(--lcars-green);">
+    <h2 style="color: var(--lcars-green);">My Campaigns</h2>
+    <p style="color: var(--lcars-tan); margin-bottom: 15px;">Campaigns you've already joined</p>
+    <ul class="action-list">
+        {% for campaign in my_campaigns %}
+            <li>
+                <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+                   style="color: inherit; text-decoration: none; display: block;">
+                    <strong>{{ campaign.name }}</strong>
+                    {% if campaign.description %}
+                        <span class="action-type">{{ campaign.description[:50] }}{% if campaign.description|length > 50 %}...{% endif %}</span>
+                    {% endif %}
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div class="panel">
+    <h2>Join a Campaign</h2>
+    <p style="color: var(--lcars-tan); margin-bottom: 15px;">Enter a campaign code from your Game Master</p>
+
+    <form id="join-form" style="display: flex; gap: 10px; align-items: end; flex-wrap: wrap;">
+        <div style="flex-grow: 1;">
+            <label for="campaign-code">Campaign Code</label>
+            <input type="text" id="campaign-code" placeholder="e.g., abc12345" style="width: 100%;">
+        </div>
+        <button type="submit" class="btn">Join</button>
+    </form>
+</div>
+
+{% if campaigns %}
+<div class="panel" style="border-color: var(--lcars-tan);">
+    <h2>Available Campaigns</h2>
+    <p style="color: var(--lcars-tan); margin-bottom: 15px;">Or browse available campaigns to join</p>
+    <ul class="action-list">
+        {% for campaign in campaigns %}
+            {% if campaign not in my_campaigns %}
+            <li>
+                <a href="{{ url_for('campaigns.join_campaign', campaign_id=campaign.campaign_id) }}"
+                   style="color: inherit; text-decoration: none; display: block;">
+                    <strong>{{ campaign.name }}</strong>
+                    <span class="action-type">Code: {{ campaign.campaign_id }}</span>
+                </a>
+            </li>
+            {% endif %}
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('main.index') }}" class="btn btn-small" style="background: #666;">
+        Back to Role Selection
+    </a>
+</div>
+
+<script>
+document.getElementById('join-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const code = document.getElementById('campaign-code').value.trim();
+    if (code) {
+        window.location.href = `/campaigns/${code}/join`;
+    }
+});
+</script>
+{% endblock %}

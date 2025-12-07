@@ -35,6 +35,7 @@ class ActiveEffect:
     # Special data for specific actions
     weapon_index: Optional[int] = None  # For Defensive Fire - which weapon to use for counterattack
     is_opposed: bool = False  # For Defensive Fire / Evasive Action - attacks become opposed rolls
+    target_system: Optional[str] = None  # For Reroute Power - which system receives the boost
 
     # Metadata
     created_round: int = 1
@@ -60,6 +61,7 @@ class ActiveEffect:
             "piercing": self.piercing,
             "weapon_index": self.weapon_index,
             "is_opposed": self.is_opposed,
+            "target_system": self.target_system,
             "created_round": self.created_round,
         }
 
@@ -80,6 +82,7 @@ class ActiveEffect:
             piercing=data.get("piercing", False),
             weapon_index=data.get("weapon_index"),
             is_opposed=data.get("is_opposed", False),
+            target_system=data.get("target_system"),
             created_round=data.get("created_round", 1),
         )
 
