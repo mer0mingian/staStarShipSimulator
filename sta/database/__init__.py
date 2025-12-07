@@ -6,6 +6,9 @@ from .schema import (
     StarshipRecord,
     EncounterRecord,
     CombatLogRecord,
+    CampaignRecord,
+    CampaignPlayerRecord,
+    CampaignShipRecord,
 )
 
 __all__ = [
@@ -16,4 +19,7 @@ __all__ = [
     "StarshipRecord",
     "EncounterRecord",
     "CombatLogRecord",
+    "CampaignRecord",
+    "CampaignPlayerRecord",
+    "CampaignShipRecord",
 ]

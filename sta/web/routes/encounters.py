@@ -3,7 +3,8 @@
 import uuid
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from sta.database import (
-    get_session, EncounterRecord, CharacterRecord, StarshipRecord
+    get_session, EncounterRecord, CharacterRecord, StarshipRecord,
+    CampaignRecord
 )
 from sta.generators import generate_character, generate_starship
 from sta.generators.starship import generate_enemy_ship
@@ -15,9 +16,35 @@ encounters_bp = Blueprint("encounters", __name__)
 @encounters_bp.route("/new", methods=["GET", "POST"])
 def new_encounter():
     """Create a new encounter."""
+    # Check for campaign context - REQUIRED
+    campaign_id_param = request.args.get("campaign") or request.form.get("campaign_id")
+
+    # If no campaign specified, redirect to GM home
+    if not campaign_id_param:
+        flash("Please select a campaign first")
+        return redirect(url_for("campaigns.gm_home"))
+
     if request.method == "POST":
         session = get_session()
         try:
+            # Load campaign
+            campaign = session.query(CampaignRecord).filter_by(
+                campaign_id=campaign_id_param
+            ).first()
+
+            if not campaign:
+                flash("Campaign not found")
+                return redirect(url_for("campaigns.gm_home"))
+
+            campaign_db_id = campaign.id
+
+            # Use campaign's active ship
+            if not campaign.active_ship_id:
+                flash("No ship assigned to campaign. Please add a ship first.")
+                return redirect(url_for("campaigns.campaign_dashboard", campaign_id=campaign_id_param))
+
+            ship_id = campaign.active_ship_id
+
             # Generate or use existing player character
             char_action = request.form.get("character_action", "generate")
             if char_action == "generate":
@@ -28,17 +55,6 @@ def new_encounter():
                 char_id = char_record.id
             else:
                 char_id = int(request.form.get("character_id", 0))
-
-            # Generate or use existing player ship
-            ship_action = request.form.get("ship_action", "generate")
-            if ship_action == "generate":
-                ship = generate_starship()
-                ship_record = StarshipRecord.from_model(ship)
-                session.add(ship_record)
-                session.flush()
-                ship_id = ship_record.id
-            else:
-                ship_id = int(request.form.get("ship_id", 0))
 
             # Generate enemy ship with selected crew quality
             crew_quality_str = request.form.get("crew_quality", "talented")
@@ -56,9 +72,16 @@ def new_encounter():
             encounter_name = request.form.get("name", "New Encounter")
             position = request.form.get("position", "captain")
 
+            # Determine initial status (draft if in campaign, active otherwise)
+            initial_status = "active"
+            if campaign_db_id and request.form.get("status") == "draft":
+                initial_status = "draft"
+
             encounter = EncounterRecord(
                 encounter_id=str(uuid.uuid4()),
                 name=encounter_name,
+                campaign_id=campaign_db_id,
+                status=initial_status,
                 player_character_id=char_id,
                 player_ship_id=ship_id,
                 player_position=position,
@@ -68,23 +91,33 @@ def new_encounter():
             session.add(encounter)
             session.commit()
 
-            # Get selected role and redirect with it
-            role = request.form.get("role", "player")
-            return redirect(url_for("encounters.combat", encounter_id=encounter.encounter_id, role=role))
+            # Redirect based on status
+            if initial_status == "draft":
+                return redirect(url_for("campaigns.campaign_dashboard", campaign_id=campaign.campaign_id))
+            # Otherwise, go to combat view as GM
+            return redirect(url_for("encounters.combat", encounter_id=encounter.encounter_id, role="gm"))
         finally:
             session.close()
 
     # GET - show form
     session = get_session()
     try:
+        # Load campaign - required
+        campaign = session.query(CampaignRecord).filter_by(
+            campaign_id=campaign_id_param
+        ).first()
+
+        if not campaign:
+            flash("Campaign not found")
+            return redirect(url_for("campaigns.gm_home"))
+
         characters = session.query(CharacterRecord).all()
-        ships = session.query(StarshipRecord).all()
         positions = [p.value for p in Position]
         return render_template(
             "new_encounter.html",
             characters=characters,
-            ships=ships,
-            positions=positions
+            positions=positions,
+            campaign=campaign,
         )
     finally:
         session.close()
@@ -154,12 +187,20 @@ def combat(encounter_id: str):
             if e.applies_to in ("defense", "all") and e.resistance_bonus > 0
         )
 
+        # Load campaign if encounter belongs to one
+        campaign = None
+        if encounter.campaign_id:
+            campaign = session.query(CampaignRecord).filter_by(
+                id=encounter.campaign_id
+            ).first()
+
         # Select template based on role
         template = "combat_gm.html" if role == "gm" else "combat_player.html"
 
         return render_template(
             template,
             encounter=encounter,
+            campaign=campaign,
             player_char=player_char,
             player_ship=player_ship,
             player_ship_db_id=player_ship_db_id,

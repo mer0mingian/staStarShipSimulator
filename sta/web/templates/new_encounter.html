@@ -1,10 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}New Encounter - STA Starship Simulator{% endblock %}
+{% block title %}New Encounter - {{ campaign.name }}{% endblock %}
 {% block header %}New Encounter{% endblock %}
 
 {% block content %}
+<!-- Campaign Context Banner -->
+<div class="panel" style="border-color: var(--lcars-purple); margin-bottom: 15px;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <span style="color: var(--lcars-tan);">Campaign:</span>
+            <strong style="color: var(--lcars-purple);">{{ campaign.name }}</strong>
+        </div>
+        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+           class="btn btn-small" style="background: #666;">
+            Back to Campaign
+        </a>
+    </div>
+</div>
+
 <form method="POST">
+    <input type="hidden" name="campaign_id" value="{{ campaign.campaign_id }}">
+
     <div class="grid">
         <div class="panel">
             <h2>Encounter Details</h2>
@@ -13,8 +29,8 @@
         </div>
 
         <div class="panel">
-            <h2>Your Position</h2>
-            <label for="position">Bridge Station</label>
+            <h2>Bridge Position</h2>
+            <label for="position">Default Player Position</label>
             <select name="position" id="position" style="width: 100%;">
                 {% for pos in positions %}
                     <option value="{{ pos }}" {% if pos == 'captain' %}selected{% endif %}>
@@ -45,22 +61,16 @@
             {% endif %}
         </div>
 
-        <div class="panel">
-            <h2>Your Ship</h2>
-            <label>
-                <input type="radio" name="ship_action" value="generate" checked>
-                Generate Random Ship
-            </label>
-            {% if ships %}
-                <label>
-                    <input type="radio" name="ship_action" value="existing">
-                    Use Existing:
-                </label>
-                <select name="ship_id" style="width: 100%;">
-                    {% for ship in ships %}
-                        <option value="{{ ship.id }}">{{ ship.name }} ({{ ship.ship_class }}-class)</option>
-                    {% endfor %}
-                </select>
+        <!-- Campaign Ship Info -->
+        <div class="panel" style="border-color: var(--lcars-blue);">
+            <h2>Campaign Ship</h2>
+            <p style="color: var(--lcars-tan);">This encounter will use the campaign's active ship.</p>
+            {% if campaign.active_ship_id %}
+                <p style="color: var(--lcars-green); margin-top: 10px;">Ship assigned and ready.</p>
+            {% else %}
+                <p style="color: var(--lcars-red); margin-top: 10px;">
+                    No ship assigned! Go to the campaign dashboard to assign a ship first.
+                </p>
             {% endif %}
         </div>
     </div>
@@ -81,28 +91,33 @@
         </p>
     </div>
 
+    <!-- Encounter Options -->
     <div class="panel" style="border-color: var(--lcars-purple);">
-        <h2 style="color: var(--lcars-purple);">Your Role</h2>
-        <p style="color: var(--lcars-tan); margin-bottom: 15px;">Select how you want to join this encounter:</p>
+        <h2 style="color: var(--lcars-purple);">Encounter Options</h2>
+        <p style="color: var(--lcars-tan); margin-bottom: 15px;">Choose how to create this encounter:</p>
         <div style="display: flex; gap: 20px; flex-wrap: wrap;">
             <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: #222; border-radius: 5px; flex: 1; min-width: 150px;">
-                <input type="radio" name="role" value="player" checked>
+                <input type="radio" name="status" value="active" checked>
                 <div>
-                    <strong style="color: var(--lcars-orange);">Player</strong>
-                    <div style="font-size: 0.85em; color: var(--lcars-tan);">Control your character and ship</div>
+                    <strong style="color: var(--lcars-green);">Start Now</strong>
+                    <div style="font-size: 0.85em; color: var(--lcars-tan);">Create and activate immediately</div>
                 </div>
             </label>
             <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: #222; border-radius: 5px; flex: 1; min-width: 150px;">
-                <input type="radio" name="role" value="gm">
+                <input type="radio" name="status" value="draft">
                 <div>
-                    <strong style="color: var(--lcars-purple);">Game Master</strong>
-                    <div style="font-size: 0.85em; color: var(--lcars-tan);">Oversee encounter and control enemies</div>
+                    <strong style="color: var(--lcars-tan);">Save as Draft</strong>
+                    <div style="font-size: 0.85em; color: var(--lcars-tan);">Prepare for later activation</div>
                 </div>
             </label>
         </div>
     </div>
 
-    <button type="submit" class="btn">Start Encounter</button>
-    <a href="{{ url_for('main.index') }}" class="btn" style="background: #666;">Cancel</a>
+    <button type="submit" class="btn" {% if not campaign.active_ship_id %}disabled style="opacity: 0.5;"{% endif %}>
+        Create Encounter
+    </button>
+    <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}" class="btn" style="background: #666;">
+        Cancel
+    </a>
 </form>
 {% endblock %}

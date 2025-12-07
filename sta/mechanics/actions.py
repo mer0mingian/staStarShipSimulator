@@ -197,7 +197,7 @@ HELM_MAJOR_ACTIONS = [
         assisted_by_system="engines",
         assisted_by_department="conn",
         effect_notes="Both ships take each other's collision damage. Ramming adds Intense quality.",
-        status="NOT_IMPL",
+        status="RFT",
     ),
     Action(
         name="Warp",
@@ -256,9 +256,9 @@ OPERATIONS_MAJOR_ACTIONS = [
         name="Reroute Power",
         action_type=ActionType.MAJOR,
         positions=[Position.OPERATIONS, Position.ENGINEERING],
-        description="Reroute Reserve Power to boost a specific system for next action.",
+        description="Reroute Reserve Power to boost a specific system for next action (-1 Difficulty).",
         requires_reserve_power=True,
-        status="NOT_IMPL",
+        status="RFT",
     ),
     Action(
         name="Transport",

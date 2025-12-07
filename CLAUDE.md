@@ -101,10 +101,10 @@ Each bridge position has specific minor and major actions available:
 
 ## File Reference
 
-- `featureTracking.md` - **Check this first!** Tracks planned features and current development priorities
+- **GitHub Issues** - **Check this first!** Tracks planned features and current development priorities. Use `gh issue list` to see open issues, organized by milestones (Alpha, Beta, v1.0) and labels (station types, core-mechanics, etc.)
 - `starshiprules.md` - Extracted starship combat rules from STA 2e Core Rulebook
 - `STA2e_Core Rulebook_DIGITAL_v1.1.txt` - Full rulebook text (human reference only, DO NOT READ)
-- `ADDING_ACTIONS.md` - **NEW!** Quick guide for adding new actions using the declarative system
+- `ADDING_ACTIONS.md` - Quick guide for adding new actions using the declarative system
 
 ## Action Framework (IMPORTANT!)
 
@@ -150,6 +150,7 @@ When implementing features:
 3. Prioritize the player turn experience - this is the core loop
 4. The view screen should be visually appealing and readable from a distance
 5. Keep the GM controls powerful but simple
+6. **After completing a feature**, add the `ready-for-testing` label to the GitHub issue: `gh issue edit <number> --add-label "ready-for-testing"`
 
 ## Future Considerations
 - Character sheet integration (full character management, not just combat stats)

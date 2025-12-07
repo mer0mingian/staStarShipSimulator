@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}New Campaign - STA Starship Simulator{% endblock %}
+
+{% block header %}Create New Campaign{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 500px; margin: 0 auto;">
+    <h2>Campaign Details</h2>
+
+    <form method="POST" action="{{ url_for('campaigns.new_campaign') }}">
+        <div style="margin-bottom: 15px;">
+            <label for="name">Campaign Name</label>
+            <input type="text" id="name" name="name" required
+                   style="width: 100%;" placeholder="e.g., USS Enterprise Adventures">
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <label for="description">Description (optional)</label>
+            <textarea id="description" name="description" rows="3"
+                      style="width: 100%; background: #333; border: 1px solid var(--lcars-orange);
+                             color: var(--lcars-text); padding: 8px 12px; border-radius: 5px;"
+                      placeholder="A brief description of your campaign..."></textarea>
+        </div>
+
+        <div style="margin-bottom: 20px; padding-top: 15px; border-top: 1px solid #333;">
+            <h3 style="color: var(--lcars-purple); margin-bottom: 10px;">Game Master (Q)</h3>
+            <p style="color: var(--lcars-tan); font-size: 0.9em; margin-bottom: 10px;">
+                As GM, you'll be "Q" - the omniscient overseer of the campaign.
+            </p>
+            <div>
+                <label for="gm_name">Your Name</label>
+                <input type="text" id="gm_name" name="gm_name" required
+                       style="width: 100%;" placeholder="e.g., Q, John, etc." value="Q">
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <a href="{{ url_for('campaigns.campaign_list') }}" class="btn btn-small" style="background: #666;">
+                Cancel
+            </a>
+            <button type="submit" class="btn">Create Campaign</button>
+        </div>
+    </form>
+</div>
+
+<div class="panel" style="max-width: 500px; margin: 20px auto 0;">
+    <h2>What Happens Next?</h2>
+    <ul style="color: var(--lcars-tan); list-style: disc; margin-left: 20px;">
+        <li>You'll be registered as the Game Master</li>
+        <li>You'll get a campaign code to share with players</li>
+        <li>Add ships to your campaign pool</li>
+        <li>Assign the active ship for your crew</li>
+        <li>Create and run encounters</li>
+    </ul>
+</div>
+{% endblock %}

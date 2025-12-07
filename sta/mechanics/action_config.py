@@ -57,6 +57,11 @@ class ActionConfig(TypedDict, total=False):
     requires_reserve_power: bool
     requires_flag: Optional[str]  # e.g., "shields_raised"
 
+    # System requirements - which ship system this action relies on
+    # If the system is destroyed (breaches >= half Scale), action is unavailable
+    # Breach potency on this system adds to task difficulty
+    requires_system: Optional[str]  # e.g., "weapons", "sensors", "engines", "structure"
+
     # Cost
     momentum_cost: int
     threat_cost: int
@@ -70,6 +75,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Calibrate Weapons": {
         "type": "buff",
+        "requires_system": "weapons",
         "effect": {
             "applies_to": "attack",
             "duration": "next_action",
@@ -79,6 +85,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Targeting Solution": {
         "type": "buff",
+        "requires_system": "weapons",
         "effect": {
             "applies_to": "attack",
             "duration": "next_action",
@@ -89,6 +96,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Modulate Shields": {
         "type": "task_roll",
+        "requires_system": "structure",
         "roll": {
             "attribute": "control",
             "discipline": "engineering",
@@ -110,6 +118,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Calibrate Sensors": {
         "type": "buff",
+        "requires_system": "sensors",
         "effect": {
             "applies_to": "sensor",
             "duration": "next_action",
@@ -119,11 +128,14 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Scan For Weakness": {
         "type": "task_roll",
+        "requires_system": "sensors",
         "roll": {
             "attribute": "control",
             "discipline": "science",
             "difficulty": 2,
             "focus_eligible": True,
+            "ship_assist_system": "sensors",
+            "ship_assist_department": "security",
         },
         "on_success": {
             "create_effect": {
@@ -137,11 +149,14 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Sensor Sweep": {
         "type": "task_roll",
+        "requires_system": "sensors",
         "roll": {
             "attribute": "reason",
             "discipline": "science",
             "difficulty": 1,
             "focus_eligible": True,
+            "ship_assist_system": "sensors",
+            "ship_assist_department": "science",
         },
         "on_success": {
             "generate_momentum": True,
@@ -152,6 +167,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Attack Pattern": {
         "type": "buff",
+        "requires_system": "engines",
         "effect": {
             "applies_to": "all",  # Affects ship's attacks and enemies attacking the ship
             "duration": "end_of_round",
@@ -161,6 +177,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Evasive Action": {
         "type": "buff",
+        "requires_system": "engines",
         "effect": {
             "applies_to": "defense",
             "duration": "end_of_round",
@@ -171,6 +188,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Defensive Fire": {
         "type": "special",  # Special because it requires weapon selection and stores weapon_index
+        "requires_system": "weapons",
         "effect": {
             "applies_to": "defense",
             "duration": "next_turn",  # Lasts until player's next turn
@@ -185,25 +203,45 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Maneuver": {
         "type": "task_roll",
+        "requires_system": "engines",
         "roll": {
             "attribute": "control",
             "discipline": "conn",
             "difficulty": 2,  # Variable based on terrain
             "focus_eligible": True,
+            "ship_assist_system": "engines",
+            "ship_assist_department": "conn",
         },
         "on_success": {
             "generate_momentum": True,
         }
     },
 
+    "Ram": {
+        "type": "special",  # Special because it deals damage to BOTH ships
+        "requires_system": "engines",
+        "roll": {
+            "attribute": "daring",
+            "discipline": "conn",
+            "difficulty": 2,
+            "focus_eligible": True,
+            "ship_assist_system": "engines",
+            "ship_assist_department": "conn",
+        },
+        # Collision damage is calculated dynamically based on Scale
+        # Ramming adds Intense quality, and collision has Piercing + Devastating
+    },
+
     # ===== ENGINEERING ACTIONS =====
 
     "Damage Control": {
         "type": "task_roll",
+        # Note: Damage Control doesn't require a specific system - it's about patching breaches
+        # The difficulty is modified by the breach potency being repaired, handled specially
         "roll": {
             "attribute": "presence",
             "discipline": "engineering",
-            "difficulty": 2,  # + breach potency
+            "difficulty": 2,  # + breach potency of target system
             "focus_eligible": True,
         },
         "on_success": {
@@ -213,6 +251,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Regain Power": {
         "type": "task_roll",
+        "requires_system": "engines",
         "roll": {
             "attribute": "control",
             "discipline": "engineering",
@@ -227,15 +266,26 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
     "Regenerate Shields": {
         "type": "task_roll",
         "requires_reserve_power": True,
+        "requires_system": "structure",
         "roll": {
             "attribute": "control",
             "discipline": "engineering",
             "difficulty": 2,
             "focus_eligible": True,
+            "ship_assist_system": "structure",
+            "ship_assist_department": "engineering",
         },
         "on_success": {
             # Custom: restore shields
         }
+    },
+
+    "Reroute Power": {
+        "type": "special",  # Special because it requires selecting a target system
+        "requires_reserve_power": True,
+        "requires_system": "engines",
+        # Player selects a system (comms, computers, engines, sensors, structure, weapons)
+        # Next action using that system gets -1 Difficulty
     },
 
     # ===== COMMAND ACTIONS (Beta) =====
@@ -325,6 +375,7 @@ NPC_ACTIONS: dict[str, list[str]] = {
         "Attack Pattern",
         "Evasive Action",
         "Maneuver",
+        "Ram",
     ],
     "engineering_minor": [],
     "engineering_major": [
@@ -354,3 +405,138 @@ def is_npc_action(action_name: str) -> bool:
 def get_npc_actions_by_category() -> dict[str, list[str]]:
     """Get NPC actions organized by category."""
     return NPC_ACTIONS
+
+
+# ===== BREACH SYSTEM HELPERS =====
+# These functions help check if actions are available and calculate breach modifiers
+
+# Map special actions (not in ACTION_CONFIGS) to their required systems
+SPECIAL_ACTION_SYSTEMS: dict[str, str] = {
+    "Fire": "weapons",
+    "Tractor Beam": "structure",
+    "Warp": "engines",
+    "Impulse": "engines",
+    "Thrusters": "engines",
+}
+
+
+def get_action_required_system(action_name: str) -> Optional[str]:
+    """
+    Get the ship system required by an action.
+
+    Returns the system name (e.g., "weapons", "sensors") or None if no system required.
+    """
+    # Check ACTION_CONFIGS first
+    config = get_action_config(action_name)
+    if config and config.get("requires_system"):
+        return config.get("requires_system")
+
+    # Check special actions
+    if action_name in SPECIAL_ACTION_SYSTEMS:
+        return SPECIAL_ACTION_SYSTEMS[action_name]
+
+    return None
+
+
+def is_action_available(action_name: str, ship) -> tuple[bool, Optional[str]]:
+    """
+    Check if an action is available given the ship's breach status.
+
+    Args:
+        action_name: Name of the action
+        ship: Starship model with breach data
+
+    Returns:
+        Tuple of (is_available, reason_if_unavailable)
+        - (True, None) if action is available
+        - (False, "System DESTROYED") if the required system is destroyed
+    """
+    required_system = get_action_required_system(action_name)
+
+    if not required_system:
+        return (True, None)
+
+    # Import here to avoid circular imports
+    from sta.models.enums import SystemType
+
+    try:
+        system_type = SystemType(required_system)
+        if ship.is_system_destroyed(system_type):
+            return (False, f"{required_system.upper()} DESTROYED")
+    except ValueError:
+        # Unknown system type, allow the action
+        pass
+
+    return (True, None)
+
+
+def get_breach_difficulty_modifier(action_name: str, ship) -> int:
+    """
+    Get the difficulty modifier from breaches for an action.
+
+    Per the rules, breach potency on a system increases the difficulty
+    of tasks that use that system.
+
+    Args:
+        action_name: Name of the action
+        ship: Starship model with breach data
+
+    Returns:
+        The difficulty modifier (0 or positive integer)
+    """
+    required_system = get_action_required_system(action_name)
+
+    if not required_system:
+        return 0
+
+    # Import here to avoid circular imports
+    from sta.models.enums import SystemType
+
+    try:
+        system_type = SystemType(required_system)
+        return ship.get_breach_potency(system_type)
+    except ValueError:
+        return 0
+
+
+def get_all_actions_availability(ship) -> dict[str, dict]:
+    """
+    Get availability status for all configured actions.
+
+    Args:
+        ship: Starship model with breach data
+
+    Returns:
+        Dict mapping action names to their availability info:
+        {
+            "action_name": {
+                "available": True/False,
+                "reason": None or "SYSTEM DESTROYED",
+                "breach_modifier": int,
+                "required_system": str or None
+            }
+        }
+    """
+    result = {}
+
+    # Check all actions in ACTION_CONFIGS
+    for action_name in ACTION_CONFIGS:
+        available, reason = is_action_available(action_name, ship)
+        result[action_name] = {
+            "available": available,
+            "reason": reason,
+            "breach_modifier": get_breach_difficulty_modifier(action_name, ship) if available else 0,
+            "required_system": get_action_required_system(action_name),
+        }
+
+    # Check special actions
+    for action_name in SPECIAL_ACTION_SYSTEMS:
+        available, reason = is_action_available(action_name, ship)
+        result[action_name] = {
+            "available": available,
+            "reason": reason,
+            "breach_modifier": get_breach_difficulty_modifier(action_name, ship) if available else 0,
+            "required_system": get_action_required_system(action_name),
+        }
+
+    return result

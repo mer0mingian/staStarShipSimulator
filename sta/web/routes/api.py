@@ -1,8 +1,9 @@
 """API routes for AJAX operations."""
 
 import json
+from datetime import datetime
 from flask import Blueprint, request, jsonify
-from sta.database import get_session, EncounterRecord, StarshipRecord, CharacterRecord
+from sta.database import get_session, EncounterRecord, StarshipRecord, CharacterRecord, CombatLogRecord
 from sta.mechanics import task_roll, assisted_task_roll
 from sta.models.enums import SystemType
 from sta.models.combat import ActiveEffect
@@ -14,10 +15,37 @@ from sta.mechanics.action_handlers import (
     apply_effects_to_attack,
     apply_effects_to_defense,
     execute_defensive_fire,
+    execute_reroute_power,
+    get_reroute_power_bonus,
+    consume_reroute_power_effect,
 )
-from sta.mechanics.action_config import get_action_config, is_buff_action, is_task_roll_action, is_toggle_action, is_npc_action
+from sta.mechanics.action_config import (
+    get_action_config,
+    is_buff_action,
+    is_task_roll_action,
+    is_toggle_action,
+    is_npc_action,
+    is_action_available,
+    get_breach_difficulty_modifier,
+    get_all_actions_availability,
+)
 
 api_bp = Blueprint("api", __name__)
+
+
+def get_bonus_dice_cost(num_dice: int) -> int:
+    """Calculate momentum cost for bonus dice (escalating: 1st=1, 2nd=2, 3rd=3).
+
+    Cost: 1 die = 1, 2 dice = 1+2=3, 3 dice = 1+2+3=6
+    """
+    if num_dice <= 0:
+        return 0
+    if num_dice == 1:
+        return 1
+    if num_dice == 2:
+        return 3
+    return 6  # 3 dice
+
 
 
 @api_bp.route("/roll", methods=["POST"])
@@ -107,6 +135,41 @@ def get_action_config_endpoint(action_name: str):
         }
 
     return jsonify(result)
+
+
+@api_bp.route("/encounter/<encounter_id>/action-availability", methods=["GET"])
+def get_action_availability(encounter_id: str):
+    """Get availability of all actions based on ship breach status.
+
+    Returns a dict mapping action names to their availability info:
+    - available: bool - whether the action can be used
+    - reason: str or null - reason if unavailable (e.g., "WEAPONS DESTROYED")
+    - breach_modifier: int - difficulty modifier from breaches
+    - required_system: str or null - the system this action requires
+    """
+    session = get_session()
+    try:
+        # Load encounter
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Load player ship
+        player_ship_record = session.query(StarshipRecord).filter_by(
+            id=encounter.player_ship_id
+        ).first()
+        if not player_ship_record:
+            return jsonify({"error": "Player ship not found"}), 404
+        player_ship = player_ship_record.to_model()
+
+        # Get availability for all actions
+        availability = get_all_actions_availability(player_ship)
+
+        return jsonify(availability)
+    finally:
+        session.close()
 
 
 @api_bp.route("/encounter/<encounter_id>/momentum", methods=["POST"])
@@ -217,9 +280,174 @@ def add_breach(ship_id: int):
         session.close()
 
 
+def get_enemy_turn_info(session, encounter):
+    """Calculate enemy turn economy info.
+
+    Returns dict with:
+        - total_turns: sum of all enemy ship Scales
+        - turns_used: total turns used this round
+        - ships_info: list of {ship_id, name, scale, turns_used, turns_remaining}
+    """
+    enemy_ids = json.loads(encounter.enemy_ship_ids_json)
+    ships_turns_used = json.loads(encounter.ships_turns_used_json)
+
+    ships_info = []
+    total_turns = 0
+    total_used = 0
+
+    for ship_id in enemy_ids:
+        ship = session.query(StarshipRecord).filter_by(id=ship_id).first()
+        if ship:
+            turns_used = ships_turns_used.get(str(ship_id), 0)
+            ships_info.append({
+                "ship_id": ship_id,
+                "name": ship.name,
+                "scale": ship.scale,
+                "turns_used": turns_used,
+                "turns_remaining": ship.scale - turns_used,
+                "can_act": turns_used < ship.scale,
+            })
+            total_turns += ship.scale
+            total_used += turns_used
+
+    return {
+        "total_turns": total_turns,
+        "turns_used": total_used,
+        "turns_remaining": total_turns - total_used,
+        "ships_info": ships_info,
+    }
+
+
+def get_player_turn_info(session, encounter):
+    """Calculate player turn economy info.
+
+    Player turns = player ship's Scale.
+    """
+    player_ship = session.query(StarshipRecord).filter_by(
+        id=encounter.player_ship_id
+    ).first()
+
+    if player_ship:
+        total_turns = player_ship.scale
+    else:
+        total_turns = 1  # Fallback
+
+    return {
+        "total_turns": total_turns,
+        "turns_used": encounter.player_turns_used,
+        "turns_remaining": total_turns - encounter.player_turns_used,
+    }
+
+
+def alternate_turn_after_action(session, encounter):
+    """Handle turn alternation after a major action.
+
+    STA 2e initiative alternates between sides after each turn.
+    After current side takes a turn:
+    1. Check if OTHER side has turns remaining - if yes, switch to them
+    2. If other side has no turns, stay on current side
+    3. If BOTH sides exhausted, advance round and reset
+
+    Returns dict with turn state info.
+    """
+    enemy_info = get_enemy_turn_info(session, encounter)
+    player_info = get_player_turn_info(session, encounter)
+
+    enemy_has_turns = enemy_info["turns_remaining"] > 0
+    player_has_turns = player_info["turns_remaining"] > 0
+
+    round_advanced = False
+
+    if not enemy_has_turns and not player_has_turns:
+        # Both sides exhausted - advance round
+        encounter.round += 1
+        encounter.player_turns_used = 0
+        encounter.ships_turns_used_json = "{}"
+        # New round starts with player (or could alternate who starts)
+        encounter.current_turn = "player"
+        round_advanced = True
+        # Recalculate after reset
+        enemy_info = get_enemy_turn_info(session, encounter)
+        player_info = get_player_turn_info(session, encounter)
+    elif encounter.current_turn == "enemy":
+        # Enemy just acted - switch to player if they have turns
+        if player_has_turns:
+            encounter.current_turn = "player"
+        # else stay on enemy (they get consecutive turns)
+    else:
+        # Player just acted - switch to enemy if they have turns
+        if enemy_has_turns:
+            encounter.current_turn = "enemy"
+        # else stay on player (they get consecutive turns)
+
+    return {
+        "current_turn": encounter.current_turn,
+        "round": encounter.round,
+        "round_advanced": round_advanced,
+        "enemy_turns_used": enemy_info["turns_used"],
+        "enemy_turns_total": enemy_info["total_turns"],
+        "enemy_turns_remaining": enemy_info["turns_remaining"],
+        "player_turns_used": encounter.player_turns_used,
+        "player_turns_total": player_info["total_turns"],
+        "player_turns_remaining": player_info["turns_remaining"],
+        "ships_info": enemy_info["ships_info"],
+    }
+
+
+def log_combat_action(
+    session,
+    encounter_record,
+    actor_name: str,
+    actor_type: str,  # "player" or "enemy"
+    ship_name: str,
+    action_name: str,
+    action_type: str,  # "minor" or "major"
+    description: str,
+    task_result: dict = None,
+    damage_dealt: int = 0,
+    momentum_spent: int = 0,
+    threat_spent: int = 0,
+):
+    """Log a combat action to the database.
+
+    Args:
+        session: Database session
+        encounter_record: The EncounterRecord for this encounter
+        actor_name: Name of the character/crew taking the action
+        actor_type: "player" or "enemy"
+        ship_name: Name of the ship performing the action
+        action_name: Name of the action (e.g., "Fire Phasers", "Evasive Action")
+        action_type: "minor" or "major"
+        description: Human-readable description of what happened
+        task_result: Optional dict with roll results (rolls, successes, etc.)
+        damage_dealt: Amount of damage dealt (if any)
+        momentum_spent: Momentum spent on this action
+        threat_spent: Threat spent on this action
+    """
+    log_entry = CombatLogRecord(
+        encounter_id=encounter_record.id,  # Use the primary key, not the UUID
+        round=encounter_record.round,
+        actor_name=actor_name,
+        actor_type=actor_type,
+        ship_name=ship_name,
+        action_name=action_name,
+        action_type=action_type,
+        description=description,
+        task_result_json=json.dumps(task_result) if task_result else None,
+        damage_dealt=damage_dealt,
+        momentum_spent=momentum_spent,
+        threat_spent=threat_spent,
+    )
+    session.add(log_entry)
+
+
 @api_bp.route("/encounter/<encounter_id>/next-turn", methods=["POST"])
 def next_turn(encounter_id: str):
-    """Advance to next turn."""
+    """Manually end the current side's remaining turns and switch to other side.
+
+    This is used when a side wants to pass/end their turn early.
+    The other side then gets to take turns until they pass or exhaust turns.
+    """
     session = get_session()
     try:
         encounter = session.query(EncounterRecord).filter_by(
@@ -229,17 +457,34 @@ def next_turn(encounter_id: str):
         if not encounter:
             return jsonify({"error": "Encounter not found"}), 404
 
+        enemy_info = get_enemy_turn_info(session, encounter)
+        player_info = get_player_turn_info(session, encounter)
+
+        # Mark current side as having used all their turns
         if encounter.current_turn == "player":
-            encounter.current_turn = "enemy"
+            # Player passes - mark all their turns as used
+            encounter.player_turns_used = player_info["total_turns"]
         else:
-            encounter.current_turn = "player"
-            encounter.round += 1
+            # Enemy passes - mark all enemy turns as used
+            ships_turns_used = json.loads(encounter.ships_turns_used_json)
+            for ship_info in enemy_info["ships_info"]:
+                ships_turns_used[str(ship_info["ship_id"])] = ship_info["scale"]
+            encounter.ships_turns_used_json = json.dumps(ships_turns_used)
+
+        # Now alternate to determine next turn owner
+        turn_result = alternate_turn_after_action(session, encounter)
 
         session.commit()
 
         return jsonify({
-            "current_turn": encounter.current_turn,
-            "round": encounter.round,
+            "current_turn": turn_result["current_turn"],
+            "round": turn_result["round"],
+            "round_advanced": turn_result["round_advanced"],
+            "player_turns_used": turn_result["player_turns_used"],
+            "player_turns_total": turn_result["player_turns_total"],
+            "enemy_turns_used": turn_result["enemy_turns_used"],
+            "enemy_turns_total": turn_result["enemy_turns_total"],
+            "ships_info": turn_result["ships_info"],
         })
     finally:
         session.close()
@@ -257,11 +502,67 @@ def get_encounter_status(encounter_id: str):
         if not encounter:
             return jsonify({"error": "Encounter not found"}), 404
 
+        # Get turn info for both sides
+        enemy_turn_info = get_enemy_turn_info(session, encounter)
+        player_turn_info = get_player_turn_info(session, encounter)
+
+        # Check for pending attack that needs player defensive roll
+        pending_attack = None
+        if encounter.pending_attack_json:
+            pending_attack = json.loads(encounter.pending_attack_json)
+
+        # Get player ship's reserve power status
+        player_ship_record = session.query(StarshipRecord).filter_by(
+            id=encounter.player_ship_id
+        ).first()
+        has_reserve_power = player_ship_record.has_reserve_power if player_ship_record else True
+
         return jsonify({
             "current_turn": encounter.current_turn,
             "round": encounter.round,
             "momentum": encounter.momentum,
             "threat": encounter.threat,
+            "player_turns_used": player_turn_info["turns_used"],
+            "player_turns_total": player_turn_info["total_turns"],
+            "player_turns_remaining": player_turn_info["turns_remaining"],
+            "enemy_turns_used": enemy_turn_info["turns_used"],
+            "enemy_turns_total": enemy_turn_info["total_turns"],
+            "enemy_turns_remaining": enemy_turn_info["turns_remaining"],
+            "ships_info": enemy_turn_info["ships_info"],
+            "pending_attack": pending_attack,
+            "has_reserve_power": has_reserve_power,
+        })
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/reserve-power", methods=["POST"])
+def toggle_reserve_power(encounter_id: str):
+    """Toggle the player ship's reserve power status (GM override)."""
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        player_ship_record = session.query(StarshipRecord).filter_by(
+            id=encounter.player_ship_id
+        ).first()
+
+        if not player_ship_record:
+            return jsonify({"error": "Player ship not found"}), 404
+
+        # Toggle reserve power
+        player_ship_record.has_reserve_power = not player_ship_record.has_reserve_power
+        session.commit()
+
+        return jsonify({
+            "success": True,
+            "has_reserve_power": player_ship_record.has_reserve_power,
+            "message": f"Reserve Power {'restored' if player_ship_record.has_reserve_power else 'depleted'}!"
         })
     finally:
         session.close()
@@ -321,6 +622,16 @@ def fire_weapon():
         if not player_ship.weapons_armed:
             return jsonify({"error": "Weapons are not armed! Use Arm Weapons first."}), 400
 
+        # Check if weapons system is destroyed (breaches >= half Scale)
+        available, reason = is_action_available("Fire", player_ship)
+        if not available:
+            return jsonify({"error": f"Cannot fire: {reason}"}), 400
+
+        # Apply breach modifier to difficulty
+        breach_modifier = get_breach_difficulty_modifier("Fire", player_ship)
+        if breach_modifier > 0:
+            difficulty = difficulty + breach_modifier
+
         # Load target ship
         enemy_ids = json.loads(encounter.enemy_ship_ids_json)
         if target_index >= len(enemy_ids):
@@ -344,7 +655,22 @@ def fire_weapon():
         encounter_model = EncounterModel(
             id=encounter.encounter_id,
             active_effects=active_effects,
+            momentum=encounter.momentum,
         )
+
+        # Validate and deduct momentum for bonus dice (escalating: 1st=1, 2nd=2, 3rd=3)
+        if role == "player" and bonus_dice > 0:
+            bonus_dice = min(bonus_dice, 3)  # Cap at 3 per STA rules
+            cost = get_bonus_dice_cost(bonus_dice)
+            if cost > encounter.momentum:
+                return jsonify({"error": f"Not enough Momentum! Need {cost} for {bonus_dice} dice, have {encounter.momentum}"}), 400
+            encounter.momentum -= cost
+            encounter_model.momentum = encounter.momentum
+
+        # Check for Reroute Power effect on weapons system
+        reroute_bonus, reroute_effect = get_reroute_power_bonus(encounter_model, "weapons")
+        if reroute_bonus != 0:
+            difficulty = max(0, difficulty + reroute_bonus)  # Apply modifier (negative = easier)
 
         # Check Targeting Solution effects
         attack_effects = encounter_model.get_effects("attack")
@@ -417,6 +743,11 @@ def fire_weapon():
         can_reroll = has_targeting_solution and not rerolled
         can_choose_system = has_targeting_solution and not rerolled  # Available until re-roll is used
 
+        # Consume Reroute Power effect if it was used (it's a "next action" effect)
+        reroute_consumed = None
+        if reroute_effect:
+            reroute_consumed = consume_reroute_power_effect(encounter_model, "weapons")
+
         response = {
             "rolls": result.rolls,
             "target_number": result.target_number,
@@ -433,6 +764,8 @@ def fire_weapon():
             "can_reroll": can_reroll,
             "can_choose_system": can_choose_system,
             "rerolled": rerolled,
+            # Reroute Power info
+            "reroute_power_bonus": reroute_bonus if reroute_effect else 0,
         }
 
         if result.succeeded:
@@ -559,7 +892,354 @@ def fire_weapon():
                 "target_shields_remaining": target_ship.shields,
                 "breaches_caused": 0,
                 "systems_hit": [],
+                "new_momentum": encounter.momentum,  # Include even on miss (bonus dice may have been spent)
             })
+
+            # Save cleared effects (Reroute Power consumed even on miss)
+            encounter.active_effects_json = json.dumps([e.to_dict() for e in encounter_model.active_effects])
+
+        # Fire is a major action - track player turn usage and alternate
+        encounter.player_turns_used += 1
+
+        # Alternate turn to the other side
+        turn_result = alternate_turn_after_action(session, encounter)
+
+        response["current_turn"] = turn_result["current_turn"]
+        response["round"] = turn_result["round"]
+        response["round_advanced"] = turn_result["round_advanced"]
+        response["player_turns_used"] = turn_result["player_turns_used"]
+        response["player_turns_total"] = turn_result["player_turns_total"]
+        response["enemy_turns_used"] = turn_result["enemy_turns_used"]
+        response["enemy_turns_total"] = turn_result["enemy_turns_total"]
+        response["ships_info"] = turn_result["ships_info"]
+        response["turn_ended"] = turn_result["current_turn"] == "enemy"
+
+        # Log the combat action
+        player_char = session.query(CharacterRecord).filter_by(id=encounter.player_character_id).first()
+        actor_name = player_char.name if player_char else "Tactical Officer"
+
+        if result.succeeded:
+            damage = response.get("total_damage", 0)
+            description = f"Fired {weapon.name} at {target_ship.name}: {result.successes} successes vs difficulty {difficulty}. Hit for {damage} damage."
+            if response.get("breaches_caused", 0) > 0:
+                description += f" Caused {response['breaches_caused']} breach(es) to {', '.join(response.get('systems_hit', []))}."
+        else:
+            description = f"Fired {weapon.name} at {target_ship.name}: {result.successes} successes vs difficulty {difficulty}. Missed!"
+
+        log_combat_action(
+            session=session,
+            encounter_record=encounter,
+            actor_name=actor_name,
+            actor_type="player",
+            ship_name=player_ship.name,
+            action_name=f"Fire {weapon.name}",
+            action_type="major",
+            description=description,
+            task_result={
+                "rolls": result.rolls,
+                "target_number": result.target_number,
+                "successes": result.successes,
+                "complications": result.complications,
+                "succeeded": result.succeeded,
+            },
+            damage_dealt=response.get("total_damage", 0),
+        )
+
+        session.commit()
+
+        return jsonify(response)
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/ram", methods=["POST"])
+def ram_action(encounter_id: str):
+    """Execute a Ram action - deliberately collide with an enemy ship.
+
+    Ram uses Daring + Conn, assisted by Engines + Conn.
+    On success, both ships take collision damage.
+
+    Collision Damage = Ship's Scale + (zones moved ÷ 2)
+    - Has Piercing quality (ignores resistance)
+    - Has Devastating quality (can cause multiple breaches)
+    - Ramming adds Intense quality (re-roll blanks - not applicable for flat damage)
+    """
+    import random
+
+    data = request.json
+    target_index = data.get("target_index", 0)
+    attribute = data.get("attribute", 9)  # Character's Daring
+    discipline = data.get("discipline", 3)  # Character's Conn
+    difficulty = data.get("difficulty", 2)
+    focus = data.get("focus", False)
+    bonus_dice = data.get("bonus_dice", 0)
+
+    session = get_session()
+    try:
+        # Load encounter
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Check turn ownership
+        if encounter.current_turn != "player":
+            return jsonify({"error": "It's not the player's turn!"}), 403
+
+        # Validate and deduct momentum for bonus dice (escalating: 1st=1, 2nd=2, 3rd=3)
+        if bonus_dice > 0:
+            bonus_dice = min(bonus_dice, 3)  # Cap at 3 per STA rules
+            cost = get_bonus_dice_cost(bonus_dice)
+            if cost > encounter.momentum:
+                return jsonify({"error": f"Not enough Momentum! Need {cost} for {bonus_dice} dice, have {encounter.momentum}"}), 400
+            encounter.momentum -= cost
+
+        # Load player ship
+        player_ship_record = session.query(StarshipRecord).filter_by(
+            id=encounter.player_ship_id
+        ).first()
+        if not player_ship_record:
+            return jsonify({"error": "Player ship not found"}), 404
+        player_ship = player_ship_record.to_model()
+
+        # Check if engines system is destroyed (breaches >= half Scale)
+        available, reason = is_action_available("Ram", player_ship)
+        if not available:
+            return jsonify({"error": f"Cannot ram: {reason}"}), 400
+
+        # Apply breach modifier to difficulty
+        breach_modifier = get_breach_difficulty_modifier("Ram", player_ship)
+        if breach_modifier > 0:
+            difficulty = difficulty + breach_modifier
+
+        # Load target ship
+        enemy_ids = json.loads(encounter.enemy_ship_ids_json)
+        if target_index >= len(enemy_ids):
+            return jsonify({"error": "Invalid target"}), 400
+
+        target_id = enemy_ids[target_index]
+        target_record = session.query(StarshipRecord).filter_by(id=target_id).first()
+        if not target_record:
+            return jsonify({"error": "Target ship not found"}), 404
+        target_ship = target_record.to_model()
+
+        # TODO: Check range - Ram requires Close range (same zone or adjacent)
+        # Zone tracking not fully implemented, so we allow Ram for now
+
+        # Perform task roll: Daring + Conn, assisted by Engines + Conn
+        result = assisted_task_roll(
+            attribute=attribute,
+            discipline=discipline,
+            system=player_ship.systems.engines,
+            department=player_ship.departments.conn,
+            difficulty=difficulty,
+            focus=focus,
+            bonus_dice=bonus_dice
+        )
+
+        response = {
+            "rolls": result.rolls,
+            "target_number": result.target_number,
+            "successes": result.successes,
+            "complications": result.complications,
+            "difficulty": difficulty,
+            "succeeded": result.succeeded,
+            "momentum_generated": result.momentum_generated,
+            "ship_target_number": result.ship_target_number,
+            "ship_roll": result.ship_roll,
+            "ship_successes": result.ship_successes,
+        }
+
+        if result.succeeded:
+            # Calculate collision damage for both ships
+            # Collision Damage = Scale + (zones moved ÷ 2)
+            # Since zone tracking isn't implemented, assume 1 zone moved (Close -> Contact)
+            zones_moved = 1
+            player_collision_damage = player_ship.scale + (zones_moved // 2)
+            target_collision_damage = target_ship.scale  # Target doesn't move, so +0
+
+            # Piercing quality: ignore resistance for both
+            # Just apply raw damage
+
+            # === Apply damage to TARGET ship (from player ramming) ===
+            target_damage = player_collision_damage
+            target_shield_damage = 0
+            target_hull_damage = 0
+            target_breaches_caused = 0
+            target_systems_hit = []
+
+            # Shields absorb first (if raised)
+            if target_ship.shields_raised and target_ship.shields > 0:
+                target_shield_damage = min(target_ship.shields, target_damage)
+                target_ship.shields -= target_shield_damage
+                target_hull_damage = target_damage - target_shield_damage
+            else:
+                target_hull_damage = target_damage
+
+            # Hull damage causes breaches (1 per 5 damage, or 1 if any hull damage)
+            if target_hull_damage > 0:
+                if target_hull_damage >= 5:
+                    target_breaches_caused = target_hull_damage // 5
+                else:
+                    target_breaches_caused = 1
+
+                for _ in range(target_breaches_caused):
+                    system_roll = random.randint(1, 20)
+                    if system_roll == 1:
+                        system_hit = "comms"
+                    elif system_roll == 2:
+                        system_hit = "computers"
+                    elif system_roll <= 6:
+                        system_hit = "engines"
+                    elif system_roll <= 9:
+                        system_hit = "sensors"
+                    elif system_roll <= 17:
+                        system_hit = "structure"
+                    else:
+                        system_hit = "weapons"
+                    target_ship.add_breach(SystemType(system_hit))
+                    target_systems_hit.append(system_hit)
+
+            # Update target ship in database
+            target_record.shields = target_ship.shields
+            target_breaches_data = [
+                {"system": b.system.value, "potency": b.potency}
+                for b in target_ship.breaches
+            ]
+            target_record.breaches_json = json.dumps(target_breaches_data)
+
+            # === Apply damage to PLAYER ship (from target's collision) ===
+            player_damage = target_collision_damage
+            player_shield_damage = 0
+            player_hull_damage = 0
+            player_breaches_caused = 0
+            player_systems_hit = []
+
+            if player_ship.shields_raised and player_ship.shields > 0:
+                player_shield_damage = min(player_ship.shields, player_damage)
+                player_ship.shields -= player_shield_damage
+                player_hull_damage = player_damage - player_shield_damage
+            else:
+                player_hull_damage = player_damage
+
+            if player_hull_damage > 0:
+                if player_hull_damage >= 5:
+                    player_breaches_caused = player_hull_damage // 5
+                else:
+                    player_breaches_caused = 1
+
+                for _ in range(player_breaches_caused):
+                    system_roll = random.randint(1, 20)
+                    if system_roll == 1:
+                        system_hit = "comms"
+                    elif system_roll == 2:
+                        system_hit = "computers"
+                    elif system_roll <= 6:
+                        system_hit = "engines"
+                    elif system_roll <= 9:
+                        system_hit = "sensors"
+                    elif system_roll <= 17:
+                        system_hit = "structure"
+                    else:
+                        system_hit = "weapons"
+                    player_ship.add_breach(SystemType(system_hit))
+                    player_systems_hit.append(system_hit)
+
+            # Update player ship in database
+            player_ship_record.shields = player_ship.shields
+            player_breaches_data = [
+                {"system": b.system.value, "potency": b.potency}
+                for b in player_ship.breaches
+            ]
+            player_ship_record.breaches_json = json.dumps(player_breaches_data)
+
+            # Update momentum
+            if result.momentum_generated > 0:
+                momentum_to_add = min(result.momentum_generated, 6 - encounter.momentum)
+                encounter.momentum += momentum_to_add
+
+            session.commit()
+
+            response.update({
+                # Damage dealt to target
+                "target_collision_damage": player_collision_damage,
+                "target_shield_damage": target_shield_damage,
+                "target_hull_damage": target_hull_damage,
+                "target_shields_remaining": target_ship.shields,
+                "target_breaches_caused": target_breaches_caused,
+                "target_systems_hit": target_systems_hit,
+                "target_breaches": target_breaches_data,
+                "target_status": target_ship.get_status(),
+                # Damage received by player
+                "player_collision_damage": target_collision_damage,
+                "player_shield_damage": player_shield_damage,
+                "player_hull_damage": player_hull_damage,
+                "player_shields_remaining": player_ship.shields,
+                "player_breaches_caused": player_breaches_caused,
+                "player_systems_hit": player_systems_hit,
+                "player_breaches": player_breaches_data,
+                "player_status": player_ship.get_status(),
+                # Momentum
+                "new_momentum": encounter.momentum,
+            })
+        else:
+            # Ram failed - no damage to either ship
+            response.update({
+                "target_collision_damage": 0,
+                "player_collision_damage": 0,
+                "new_momentum": encounter.momentum,  # Include even on miss (bonus dice may have been spent)
+            })
+
+        # Ram is a major action - alternate turn
+        encounter.player_turns_used += 1
+        turn_result = alternate_turn_after_action(session, encounter)
+
+        response["current_turn"] = turn_result["current_turn"]
+        response["round"] = turn_result["round"]
+        response["round_advanced"] = turn_result["round_advanced"]
+        response["player_turns_used"] = turn_result["player_turns_used"]
+        response["player_turns_total"] = turn_result["player_turns_total"]
+        response["enemy_turns_used"] = turn_result["enemy_turns_used"]
+        response["enemy_turns_total"] = turn_result["enemy_turns_total"]
+        response["ships_info"] = turn_result["ships_info"]
+        response["turn_ended"] = turn_result["current_turn"] == "enemy"
+
+        # Log the combat action
+        player_char = session.query(CharacterRecord).filter_by(id=encounter.player_character_id).first()
+        actor_name = player_char.name if player_char else "Helm Officer"
+
+        if result.succeeded:
+            description = f"Rammed {target_ship.name}: {result.successes} successes vs difficulty {difficulty}. "
+            description += f"Dealt {player_collision_damage} collision damage to {target_ship.name}. "
+            description += f"Suffered {target_collision_damage} collision damage in return."
+            if target_breaches_caused > 0:
+                description += f" Target breaches: {', '.join(target_systems_hit)}."
+            if player_breaches_caused > 0:
+                description += f" Own breaches: {', '.join(player_systems_hit)}."
+        else:
+            description = f"Attempted to ram {target_ship.name}: {result.successes} successes vs difficulty {difficulty}. Failed to connect!"
+
+        log_combat_action(
+            session=session,
+            encounter_record=encounter,
+            actor_name=actor_name,
+            actor_type="player",
+            ship_name=player_ship.name,
+            action_name="Ram",
+            action_type="major",
+            description=description,
+            task_result={
+                "rolls": result.rolls,
+                "target_number": result.target_number,
+                "successes": result.successes,
+                "complications": result.complications,
+                "succeeded": result.succeeded,
+            },
+            damage_dealt=player_collision_damage if result.succeeded else 0,
+        )
+
+        session.commit()
 
         return jsonify(response)
     finally:
@@ -730,9 +1410,20 @@ def execute_action(encounter_id: str):
 
         # Execute action based on type
         if is_buff_action(action_name):
-            result = execute_buff_action(action_name, encounter, config)
+            result = execute_buff_action(action_name, encounter, player_ship, config)
 
         elif is_task_roll_action(action_name):
+            # Validate and deduct momentum for bonus dice (escalating: 1st=1, 2nd=2, 3rd=3)
+            # This applies whether roll was done frontend-side or will be done now
+            bonus_dice = data.get("bonus_dice", 0)
+            if role == "player" and bonus_dice > 0:
+                bonus_dice = min(bonus_dice, 3)  # Cap at 3 per STA rules
+                cost = get_bonus_dice_cost(bonus_dice)
+                if cost > encounter_record.momentum:
+                    return jsonify({"error": f"Not enough Momentum! Need {cost} for {bonus_dice} dice, have {encounter_record.momentum}"}), 400
+                encounter_record.momentum -= cost
+                encounter.momentum = encounter_record.momentum
+
             # Check if roll was already done by the frontend
             if data.get("roll_succeeded"):
                 # Apply success effects without re-rolling
@@ -752,7 +1443,6 @@ def execute_action(encounter_id: str):
                 attribute_value = data.get("attribute", 9)
                 discipline_value = data.get("discipline", 2)
                 focus = data.get("focus", False)
-                bonus_dice = data.get("bonus_dice", 0)
 
                 result = execute_task_roll_action(
                     action_name,
@@ -814,6 +1504,18 @@ def execute_action(encounter_id: str):
                     return jsonify({"error": "weapon_index required for Defensive Fire"}), 400
 
                 result = execute_defensive_fire(encounter, player_ship, weapon_index)
+
+            elif action_name == "Reroute Power":
+                target_system = data.get("target_system")
+                if target_system is None:
+                    return jsonify({"error": "target_system required for Reroute Power"}), 400
+
+                result = execute_reroute_power(encounter, player_ship, target_system)
+
+                # Update ship's reserve power status in database
+                if result.success:
+                    player_ship_record.has_reserve_power = player_ship.has_reserve_power
+
             else:
                 return jsonify({"error": f"Special action not implemented: {action_name}"}), 400
 
@@ -823,9 +1525,71 @@ def execute_action(encounter_id: str):
         # Save updated state
         encounter_record.momentum = encounter.momentum
         encounter_record.active_effects_json = json.dumps([e.to_dict() for e in encounter.active_effects])
+
+        # Save ship's reserve power status if it changed
+        if result.data.get("reserve_power_consumed") or result.data.get("reserve_power_restored"):
+            player_ship_record.has_reserve_power = player_ship.has_reserve_power
+
+        # Determine if this is a major action (uses a turn)
+        # buff and toggle actions are minor; task_roll and special are major
+        action_type = config.get("type")
+        is_major_action = action_type in ("task_roll", "special")
+
+        response = result.to_dict()
+
+        if is_major_action:
+            # Track player turn usage and alternate
+            encounter_record.player_turns_used += 1
+
+            # Alternate turn to the other side
+            turn_result = alternate_turn_after_action(session, encounter_record)
+
+            response["current_turn"] = turn_result["current_turn"]
+            response["round"] = turn_result["round"]
+            response["round_advanced"] = turn_result["round_advanced"]
+            response["player_turns_used"] = turn_result["player_turns_used"]
+            response["player_turns_total"] = turn_result["player_turns_total"]
+            response["enemy_turns_used"] = turn_result["enemy_turns_used"]
+            response["enemy_turns_total"] = turn_result["enemy_turns_total"]
+            response["ships_info"] = turn_result["ships_info"]
+            response["turn_ended"] = turn_result["current_turn"] == "enemy"
+
+        # Always include current momentum (may have been spent on bonus dice)
+        response["momentum"] = encounter_record.momentum
+        response["new_momentum"] = encounter_record.momentum
+
+        # Log the combat action
+        player_char = session.query(CharacterRecord).filter_by(id=encounter_record.player_character_id).first()
+        actor_name = player_char.name if player_char else "Bridge Officer"
+
+        # Build description based on action result
+        description = result.message
+        task_result_data = None
+        if hasattr(result, 'roll_result') and result.roll_result:
+            rr = result.roll_result
+            task_result_data = {
+                "rolls": rr.get("rolls", []),
+                "target_number": rr.get("target_number", 0),
+                "successes": rr.get("successes", 0),
+                "complications": rr.get("complications", 0),
+                "succeeded": rr.get("succeeded", True),
+            }
+
+        log_combat_action(
+            session=session,
+            encounter_record=encounter_record,
+            actor_name=actor_name,
+            actor_type="player",
+            ship_name=player_ship.name,
+            action_name=action_name,
+            action_type="major" if is_major_action else "minor",
+            description=description,
+            task_result=task_result_data,
+        )
+
         session.commit()
 
-        return jsonify(result.to_dict())
+        return jsonify(response)
 
     finally:
         session.close()
@@ -860,11 +1624,15 @@ def npc_action(encounter_id: str):
     ship_id = data.get("ship_id")
     action_name = data.get("action_name")
     action_type = data.get("action_type")
+    action_category = data.get("action_category", "")  # e.g., "tactical_major"
     bonus_dice = data.get("bonus_dice", 0)
     difficulty = data.get("difficulty", 2)
     attribute = data.get("attribute", 10)  # Crew quality attribute
     department = data.get("department", 3)  # Crew quality department
     focus = data.get("focus", True)  # NPCs always have focus
+
+    # Determine if this is a major action (ends turn)
+    is_major_action = action_category.endswith("_major")
 
     if not action_name:
         return jsonify({"error": "action_name required"}), 400
@@ -886,11 +1654,21 @@ def npc_action(encounter_id: str):
         if encounter_record.current_turn != "enemy":
             return jsonify({"error": "It's not the enemy's turn!"}), 403
 
+        # Check if this ship can still act (has turns remaining)
+        ships_turns_used = json.loads(encounter_record.ships_turns_used_json)
+        ship_turns_used = ships_turns_used.get(str(ship_id), 0)
+
         # Load NPC ship
         npc_ship_record = session.query(StarshipRecord).filter_by(id=ship_id).first()
         if not npc_ship_record:
             return jsonify({"error": "NPC ship not found"}), 404
         npc_ship = npc_ship_record.to_model()
+
+        # Check if ship can act (for major actions, must have turns remaining)
+        if is_major_action and ship_turns_used >= npc_ship_record.scale:
+            return jsonify({
+                "error": f"{npc_ship.name} has used all {npc_ship_record.scale} turns this round!"
+            }), 400
 
         # Load active effects
         active_effects_data = json.loads(encounter_record.active_effects_json)
@@ -1015,11 +1793,209 @@ def npc_action(encounter_id: str):
                 result["message"] = f"{npc_ship.name}: {action_name} failed."
 
         elif action_type == "special":
-            # Handle special actions like Defensive Fire
-            result["message"] = f"{npc_ship.name}: {action_name} - special action (TODO)"
+            # Handle special actions
+            if action_name == "Ram":
+                # NPC Ram action - rams the player ship
+                player_ship_record = session.query(StarshipRecord).filter_by(
+                    id=encounter_record.player_ship_id
+                ).first()
+                if not player_ship_record:
+                    return jsonify({"error": "Player ship not found"}), 404
+                player_ship = player_ship_record.to_model()
+
+                # Perform task roll using NPC crew quality
+                target_number = attribute + department
+                num_dice = 2 + bonus_dice
+                rolls = [random.randint(1, 20) for _ in range(num_dice)]
+                successes = 0
+                complications = 0
+
+                for roll in rolls:
+                    if roll == 1:
+                        successes += 2
+                    elif roll <= 2 and focus:
+                        successes += 2
+                    elif roll <= target_number:
+                        successes += 1
+                    if roll == 20:
+                        complications += 1
+
+                succeeded = successes >= difficulty
+                momentum_generated = max(0, successes - difficulty) if succeeded else 0
+
+                result["roll_results"] = {
+                    "rolls": rolls,
+                    "target": target_number,
+                    "successes": successes,
+                    "complications": complications,
+                    "difficulty": difficulty,
+                    "succeeded": succeeded,
+                    "momentum_generated": momentum_generated,
+                    "has_focus": focus,
+                }
+
+                if succeeded:
+                    # Calculate collision damage (Piercing - ignores resistance)
+                    zones_moved = 1
+                    npc_collision_damage = npc_ship.scale + (zones_moved // 2)
+                    player_collision_damage = player_ship.scale
+
+                    # Apply damage to PLAYER ship
+                    player_damage = npc_collision_damage
+                    player_shield_damage = 0
+                    player_hull_damage = 0
+                    player_breaches_caused = 0
+                    player_systems_hit = []
+
+                    if player_ship.shields_raised and player_ship.shields > 0:
+                        player_shield_damage = min(player_ship.shields, player_damage)
+                        player_ship.shields -= player_shield_damage
+                        player_hull_damage = player_damage - player_shield_damage
+                    else:
+                        player_hull_damage = player_damage
+
+                    if player_hull_damage > 0:
+                        player_breaches_caused = max(1, player_hull_damage // 5)
+                        for _ in range(player_breaches_caused):
+                            system_roll = random.randint(1, 20)
+                            if system_roll == 1:
+                                system_hit = "comms"
+                            elif system_roll == 2:
+                                system_hit = "computers"
+                            elif system_roll <= 6:
+                                system_hit = "engines"
+                            elif system_roll <= 9:
+                                system_hit = "sensors"
+                            elif system_roll <= 17:
+                                system_hit = "structure"
+                            else:
+                                system_hit = "weapons"
+                            player_ship.add_breach(SystemType(system_hit))
+                            player_systems_hit.append(system_hit)
+
+                    player_ship_record.shields = player_ship.shields
+                    player_ship_record.breaches_json = json.dumps([
+                        {"system": b.system.value, "potency": b.potency}
+                        for b in player_ship.breaches
+                    ])
+
+                    # Apply damage to NPC ship
+                    npc_damage = player_collision_damage
+                    npc_shield_damage = 0
+                    npc_hull_damage = 0
+                    npc_breaches_caused = 0
+                    npc_systems_hit = []
+
+                    if npc_ship.shields_raised and npc_ship.shields > 0:
+                        npc_shield_damage = min(npc_ship.shields, npc_damage)
+                        npc_ship.shields -= npc_shield_damage
+                        npc_hull_damage = npc_damage - npc_shield_damage
+                    else:
+                        npc_hull_damage = npc_damage
+
+                    if npc_hull_damage > 0:
+                        npc_breaches_caused = max(1, npc_hull_damage // 5)
+                        for _ in range(npc_breaches_caused):
+                            system_roll = random.randint(1, 20)
+                            if system_roll == 1:
+                                system_hit = "comms"
+                            elif system_roll == 2:
+                                system_hit = "computers"
+                            elif system_roll <= 6:
+                                system_hit = "engines"
+                            elif system_roll <= 9:
+                                system_hit = "sensors"
+                            elif system_roll <= 17:
+                                system_hit = "structure"
+                            else:
+                                system_hit = "weapons"
+                            npc_ship.add_breach(SystemType(system_hit))
+                            npc_systems_hit.append(system_hit)
+
+                    npc_ship_record.shields = npc_ship.shields
+                    npc_ship_record.breaches_json = json.dumps([
+                        {"system": b.system.value, "potency": b.potency}
+                        for b in npc_ship.breaches
+                    ])
+
+                    if momentum_generated > 0:
+                        encounter_record.threat += momentum_generated
+                        result["threat_generated"] = momentum_generated
+
+                    result["message"] = f"{npc_ship.name} rammed {player_ship.name}!"
+                    result["ram_results"] = {
+                        "player_collision_damage": npc_collision_damage,
+                        "player_shield_damage": player_shield_damage,
+                        "player_hull_damage": player_hull_damage,
+                        "player_shields_remaining": player_ship.shields,
+                        "player_breaches_caused": player_breaches_caused,
+                        "player_systems_hit": player_systems_hit,
+                        "npc_collision_damage": player_collision_damage,
+                        "npc_shield_damage": npc_shield_damage,
+                        "npc_hull_damage": npc_hull_damage,
+                        "npc_shields_remaining": npc_ship.shields,
+                        "npc_breaches_caused": npc_breaches_caused,
+                        "npc_systems_hit": npc_systems_hit,
+                    }
+                else:
+                    result["message"] = f"{npc_ship.name} failed to ram!"
+            else:
+                result["message"] = f"{npc_ship.name}: {action_name} - special action (not implemented)"
 
         # Save updated effects
         encounter_record.active_effects_json = json.dumps([e.to_dict() for e in active_effects])
+
+        # Track turn usage for major actions and alternate turns
+        if is_major_action:
+            # Increment this ship's turns used
+            ships_turns_used[str(ship_id)] = ship_turns_used + 1
+            encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
+
+            # Alternate turn to the other side
+            turn_result = alternate_turn_after_action(session, encounter_record)
+
+            result["ship_turns_used"] = ships_turns_used[str(ship_id)]
+            result["ship_turns_total"] = npc_ship_record.scale
+            result["current_turn"] = turn_result["current_turn"]
+            result["round"] = turn_result["round"]
+            result["round_advanced"] = turn_result["round_advanced"]
+            result["enemy_turns_used"] = turn_result["enemy_turns_used"]
+            result["enemy_turns_total"] = turn_result["enemy_turns_total"]
+            result["player_turns_used"] = turn_result["player_turns_used"]
+            result["player_turns_total"] = turn_result["player_turns_total"]
+            result["ships_info"] = turn_result["ships_info"]
+
+            # Turn switched to player (or round ended)
+            result["turn_ended"] = turn_result["current_turn"] == "player"
+
+        # Log the combat action
+        crew_quality = npc_ship.crew_quality.value if npc_ship.crew_quality else "Talented"
+        actor_name = f"{npc_ship.name} Crew ({crew_quality})"
+
+        task_result_data = None
+        if "roll_results" in result:
+            rr = result["roll_results"]
+            task_result_data = {
+                "rolls": rr.get("rolls", []),
+                "target_number": rr.get("target", 0),
+                "successes": rr.get("successes", 0),
+                "complications": rr.get("complications", 0),
+                "succeeded": rr.get("succeeded", True),
+            }
+
+        log_combat_action(
+            session=session,
+            encounter_record=encounter_record,
+            actor_name=actor_name,
+            actor_type="enemy",
+            ship_name=npc_ship.name,
+            action_name=action_name,
+            action_type="major" if is_major_action else "minor",
+            description=result.get("message", f"{npc_ship.name} performed {action_name}"),
+            task_result=task_result_data,
+            threat_spent=result.get("threat_generated", 0),
+        )
+
         session.commit()
 
         return jsonify(result)
@@ -1078,6 +2054,14 @@ def gm_attack(encounter_id: str):
             return jsonify({"error": "Enemy ship not found"}), 404
         enemy_ship = enemy_record.to_model()
 
+        # Check if this ship can still act (has turns remaining)
+        ships_turns_used = json.loads(encounter_record.ships_turns_used_json)
+        ship_turns_used = ships_turns_used.get(str(enemy_id), 0)
+        if ship_turns_used >= enemy_record.scale:
+            return jsonify({
+                "error": f"{enemy_ship.name} has used all {enemy_record.scale} turns this round!"
+            }), 400
+
         # Get enemy weapon
         if weapon_index >= len(enemy_ship.weapons):
             return jsonify({"error": "Invalid weapon"}), 400
@@ -1116,6 +2100,30 @@ def gm_attack(encounter_id: str):
             "has_defensive_effect": has_defensive_effect,
             "defense_effect_name": defense_effect_name,
         }
+
+        # If Defensive Fire is active, create a pending attack for the player to roll
+        if defensive_fire_effect:
+            # Store the pending attack - player needs to make their defensive roll
+            pending_attack = {
+                "attacker_index": enemy_index,
+                "attacker_name": enemy_ship.name,
+                "weapon_index": weapon_index,
+                "weapon_name": weapon.name,
+                "bonus_dice": data.get("bonus_dice", 0),
+                "timestamp": datetime.now().isoformat(),
+                "defensive_fire_weapon_index": defensive_fire_effect.weapon_index,
+            }
+            encounter_record.pending_attack_json = json.dumps(pending_attack)
+            session.commit()
+
+            return jsonify({
+                "status": "pending_defensive_roll",
+                "message": f"{enemy_ship.name} is attacking with {weapon.name}! Waiting for defensive roll...",
+                "attacker": enemy_ship.name,
+                "attacker_weapon": weapon.name,
+                "defender": player_ship.name,
+                "pending_attack": pending_attack,
+            })
 
         if has_defensive_effect:
             # OPPOSED ROLL
@@ -1210,10 +2218,12 @@ def gm_attack(encounter_id: str):
                 response["message"] = f"{player_ship.name} successfully defended! Attack misses."
 
                 # Check for counterattack option (Defensive Fire only)
+                can_counterattack = False
                 if defensive_fire_effect and defensive_fire_effect.weapon_index is not None:
                     counterattack_weapon_index = defensive_fire_effect.weapon_index
                     if counterattack_weapon_index < len(player_ship.weapons):
                         counterattack_weapon = player_ship.weapons[counterattack_weapon_index]
+                        can_counterattack = True
                         response["can_counterattack"] = True
                         response["counterattack_cost"] = 2  # 2 Momentum
                         response["counterattack_weapon"] = counterattack_weapon.name
@@ -1223,6 +2233,48 @@ def gm_attack(encounter_id: str):
 
                 # Save state (no damage applied)
                 encounter_record.active_effects_json = json.dumps([e.to_dict() for e in encounter_model.active_effects])
+
+                # Track turn usage (attack is a major action) and alternate turns
+                if not can_counterattack:
+                    ships_turns_used[str(enemy_id)] = ship_turns_used + 1
+                    encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
+
+                    # Alternate turn to the other side
+                    turn_result = alternate_turn_after_action(session, encounter_record)
+
+                    response["ship_turns_used"] = ships_turns_used[str(enemy_id)]
+                    response["ship_turns_total"] = enemy_record.scale
+                    response["current_turn"] = turn_result["current_turn"]
+                    response["round"] = turn_result["round"]
+                    response["round_advanced"] = turn_result["round_advanced"]
+                    response["enemy_turns_used"] = turn_result["enemy_turns_used"]
+                    response["enemy_turns_total"] = turn_result["enemy_turns_total"]
+                    response["player_turns_used"] = turn_result["player_turns_used"]
+                    response["player_turns_total"] = turn_result["player_turns_total"]
+                    response["ships_info"] = turn_result["ships_info"]
+                    response["turn_ended"] = turn_result["current_turn"] == "player"
+
+                # Log the missed attack
+                crew_quality = enemy_ship.crew_quality.value if enemy_ship.crew_quality else "Talented"
+                log_combat_action(
+                    session=session,
+                    encounter_record=encounter_record,
+                    actor_name=f"{enemy_ship.name} Crew ({crew_quality})",
+                    actor_type="enemy",
+                    ship_name=enemy_ship.name,
+                    action_name=f"Fire {weapon.name}",
+                    action_type="major",
+                    description=f"Fired {weapon.name} at {player_ship.name}: Attack defended! ({attacker_successes} vs {defender_successes} successes)",
+                    task_result={
+                        "attacker_rolls": attacker_rolls,
+                        "attacker_successes": attacker_successes,
+                        "defender_rolls": defender_rolls,
+                        "defender_successes": defender_successes,
+                        "defender_wins": True,
+                    },
+                    damage_dealt=0,
+                )
+
                 session.commit()
 
                 return jsonify(response)
@@ -1309,6 +2361,379 @@ def gm_attack(encounter_id: str):
             "message": f"{enemy_ship.name} hit {player_ship.name} for {total_damage} damage!"
         })
 
+        # Track turn usage (attack is a major action) and alternate turns
+        ships_turns_used[str(enemy_id)] = ship_turns_used + 1
+        encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
+
+        # Alternate turn to the other side
+        turn_result = alternate_turn_after_action(session, encounter_record)
+
+        response["ship_turns_used"] = ships_turns_used[str(enemy_id)]
+        response["ship_turns_total"] = enemy_record.scale
+        response["current_turn"] = turn_result["current_turn"]
+        response["round"] = turn_result["round"]
+        response["round_advanced"] = turn_result["round_advanced"]
+        response["enemy_turns_used"] = turn_result["enemy_turns_used"]
+        response["enemy_turns_total"] = turn_result["enemy_turns_total"]
+        response["player_turns_used"] = turn_result["player_turns_used"]
+        response["player_turns_total"] = turn_result["player_turns_total"]
+        response["ships_info"] = turn_result["ships_info"]
+        response["turn_ended"] = turn_result["current_turn"] == "player"
+
+        # Log the successful attack
+        crew_quality = enemy_ship.crew_quality.value if enemy_ship.crew_quality else "Talented"
+        description = f"Fired {weapon.name} at {player_ship.name}: Hit for {total_damage} damage!"
+        if breaches_caused > 0:
+            description += f" Caused {breaches_caused} breach(es) to {', '.join(systems_hit)}."
+
+        log_combat_action(
+            session=session,
+            encounter_record=encounter_record,
+            actor_name=f"{enemy_ship.name} Crew ({crew_quality})",
+            actor_type="enemy",
+            ship_name=enemy_ship.name,
+            action_name=f"Fire {weapon.name}",
+            action_type="major",
+            description=description,
+            task_result={
+                "attacker_rolls": response.get("attacker_rolls", []),
+                "attacker_successes": response.get("attacker_successes", 0),
+            } if has_defensive_effect else None,
+            damage_dealt=total_damage,
+        )
+
+        session.commit()
+
+        return jsonify(response)
+
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/resolve-defensive-roll", methods=["POST"])
+def resolve_defensive_roll(encounter_id: str):
+    """Resolve the player's defensive roll for a pending attack.
+
+    The player makes their opposed roll (Daring + Security, assisted by Weapons + Security),
+    and this endpoint compares it to the attacker's roll and resolves the attack.
+    """
+    import random
+
+    data = request.json
+    defender_rolls = data.get("defender_rolls", [])  # Player's 2d20 rolls
+    ship_assist_roll = data.get("ship_assist_roll")  # Ship's assist roll
+
+    session = get_session()
+    try:
+        # Load encounter
+        encounter_record = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+        if not encounter_record:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Check for pending attack
+        if not encounter_record.pending_attack_json:
+            return jsonify({"error": "No pending attack to resolve"}), 400
+
+        pending_attack = json.loads(encounter_record.pending_attack_json)
+
+        # Load player ship (defender)
+        player_ship_record = session.query(StarshipRecord).filter_by(
+            id=encounter_record.player_ship_id
+        ).first()
+        if not player_ship_record:
+            return jsonify({"error": "Player ship not found"}), 404
+        player_ship = player_ship_record.to_model()
+
+        # Load player character for stats
+        player_char_record = session.query(CharacterRecord).filter_by(
+            id=encounter_record.player_character_id
+        ).first()
+        player_char = player_char_record.to_model() if player_char_record else None
+
+        # Load attacking enemy ship
+        enemy_ids = json.loads(encounter_record.enemy_ship_ids_json)
+        enemy_index = pending_attack["attacker_index"]
+        if enemy_index >= len(enemy_ids):
+            return jsonify({"error": "Invalid enemy ship"}), 400
+
+        enemy_id = enemy_ids[enemy_index]
+        enemy_record = session.query(StarshipRecord).filter_by(id=enemy_id).first()
+        if not enemy_record:
+            return jsonify({"error": "Enemy ship not found"}), 404
+        enemy_ship = enemy_record.to_model()
+
+        weapon_index = pending_attack["weapon_index"]
+        if weapon_index >= len(enemy_ship.weapons):
+            return jsonify({"error": "Invalid weapon"}), 400
+        weapon = enemy_ship.weapons[weapon_index]
+
+        # Load active effects for later
+        active_effects_data = json.loads(encounter_record.active_effects_json)
+        active_effects = [ActiveEffect.from_dict(e) for e in active_effects_data]
+        from sta.models.combat import Encounter as EncounterModel
+        encounter_model = EncounterModel(
+            id=encounter_record.encounter_id,
+            momentum=encounter_record.momentum,
+            active_effects=active_effects,
+        )
+
+        # Defender stats
+        if player_char:
+            defender_attr = player_char.attributes.daring
+            defender_disc = player_char.disciplines.security
+        else:
+            defender_attr = 9
+            defender_disc = 3
+
+        defender_target = defender_attr + defender_disc
+        ship_target = player_ship.systems.weapons + player_ship.departments.security
+
+        # Calculate defender successes from provided rolls
+        defender_successes = 0
+        defender_complications = 0
+
+        for roll in defender_rolls:
+            if roll == 1:
+                defender_successes += 2  # Critical
+            elif roll <= defender_target:
+                defender_successes += 1
+            if roll == 20:
+                defender_complications += 1
+
+        # Ship assist
+        if ship_assist_roll == 1:
+            defender_successes += 2
+        elif ship_assist_roll <= ship_target:
+            defender_successes += 1
+        if ship_assist_roll == 20:
+            defender_complications += 1
+
+        # Attacker rolls - enemy uses Control + Security, assisted by Weapons + Security
+        attacker_attr = 9  # Default enemy Control
+        attacker_disc = 3  # Default enemy Security
+        attacker_target = attacker_attr + attacker_disc
+        enemy_ship_target = enemy_ship.systems.weapons + enemy_ship.departments.security
+
+        attacker_rolls = [random.randint(1, 20), random.randint(1, 20)]
+        enemy_assist_roll = random.randint(1, 20)
+
+        attacker_successes = 0
+        attacker_complications = 0
+
+        for roll in attacker_rolls:
+            if roll == 1:
+                attacker_successes += 2
+            elif roll <= attacker_target:
+                attacker_successes += 1
+            if roll == 20:
+                attacker_complications += 1
+
+        if enemy_assist_roll == 1:
+            attacker_successes += 2
+        elif enemy_assist_roll <= enemy_ship_target:
+            attacker_successes += 1
+        if enemy_assist_roll == 20:
+            attacker_complications += 1
+
+        # Opposed roll: defender wins if they have equal or more successes
+        defender_wins = defender_successes >= attacker_successes
+
+        response = {
+            "attacker": enemy_ship.name,
+            "attacker_weapon": weapon.name,
+            "defender": player_ship.name,
+            "opposed_roll": True,
+            "defender_rolls": defender_rolls,
+            "defender_target": defender_target,
+            "defender_ship_roll": ship_assist_roll,
+            "defender_ship_target": ship_target,
+            "defender_successes": defender_successes,
+            "defender_complications": defender_complications,
+            "attacker_rolls": attacker_rolls,
+            "attacker_target": attacker_target,
+            "attacker_ship_roll": enemy_assist_roll,
+            "attacker_ship_target": enemy_ship_target,
+            "attacker_successes": attacker_successes,
+            "attacker_complications": attacker_complications,
+            "defender_wins": defender_wins,
+        }
+
+        # Clear pending attack
+        encounter_record.pending_attack_json = None
+
+        # Get turn tracking info
+        ships_turns_used = json.loads(encounter_record.ships_turns_used_json)
+        ship_turns_used = ships_turns_used.get(str(enemy_id), 0)
+
+        if defender_wins:
+            # Attack misses!
+            response["attack_result"] = "missed"
+            response["message"] = f"{player_ship.name} successfully defended! Attack misses."
+
+            # Check for counterattack option
+            defensive_fire_weapon_index = pending_attack.get("defensive_fire_weapon_index")
+            can_counterattack = False
+            if defensive_fire_weapon_index is not None and defensive_fire_weapon_index < len(player_ship.weapons):
+                counterattack_weapon = player_ship.weapons[defensive_fire_weapon_index]
+                can_counterattack = True
+                response["can_counterattack"] = True
+                response["counterattack_cost"] = 2
+                response["counterattack_weapon"] = counterattack_weapon.name
+                response["counterattack_weapon_index"] = defensive_fire_weapon_index
+                response["counterattack_target_index"] = enemy_index
+                response["current_momentum"] = encounter_record.momentum
+                response["message"] += f" May spend 2 Momentum to counterattack with {counterattack_weapon.name}."
+
+            # Track turn usage and alternate if no counterattack
+            if not can_counterattack:
+                ships_turns_used[str(enemy_id)] = ship_turns_used + 1
+                encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
+                turn_result = alternate_turn_after_action(session, encounter_record)
+                response.update({
+                    "ship_turns_used": ships_turns_used[str(enemy_id)],
+                    "ship_turns_total": enemy_record.scale,
+                    "current_turn": turn_result["current_turn"],
+                    "round": turn_result["round"],
+                })
+
+            # Log the defended attack
+            crew_quality = enemy_ship.crew_quality.value if enemy_ship.crew_quality else "Talented"
+            log_combat_action(
+                session=session,
+                encounter_record=encounter_record,
+                actor_name=f"{enemy_ship.name} Crew ({crew_quality})",
+                actor_type="enemy",
+                ship_name=enemy_ship.name,
+                action_name=f"Fire {weapon.name}",
+                action_type="major",
+                description=f"Fired {weapon.name} at {player_ship.name}: Attack defended! ({attacker_successes} vs {defender_successes} successes)",
+                task_result={
+                    "attacker_rolls": attacker_rolls,
+                    "attacker_successes": attacker_successes,
+                    "defender_rolls": defender_rolls,
+                    "defender_successes": defender_successes,
+                    "defender_wins": True,
+                },
+                damage_dealt=0,
+            )
+
+            session.commit()
+            return jsonify(response)
+
+        # Attack hits - attacker won the opposed roll
+        response["attack_result"] = "hit"
+
+        # Calculate damage
+        base_damage = weapon.damage + enemy_ship.weapons_damage_bonus()
+
+        # Apply defensive effects to target's resistance
+        effective_resistance, _, defense_details = apply_effects_to_defense(
+            encounter_model, player_ship.resistance
+        )
+
+        # Apply resistance
+        damage_after_resistance = max(1, base_damage - effective_resistance)
+
+        # Apply attacker complications to reduce damage
+        complication_reduction = attacker_complications
+        total_damage = max(0, damage_after_resistance - complication_reduction)
+
+        # Apply to target - shields absorb first (only if raised)
+        if player_ship.shields_raised and player_ship.shields > 0:
+            shield_damage = min(player_ship.shields, total_damage)
+            player_ship.shields -= shield_damage
+            remaining_damage = total_damage - shield_damage
+        else:
+            shield_damage = 0
+            remaining_damage = total_damage
+        hull_damage = remaining_damage
+
+        breaches_caused = 0
+        systems_hit = []
+
+        if hull_damage > 0:
+            if hull_damage >= 5:
+                breaches_caused = hull_damage // 5
+            else:
+                breaches_caused = 1
+
+            for i in range(breaches_caused):
+                system_roll = random.randint(1, 20)
+                if system_roll == 1:
+                    system_hit = "comms"
+                elif system_roll == 2:
+                    system_hit = "computers"
+                elif system_roll <= 6:
+                    system_hit = "engines"
+                elif system_roll <= 9:
+                    system_hit = "sensors"
+                elif system_roll <= 17:
+                    system_hit = "structure"
+                else:
+                    system_hit = "weapons"
+
+                player_ship.add_breach(SystemType(system_hit))
+                systems_hit.append(system_hit)
+
+        # Update player ship in database
+        player_ship_record.shields = player_ship.shields
+        breaches_data = [
+            {"system": b.system.value, "potency": b.potency}
+            for b in player_ship.breaches
+        ]
+        player_ship_record.breaches_json = json.dumps(breaches_data)
+
+        # Track turn usage and alternate
+        ships_turns_used[str(enemy_id)] = ship_turns_used + 1
+        encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
+        turn_result = alternate_turn_after_action(session, encounter_record)
+
+        response.update({
+            "base_damage": base_damage,
+            "effective_resistance": effective_resistance,
+            "damage_after_resistance": damage_after_resistance,
+            "complication_reduction": complication_reduction,
+            "total_damage": total_damage,
+            "shield_damage": shield_damage,
+            "hull_damage": hull_damage,
+            "breaches_caused": breaches_caused,
+            "systems_hit": systems_hit,
+            "target_shields_remaining": player_ship.shields,
+            "message": f"{enemy_ship.name} hit {player_ship.name} for {total_damage} damage!",
+            "ship_turns_used": ships_turns_used[str(enemy_id)],
+            "ship_turns_total": enemy_record.scale,
+            "current_turn": turn_result["current_turn"],
+            "round": turn_result["round"],
+        })
+
+        # Log the attack
+        crew_quality = enemy_ship.crew_quality.value if enemy_ship.crew_quality else "Talented"
+        description = f"Fired {weapon.name} at {player_ship.name}: Hit for {total_damage} damage!"
+        if breaches_caused > 0:
+            description += f" Caused {breaches_caused} breach(es) to {', '.join(systems_hit)}."
+
+        log_combat_action(
+            session=session,
+            encounter_record=encounter_record,
+            actor_name=f"{enemy_ship.name} Crew ({crew_quality})",
+            actor_type="enemy",
+            ship_name=enemy_ship.name,
+            action_name=f"Fire {weapon.name}",
+            action_type="major",
+            description=description,
+            task_result={
+                "attacker_rolls": attacker_rolls,
+                "attacker_successes": attacker_successes,
+                "defender_rolls": defender_rolls,
+                "defender_successes": defender_successes,
+                "defender_wins": False,
+            },
+            damage_dealt=total_damage,
+        )
+
+        session.commit()
         return jsonify(response)
 
     finally:
@@ -1499,6 +2924,57 @@ def counterattack(encounter_id: str):
         else:
             response["message"] = "Counterattack missed!"
 
+        # Track turn usage for the enemy that attacked (their attack triggered this counterattack)
+        ships_turns_used = json.loads(encounter_record.ships_turns_used_json)
+        ship_turns_used = ships_turns_used.get(str(target_id), 0)
+        ships_turns_used[str(target_id)] = ship_turns_used + 1
+        encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
+
+        # Alternate turn to the other side
+        turn_result = alternate_turn_after_action(session, encounter_record)
+
+        response["ship_turns_used"] = ships_turns_used[str(target_id)]
+        response["ship_turns_total"] = target_record.scale
+        response["current_turn"] = turn_result["current_turn"]
+        response["round"] = turn_result["round"]
+        response["round_advanced"] = turn_result["round_advanced"]
+        response["enemy_turns_used"] = turn_result["enemy_turns_used"]
+        response["enemy_turns_total"] = turn_result["enemy_turns_total"]
+        response["player_turns_used"] = turn_result["player_turns_used"]
+        response["player_turns_total"] = turn_result["player_turns_total"]
+        response["ships_info"] = turn_result["ships_info"]
+        response["turn_ended"] = turn_result["current_turn"] == "player"
+
+        # Log the counterattack
+        actor_name = player_char.name if player_char else "Tactical Officer"
+        if succeeded:
+            damage = response.get("total_damage", 0)
+            description = f"Counterattack with {weapon.name} at {target_ship.name}: {successes} successes vs difficulty {difficulty}. Hit for {damage} damage!"
+            if response.get("breaches_caused", 0) > 0:
+                description += f" Caused {response['breaches_caused']} breach(es) to {', '.join(response.get('systems_hit', []))}."
+        else:
+            description = f"Counterattack with {weapon.name} at {target_ship.name}: {successes} successes vs difficulty {difficulty}. Missed!"
+
+        log_combat_action(
+            session=session,
+            encounter_record=encounter_record,
+            actor_name=actor_name,
+            actor_type="player",
+            ship_name=player_ship.name,
+            action_name=f"Counterattack ({weapon.name})",
+            action_type="major",
+            description=description,
+            task_result={
+                "rolls": rolls,
+                "target_number": target_number,
+                "successes": successes,
+                "complications": complications,
+                "succeeded": succeeded,
+            },
+            damage_dealt=response.get("total_damage", 0),
+            momentum_spent=2,
+        )
+
         session.commit()
         return jsonify(response)
 
@@ -1530,5 +3006,77 @@ def delete_encounter(encounter_id: str):
         session.commit()
 
         return jsonify({"success": True, "message": "Encounter deleted"})
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/combat-log", methods=["GET"])
+def get_combat_log(encounter_id: str):
+    """Get the combat log for an encounter.
+
+    Query params:
+        since_id: int - Only return log entries after this ID (for polling)
+        round: int - Only return log entries from this round
+        limit: int - Maximum number of entries to return (default 50)
+
+    Returns:
+        JSON with log entries, newest first
+    """
+    since_id = request.args.get("since_id", type=int)
+    round_filter = request.args.get("round", type=int)
+    limit = request.args.get("limit", default=50, type=int)
+
+    session = get_session()
+    try:
+        # Get the encounter to get its primary key ID
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Build query
+        query = session.query(CombatLogRecord).filter_by(
+            encounter_id=encounter.id
+        )
+
+        if since_id:
+            query = query.filter(CombatLogRecord.id > since_id)
+
+        if round_filter is not None:
+            query = query.filter(CombatLogRecord.round == round_filter)
+
+        # Order by ID descending (newest first) and limit
+        log_entries = query.order_by(CombatLogRecord.id.desc()).limit(limit).all()
+
+        # Convert to JSON-serializable format
+        entries = []
+        for entry in log_entries:
+            entries.append({
+                "id": entry.id,
+                "round": entry.round,
+                "actor_name": entry.actor_name,
+                "actor_type": entry.actor_type,
+                "ship_name": entry.ship_name,
+                "action_name": entry.action_name,
+                "action_type": entry.action_type,
+                "description": entry.description,
+                "task_result": json.loads(entry.task_result_json) if entry.task_result_json else None,
+                "damage_dealt": entry.damage_dealt,
+                "momentum_spent": entry.momentum_spent,
+                "threat_spent": entry.threat_spent,
+                "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
+            })
+
+        # Reverse to get oldest-first order for display
+        entries.reverse()
+
+        return jsonify({
+            "log": entries,
+            "count": len(entries),
+            "latest_id": log_entries[0].id if log_entries else None,
+        })
+
     finally:
         session.close()
