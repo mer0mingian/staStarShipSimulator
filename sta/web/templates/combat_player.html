@@ -1115,6 +1115,39 @@
         }
     }
 
+    // Add turn-over indicator to a results element
+    function addTurnOverIndicator(elementId, newTurn) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+
+        // Remove any existing turn-over indicator
+        const existing = element.querySelector('.turn-over-indicator');
+        if (existing) existing.remove();
+
+        // Add new indicator
+        const indicator = document.createElement('div');
+        indicator.className = 'turn-over-indicator';
+        indicator.style.cssText = 'margin-top: 15px; padding: 12px; border-radius: 5px; text-align: center; font-weight: bold;';
+
+        if (newTurn === 'enemy') {
+            indicator.style.background = 'linear-gradient(135deg, #2a1a1a 0%, #3a2020 100%)';
+            indicator.style.border = '2px solid var(--lcars-red)';
+            indicator.innerHTML = `
+                <div style="color: var(--lcars-red); font-size: 1.1em;">ACTION COMPLETE</div>
+                <div style="color: var(--lcars-tan); margin-top: 5px;">Enemy Turn - Waiting for GM...</div>
+            `;
+        } else {
+            indicator.style.background = 'linear-gradient(135deg, #1a2a1a 0%, #203a20 100%)';
+            indicator.style.border = '2px solid var(--lcars-green)';
+            indicator.innerHTML = `
+                <div style="color: var(--lcars-green); font-size: 1.1em;">YOUR TURN</div>
+                <div style="color: var(--lcars-tan); margin-top: 5px;">Select your next action</div>
+            `;
+        }
+
+        element.appendChild(indicator);
+    }
+
     // Fetch initial turn status on page load
     async function fetchTurnStatus() {
         try {
@@ -1817,6 +1850,17 @@
                 if (execData.current_turn) {
                     currentTurn = execData.current_turn;
                     updateTurnDisplay(execData.current_turn, execData.round, execData);
+
+                    // Clear action state
+                    activeMinorAction = null;
+                    selectedMajorAction = null;
+                    updateFireMinorActionBanner();
+                    updateMajorActionHighlights();
+                    clearActionSelections('minor');
+                    clearActionSelections('major');
+
+                    // Add turn indicator to results (keep panel visible)
+                    addTurnOverIndicator('damage-control-results', execData.current_turn);
                 }
 
                 // Update turn counters
@@ -1826,11 +1870,6 @@
                         execData.enemy_turns_used, execData.enemy_turns_total
                     );
                 }
-
-                // Hide the panel after success
-                setTimeout(() => {
-                    document.getElementById('damage-control-panel').style.display = 'none';
-                }, 2000);
             } else {
                 resultsDiv.innerHTML = `
                     <div style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
@@ -1866,6 +1905,17 @@
                     if (failData.current_turn) {
                         currentTurn = failData.current_turn;
                         updateTurnDisplay(failData.current_turn, failData.round, failData);
+
+                        // Clear action state
+                        activeMinorAction = null;
+                        selectedMajorAction = null;
+                        updateFireMinorActionBanner();
+                        updateMajorActionHighlights();
+                        clearActionSelections('minor');
+                        clearActionSelections('major');
+
+                        // Add turn indicator to results (keep panel visible)
+                        addTurnOverIndicator('damage-control-results', failData.current_turn);
                     }
 
                     if (failData.player_turns_used !== undefined) {
@@ -1876,14 +1926,7 @@
                     }
                 } catch (e) {
                     console.error('Failed to record failed action:', e);
-                    // Fallback to nextTurn if execute-action fails
-                    await nextTurn();
                 }
-
-                // Hide the panel after failure
-                setTimeout(() => {
-                    document.getElementById('damage-control-panel').style.display = 'none';
-                }, 2000);
             }
         } catch (err) {
             resultsDiv.style.display = 'block';
@@ -2132,16 +2175,28 @@
                 showErrorToast('Ram failed! Target evaded the collision.');
             }
 
-            // Handle turn changes
-            if (data.turn_ended) {
-                currentTurn = 'enemy';
-                updateTurnDisplay();
-                showSuccessToast("Enemy turn!");
+            // Handle turn state from response
+            if (data.current_turn) {
+                updateTurnDisplay(data.current_turn, data.round, data);
+
+                // Clear action state
+                activeMinorAction = null;
+                selectedMajorAction = null;
+                updateFireMinorActionBanner();
+                updateMajorActionHighlights();
+                clearActionSelections('minor');
+                clearActionSelections('major');
+
+                // Add turn indicator to ram results
+                addTurnOverIndicator('ram-results', data.current_turn);
             }
 
-            // Mark action as complete
-            selectedMajorAction = 'Ram';
-            updateSelectionSummary();
+            if (data.player_turns_used !== undefined) {
+                updateTurnCounters(
+                    data.player_turns_used, data.player_turns_total,
+                    data.enemy_turns_used, data.enemy_turns_total
+                );
+            }
 
         } catch (err) {
             resultsDiv.innerHTML = `
@@ -2196,8 +2251,18 @@
         const data = await response.json();
 
         if (data.success) {
-            // Show success message
-            showSuccessToast(`${actionName} activated! ${data.message || ''}`);
+            // Show results in dice panel
+            const resultsDiv = document.getElementById('dice-results');
+            const displayDiv = document.getElementById('dice-display');
+            document.getElementById('dice-panel').style.display = 'block';
+            resultsDiv.style.display = 'block';
+
+            displayDiv.innerHTML = `
+                <div class="alert alert-success" style="padding: 15px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                    <strong style="color: var(--lcars-green);">${actionName.toUpperCase()} ACTIVATED!</strong>
+                    <p style="margin-top: 10px;">${data.message || 'Effect applied successfully.'}</p>
+                </div>
+            `;
 
             // Update resistance display if applicable
             if (data.resistance_bonus) {
@@ -2205,8 +2270,28 @@
                 updateResistanceDisplay();
             }
 
-            // End the turn since this is a major action
-            await nextTurn();
+            // Handle turn state from response
+            if (data.current_turn) {
+                updateTurnDisplay(data.current_turn, data.round, data);
+
+                // Clear action state
+                activeMinorAction = null;
+                selectedMajorAction = null;
+                updateFireMinorActionBanner();
+                updateMajorActionHighlights();
+                clearActionSelections('minor');
+                clearActionSelections('major');
+
+                // Add turn indicator
+                addTurnOverIndicator('dice-display', data.current_turn);
+            }
+
+            if (data.player_turns_used !== undefined) {
+                updateTurnCounters(
+                    data.player_turns_used, data.player_turns_total,
+                    data.enemy_turns_used, data.enemy_turns_total
+                );
+            }
         } else {
             showErrorToast(data.error || `${actionName} failed!`);
         }
@@ -2386,6 +2471,29 @@
         lastFireData.previous_rolls = data.rolls;
 
         displayFireResults(data, targetIndex, focus, bonusDice, difficulty);
+
+        // Handle turn state from response
+        if (data.current_turn) {
+            updateTurnDisplay(data.current_turn, data.round, data);
+
+            // Clear action state
+            activeMinorAction = null;
+            selectedMajorAction = null;
+            updateFireMinorActionBanner();
+            updateMajorActionHighlights();
+            clearActionSelections('minor');
+            clearActionSelections('major');
+
+            // Add turn indicator to fire results
+            addTurnOverIndicator('fire-results', data.current_turn);
+        }
+
+        if (data.player_turns_used !== undefined) {
+            updateTurnCounters(
+                data.player_turns_used, data.player_turns_total,
+                data.enemy_turns_used, data.enemy_turns_total
+            );
+        }
     }
 
     async function executeDefensiveFire() {
@@ -2766,24 +2874,26 @@
                 // Update turn display from execute-action response (handles turn advancement)
                 if (currentAction && currentAction.type === 'major') {
                     if (execData.current_turn) {
-                        // Delay UI update to show results first
+                        // Update turn display immediately
+                        updateTurnDisplay(execData.current_turn, execData.round, execData);
+
+                        // Clear action state
+                        activeMinorAction = null;
+                        selectedMajorAction = null;
+                        updateFireMinorActionBanner();
+                        updateMajorActionHighlights();
+                        updateSelectionSummary();
+                        clearActionSelections('minor');
+                        clearActionSelections('major');
+
+                        // Hide action panels but keep results visible
+                        document.getElementById('dice-panel').style.display = 'none';
+                        document.getElementById('selection-summary').style.display = 'none';
+
+                        // Add turn-over indicator to results (will be added after summary.innerHTML is set)
                         setTimeout(() => {
-                            updateTurnDisplay(execData.current_turn, execData.round, execData);
-
-                            // Clear action state for new turn
-                            activeMinorAction = null;
-                            selectedMajorAction = null;
-                            updateFireMinorActionBanner();
-                            updateMajorActionHighlights();
-                            updateSelectionSummary();
-                            clearActionSelections('minor');
-                            clearActionSelections('major');
-
-                            // Hide panels
-                            document.getElementById('dice-panel').style.display = 'none';
-                            document.getElementById('dice-results').style.display = 'none';
-                            document.getElementById('selection-summary').style.display = 'none';
-                        }, 2000);
+                            addTurnOverIndicator('dice-summary', execData.current_turn);
+                        }, 100);
                     }
 
                     if (execData.player_turns_used !== undefined) {
