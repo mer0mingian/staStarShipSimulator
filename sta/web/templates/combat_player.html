@@ -1116,7 +1116,7 @@
     }
 
     // Add turn-over indicator to a results element
-    function addTurnOverIndicator(elementId, newTurn) {
+    function addTurnOverIndicator(elementId, newTurn, turnData = null) {
         const element = document.getElementById(elementId);
         if (!element) return;
 
@@ -1137,12 +1137,24 @@
                 <div style="color: var(--lcars-tan); margin-top: 5px;">Enemy Turn - Waiting for GM...</div>
             `;
         } else {
+            // Check if enemy is out of turns (player gets consecutive turns)
+            const enemyOutOfTurns = turnData && turnData.enemy_turns_used >= turnData.enemy_turns_total;
+            const playerTurnsRemaining = turnData ? (turnData.player_turns_total - turnData.player_turns_used) : null;
+
             indicator.style.background = 'linear-gradient(135deg, #1a2a1a 0%, #203a20 100%)';
             indicator.style.border = '2px solid var(--lcars-green)';
-            indicator.innerHTML = `
-                <div style="color: var(--lcars-green); font-size: 1.1em;">YOUR TURN</div>
-                <div style="color: var(--lcars-tan); margin-top: 5px;">Select your next action</div>
-            `;
+
+            if (enemyOutOfTurns && playerTurnsRemaining > 0) {
+                indicator.innerHTML = `
+                    <div style="color: var(--lcars-green); font-size: 1.1em;">ACTION COMPLETE - CONTINUE!</div>
+                    <div style="color: var(--lcars-tan); margin-top: 5px;">Enemy out of turns - You have ${playerTurnsRemaining} turn(s) remaining</div>
+                `;
+            } else {
+                indicator.innerHTML = `
+                    <div style="color: var(--lcars-green); font-size: 1.1em;">YOUR TURN</div>
+                    <div style="color: var(--lcars-tan); margin-top: 5px;">Select your next action</div>
+                `;
+            }
         }
 
         element.appendChild(indicator);
@@ -1860,7 +1872,7 @@
                     clearActionSelections('major');
 
                     // Add turn indicator to results (keep panel visible)
-                    addTurnOverIndicator('damage-control-results', execData.current_turn);
+                    addTurnOverIndicator('damage-control-results', execData.current_turn, execData);
                 }
 
                 // Update turn counters
@@ -1915,7 +1927,7 @@
                         clearActionSelections('major');
 
                         // Add turn indicator to results (keep panel visible)
-                        addTurnOverIndicator('damage-control-results', failData.current_turn);
+                        addTurnOverIndicator('damage-control-results', failData.current_turn, failData);
                     }
 
                     if (failData.player_turns_used !== undefined) {
@@ -2188,7 +2200,7 @@
                 clearActionSelections('major');
 
                 // Add turn indicator to ram results
-                addTurnOverIndicator('ram-results', data.current_turn);
+                addTurnOverIndicator('ram-results', data.current_turn, data);
             }
 
             if (data.player_turns_used !== undefined) {
@@ -2283,7 +2295,7 @@
                 clearActionSelections('major');
 
                 // Add turn indicator
-                addTurnOverIndicator('dice-display', data.current_turn);
+                addTurnOverIndicator('dice-display', data.current_turn, data);
             }
 
             if (data.player_turns_used !== undefined) {
@@ -2472,6 +2484,17 @@
 
         displayFireResults(data, targetIndex, focus, bonusDice, difficulty);
 
+        // Debug: log turn state from fire response
+        console.log('Fire response turn state:', {
+            current_turn: data.current_turn,
+            round: data.round,
+            player_turns_used: data.player_turns_used,
+            player_turns_total: data.player_turns_total,
+            enemy_turns_used: data.enemy_turns_used,
+            enemy_turns_total: data.enemy_turns_total,
+            turn_ended: data.turn_ended
+        });
+
         // Handle turn state from response
         if (data.current_turn) {
             updateTurnDisplay(data.current_turn, data.round, data);
@@ -2485,7 +2508,9 @@
             clearActionSelections('major');
 
             // Add turn indicator to fire results
-            addTurnOverIndicator('fire-results', data.current_turn);
+            addTurnOverIndicator('fire-results', data.current_turn, data);
+        } else {
+            console.warn('Fire response missing current_turn!', data);
         }
 
         if (data.player_turns_used !== undefined) {
@@ -2892,7 +2917,7 @@
 
                         // Add turn-over indicator to results (will be added after summary.innerHTML is set)
                         setTimeout(() => {
-                            addTurnOverIndicator('dice-summary', execData.current_turn);
+                            addTurnOverIndicator('dice-summary', execData.current_turn, execData);
                         }, 100);
                     }
 
