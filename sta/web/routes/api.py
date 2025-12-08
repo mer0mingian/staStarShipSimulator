@@ -5,8 +5,8 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from sta.database import get_session, EncounterRecord, StarshipRecord, CharacterRecord, CombatLogRecord
 from sta.mechanics import task_roll, assisted_task_roll
-from sta.models.enums import SystemType
-from sta.models.combat import ActiveEffect
+from sta.models.enums import SystemType, TerrainType, Range
+from sta.models.combat import ActiveEffect, HexCoord, TacticalMap, HexTile
 from sta.mechanics.action_handlers import (
     execute_buff_action,
     execute_task_roll_action,
@@ -29,6 +29,8 @@ from sta.mechanics.action_config import (
     is_action_available,
     get_breach_difficulty_modifier,
     get_all_actions_availability,
+    check_action_range,
+    get_range_difficulty_modifier as get_action_range_difficulty_modifier,
 )
 
 api_bp = Blueprint("api", __name__)
@@ -46,6 +48,136 @@ def get_bonus_dice_cost(num_dice: int) -> int:
     if num_dice == 2:
         return 3
     return 6  # 3 dice
+
+
+def get_max_range_distance(weapon_range: Range) -> int:
+    """Convert a weapon's Range to max hex distance.
+
+    Range mapping (STA 2e with hex grid):
+    - CONTACT: 0 (must be docked/landed - special state)
+    - CLOSE: 0 hexes (same hex)
+    - MEDIUM: 1 hex
+    - LONG: 2 hexes
+    - EXTREME: 3+ hexes (effectively unlimited on standard map)
+    """
+    if weapon_range == Range.CONTACT:
+        return 0
+    if weapon_range == Range.CLOSE:
+        return 0
+    if weapon_range == Range.MEDIUM:
+        return 1
+    if weapon_range == Range.LONG:
+        return 2
+    return 999  # EXTREME - no practical limit
+
+
+def get_range_name_for_distance(distance: int) -> str:
+    """Convert hex distance to STA range name."""
+    if distance == 0:
+        return "Close"
+    if distance == 1:
+        return "Medium"
+    if distance == 2:
+        return "Long"
+    return "Extreme"
+
+
+def get_ship_positions_from_encounter(encounter) -> dict:
+    """Extract ship positions from encounter's JSON data."""
+    try:
+        return json.loads(encounter.ship_positions_json) if encounter.ship_positions_json else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def get_tactical_map_from_encounter(encounter) -> dict:
+    """Extract tactical map data from encounter's JSON data."""
+    try:
+        return json.loads(encounter.tactical_map_json) if encounter.tactical_map_json else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+# Terrain types that block visibility
+VISIBILITY_BLOCKING_TERRAIN = ["dust_cloud", "dense_nebula"]
+
+
+def get_terrain_at_position(tactical_map: dict, q: int, r: int) -> str:
+    """Get the terrain type at a given hex position."""
+    tiles = tactical_map.get("tiles", [])
+    for tile in tiles:
+        coord = tile.get("coord", {})
+        if coord.get("q") == q and coord.get("r") == r:
+            return tile.get("terrain", "open")
+    return "open"
+
+
+def is_ship_visible_to_player(
+    player_pos: dict,
+    enemy_pos: dict,
+    tactical_map: dict,
+    detected_positions: list = None
+) -> bool:
+    """
+    Determine if an enemy ship is visible to the player.
+
+    Visibility rules:
+    - Ships in visibility-blocked terrain (dust_cloud, dense_nebula) are hidden
+    - UNLESS the player is in the same hex
+    - OR the position has been detected via Sensor Sweep
+
+    Args:
+        player_pos: Player ship position {"q": int, "r": int}
+        enemy_pos: Enemy ship position {"q": int, "r": int}
+        tactical_map: Tactical map data with tiles
+        detected_positions: List of positions that have been scanned/detected
+
+    Returns:
+        True if the enemy ship is visible to the player
+    """
+    if detected_positions is None:
+        detected_positions = []
+
+    player_q = player_pos.get("q", 0)
+    player_r = player_pos.get("r", 0)
+    enemy_q = enemy_pos.get("q", 0)
+    enemy_r = enemy_pos.get("r", 0)
+
+    # Get terrain at enemy position
+    enemy_terrain = get_terrain_at_position(tactical_map, enemy_q, enemy_r)
+
+    # If enemy is not in visibility-blocked terrain, they're visible
+    if enemy_terrain not in VISIBILITY_BLOCKING_TERRAIN:
+        return True
+
+    # Enemy is in visibility-blocked terrain
+
+    # Check if player is in the same hex (Close range)
+    if player_q == enemy_q and player_r == enemy_r:
+        return True
+
+    # Check if position has been detected via Sensor Sweep
+    for detected in detected_positions:
+        if detected.get("q") == enemy_q and detected.get("r") == enemy_r:
+            return True
+
+    # Ship is hidden
+    return False
+
+
+def get_detected_positions_from_effects(active_effects: list) -> list:
+    """
+    Extract detected positions from active effects.
+
+    Sensor Sweep creates effects with detected_position data.
+    """
+    detected = []
+    for effect in active_effects:
+        if hasattr(effect, 'detected_position') and effect.detected_position:
+            detected.append(effect.detected_position)
+        elif isinstance(effect, dict) and effect.get('detected_position'):
+            detected.append(effect['detected_position'])
+    return detected
 
 
 
@@ -494,6 +626,8 @@ def next_turn(encounter_id: str):
 @api_bp.route("/encounter/<encounter_id>/status", methods=["GET"])
 def get_encounter_status(encounter_id: str):
     """Get current encounter status (for polling)."""
+    role = request.args.get("role", "player")
+
     session = get_session()
     try:
         encounter = session.query(EncounterRecord).filter_by(
@@ -518,6 +652,27 @@ def get_encounter_status(encounter_id: str):
         ).first()
         has_reserve_power = player_ship_record.has_reserve_power if player_ship_record else True
 
+        # Filter ships_info by visibility for player role
+        ships_info = enemy_turn_info["ships_info"]
+        if role == "player":
+            # Load visibility data
+            tactical_map = json.loads(encounter.tactical_map_json or "{}")
+            ship_positions = json.loads(encounter.ship_positions_json or "{}")
+            player_pos = ship_positions.get("player", {"q": 0, "r": 0})
+
+            # Load active effects for detection
+            active_effects_data = json.loads(encounter.active_effects_json)
+            active_effects = [ActiveEffect.from_dict(e) for e in active_effects_data]
+            detected_positions = get_detected_positions_from_effects(active_effects)
+
+            # Filter ships to only visible ones
+            visible_ships = []
+            for i, ship_info in enumerate(ships_info):
+                enemy_pos = ship_positions.get(f"enemy_{i}", {"q": 0, "r": 0})
+                if is_ship_visible_to_player(player_pos, enemy_pos, tactical_map, detected_positions):
+                    visible_ships.append(ship_info)
+            ships_info = visible_ships
+
         return jsonify({
             "current_turn": encounter.current_turn,
             "round": encounter.round,
@@ -529,7 +684,7 @@ def get_encounter_status(encounter_id: str):
             "enemy_turns_used": enemy_turn_info["turns_used"],
             "enemy_turns_total": enemy_turn_info["total_turns"],
             "enemy_turns_remaining": enemy_turn_info["turns_remaining"],
-            "ships_info": enemy_turn_info["ships_info"],
+            "ships_info": ships_info,
             "pending_attack": pending_attack,
             "has_reserve_power": has_reserve_power,
         })
@@ -649,6 +804,22 @@ def fire_weapon():
         if weapon_index >= len(player_ship.weapons):
             return jsonify({"error": "Invalid weapon"}), 400
         weapon = player_ship.weapons[weapon_index]
+
+        # Check weapon range vs target distance
+        ship_positions = get_ship_positions_from_encounter(encounter)
+        player_pos = ship_positions.get("player", {"q": 0, "r": 0})
+        target_pos = ship_positions.get(f"enemy_{target_index}", {"q": 0, "r": 0})
+        player_coord = HexCoord(q=player_pos.get("q", 0), r=player_pos.get("r", 0))
+        target_coord = HexCoord(q=target_pos.get("q", 0), r=target_pos.get("r", 0))
+        hex_distance = player_coord.distance_to(target_coord)
+        max_weapon_range = get_max_range_distance(weapon.range)
+
+        if hex_distance > max_weapon_range:
+            current_range = get_range_name_for_distance(hex_distance)
+            weapon_range_name = weapon.range.value.title()
+            return jsonify({
+                "error": f"Target is out of range! {weapon.name} has {weapon_range_name} range ({max_weapon_range} hex{'es' if max_weapon_range != 1 else ''}), but target is at {current_range} range ({hex_distance} hex{'es' if hex_distance != 1 else ''})."
+            }), 400
 
         # Load active effects to check for can_reroll
         active_effects_data = json.loads(encounter.active_effects_json)
@@ -1410,6 +1581,23 @@ def execute_action(encounter_id: str):
         if not can_execute:
             return jsonify({"error": error_msg}), 400
 
+        # Check range requirements for actions that target enemies
+        target_index = data.get("target_index", 0)  # Default to first enemy
+        hex_distance = 0
+        if config.get("max_range") is not None or config.get("difficulty_per_range"):
+            # This action has range requirements - calculate distance to target
+            ship_positions = get_ship_positions_from_encounter(encounter_record)
+            player_pos = ship_positions.get("player", {"q": 0, "r": 0})
+            target_pos = ship_positions.get(f"enemy_{target_index}", {"q": 0, "r": 0})
+            player_coord = HexCoord(q=player_pos.get("q", 0), r=player_pos.get("r", 0))
+            target_coord = HexCoord(q=target_pos.get("q", 0), r=target_pos.get("r", 0))
+            hex_distance = player_coord.distance_to(target_coord)
+
+            # Check max range
+            range_valid, range_error = check_action_range(action_name, hex_distance)
+            if not range_valid:
+                return jsonify({"error": range_error}), 400
+
         # Execute action based on type
         if is_buff_action(action_name):
             result = execute_buff_action(action_name, encounter, player_ship, config)
@@ -1468,6 +1656,29 @@ def execute_action(encounter_id: str):
                                 {"system": b.system.value, "potency": b.potency}
                                 for b in player_ship.breaches
                             ])
+
+                    # Special handling for Sensor Sweep - create detection effect if target is in fog
+                    if action_name == "Sensor Sweep":
+                        # Get the target position from the data
+                        target_idx = data.get("target_index", 0)
+                        ship_positions = get_ship_positions_from_encounter(encounter_record)
+                        target_pos = ship_positions.get(f"enemy_{target_idx}", {"q": 0, "r": 0})
+
+                        # Get tactical map and check if target is in visibility-blocked terrain
+                        tactical_map = json.loads(encounter_record.tactical_map_json or "{}")
+                        target_terrain = get_terrain_at_position(tactical_map, target_pos.get("q", 0), target_pos.get("r", 0))
+
+                        if target_terrain in VISIBILITY_BLOCKING_TERRAIN:
+                            # Create a detection effect for this position
+                            detection_effect = ActiveEffect(
+                                source_action="Sensor Sweep Detection",
+                                applies_to="sensor",
+                                duration="end_of_round",
+                                detected_position={"q": target_pos.get("q", 0), "r": target_pos.get("r", 0)}
+                            )
+                            encounter.add_effect(detection_effect)
+                            result.message += f" Detected ship at ({target_pos.get('q', 0)}, {target_pos.get('r', 0)}) through {target_terrain.replace('_', ' ')}!"
+                            result.data["detected_position"] = detection_effect.detected_position
                 else:
                     # Roll failed - create a failure result (no effects applied)
                     from sta.mechanics.action_handlers import ActionExecutionResult
@@ -1538,6 +1749,29 @@ def execute_action(encounter_id: str):
                             {"system": b.system.value, "potency": b.potency}
                             for b in player_ship.breaches
                         ])
+
+                # Special handling for Sensor Sweep - create detection effect if target is in fog
+                if action_name == "Sensor Sweep" and result.success:
+                    # Get the target position from the data
+                    target_idx = data.get("target_index", 0)
+                    ship_positions = get_ship_positions_from_encounter(encounter_record)
+                    target_pos = ship_positions.get(f"enemy_{target_idx}", {"q": 0, "r": 0})
+
+                    # Get tactical map and check if target is in visibility-blocked terrain
+                    tactical_map = json.loads(encounter_record.tactical_map_json or "{}")
+                    target_terrain = get_terrain_at_position(tactical_map, target_pos.get("q", 0), target_pos.get("r", 0))
+
+                    if target_terrain in VISIBILITY_BLOCKING_TERRAIN:
+                        # Create a detection effect for this position
+                        detection_effect = ActiveEffect(
+                            source_action="Sensor Sweep Detection",
+                            applies_to="sensor",
+                            duration="end_of_round",
+                            detected_position={"q": target_pos.get("q", 0), "r": target_pos.get("r", 0)}
+                        )
+                        encounter.add_effect(detection_effect)
+                        result.message += f" Detected ship at ({target_pos.get('q', 0)}, {target_pos.get('r', 0)}) through {target_terrain.replace('_', ' ')}!"
+                        result.data["detected_position"] = detection_effect.detected_position
 
         elif is_toggle_action(action_name):
             # Toggle action - update ship state
@@ -2134,6 +2368,22 @@ def gm_attack(encounter_id: str):
         if weapon_index >= len(enemy_ship.weapons):
             return jsonify({"error": "Invalid weapon"}), 400
         weapon = enemy_ship.weapons[weapon_index]
+
+        # Check weapon range vs target distance
+        ship_positions = get_ship_positions_from_encounter(encounter_record)
+        player_pos = ship_positions.get("player", {"q": 0, "r": 0})
+        enemy_pos = ship_positions.get(f"enemy_{enemy_index}", {"q": 0, "r": 0})
+        player_coord = HexCoord(q=player_pos.get("q", 0), r=player_pos.get("r", 0))
+        enemy_coord = HexCoord(q=enemy_pos.get("q", 0), r=enemy_pos.get("r", 0))
+        hex_distance = enemy_coord.distance_to(player_coord)
+        max_weapon_range = get_max_range_distance(weapon.range)
+
+        if hex_distance > max_weapon_range:
+            current_range = get_range_name_for_distance(hex_distance)
+            weapon_range_name = weapon.range.value.title()
+            return jsonify({
+                "error": f"Target is out of range! {weapon.name} has {weapon_range_name} range ({max_weapon_range} hex{'es' if max_weapon_range != 1 else ''}), but target is at {current_range} range ({hex_distance} hex{'es' if hex_distance != 1 else ''})."
+            }), 400
 
         # Load active effects
         active_effects_data = json.loads(encounter_record.active_effects_json)
@@ -3111,6 +3361,518 @@ def get_combat_log(encounter_id: str):
             "log": entries,
             "count": len(entries),
             "latest_id": log_entries[0].id if log_entries else None,
+        })
+
+    finally:
+        session.close()
+
+
+# ========== TACTICAL MAP ENDPOINTS ==========
+
+@api_bp.route("/encounter/<encounter_id>/map", methods=["GET"])
+def get_tactical_map(encounter_id: str):
+    """Get the tactical map data for an encounter."""
+    role = request.args.get("role", "player")
+
+    session = get_session()
+    try:
+        encounter_record = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter_record:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Parse tactical map data
+        tactical_map_data = json.loads(encounter_record.tactical_map_json or "{}")
+        ship_positions_data = json.loads(encounter_record.ship_positions_json or "{}")
+
+        # Build ship positions list with names
+        ship_positions = []
+
+        # Player ship position
+        player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
+        if encounter_record.player_ship_id:
+            player_ship = session.query(StarshipRecord).get(encounter_record.player_ship_id)
+            ship_positions.append({
+                "id": "player",
+                "name": player_ship.name if player_ship else "Player Ship",
+                "faction": "player",
+                "position": player_pos
+            })
+
+        # Get detected positions for visibility filtering (player role only)
+        detected_positions = []
+        if role == "player":
+            active_effects_data = json.loads(encounter_record.active_effects_json or "[]")
+            active_effects = [ActiveEffect.from_dict(e) for e in active_effects_data]
+            detected_positions = get_detected_positions_from_effects(active_effects)
+
+        # Enemy ship positions
+        enemy_ids = json.loads(encounter_record.enemy_ship_ids_json or "[]")
+        for i, enemy_id in enumerate(enemy_ids):
+            enemy_ship = session.query(StarshipRecord).get(enemy_id)
+            enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
+
+            # For player role, filter by visibility
+            if role == "player":
+                if not is_ship_visible_to_player(player_pos, enemy_pos, tactical_map_data, detected_positions):
+                    continue  # Skip hidden enemy
+
+            ship_positions.append({
+                "id": f"enemy_{i}",
+                "name": enemy_ship.name if enemy_ship else f"Enemy {i+1}",
+                "faction": "enemy",
+                "position": enemy_pos
+            })
+
+        return jsonify({
+            "tactical_map": tactical_map_data,
+            "ship_positions": ship_positions
+        })
+
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/map/terrain", methods=["POST"])
+def update_map_terrain(encounter_id: str):
+    """Update terrain at a specific hex coordinate."""
+    session = get_session()
+    try:
+        data = request.json
+        q = data.get("q")
+        r = data.get("r")
+        terrain = data.get("terrain", "open")
+
+        if q is None or r is None:
+            return jsonify({"error": "Missing q or r coordinate"}), 400
+
+        # Validate terrain type
+        try:
+            terrain_type = TerrainType(terrain)
+        except ValueError:
+            return jsonify({"error": f"Invalid terrain type: {terrain}"}), 400
+
+        encounter_record = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter_record:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Load current map data
+        tactical_map_data = json.loads(encounter_record.tactical_map_json or "{}")
+
+        # Initialize map if empty
+        if not tactical_map_data or "radius" not in tactical_map_data:
+            tactical_map_data = {"radius": 3, "tiles": []}
+
+        # Update or add tile
+        tiles = tactical_map_data.get("tiles", [])
+        found = False
+        for tile in tiles:
+            if tile.get("coord", {}).get("q") == q and tile.get("coord", {}).get("r") == r:
+                tile["terrain"] = terrain
+                found = True
+                break
+
+        if not found and terrain != "open":
+            # Only add non-open tiles (open is the default)
+            tiles.append({
+                "coord": {"q": q, "r": r},
+                "terrain": terrain,
+                "traits": []
+            })
+        elif found and terrain == "open":
+            # Remove tile if set back to open (default)
+            tiles = [t for t in tiles if not (t.get("coord", {}).get("q") == q and t.get("coord", {}).get("r") == r)]
+
+        tactical_map_data["tiles"] = tiles
+
+        # Save back to database
+        encounter_record.tactical_map_json = json.dumps(tactical_map_data)
+        session.commit()
+
+        return jsonify({
+            "success": True,
+            "tactical_map": tactical_map_data,
+            "message": f"Terrain at ({q}, {r}) set to {terrain}"
+        })
+
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/map/ship-position", methods=["POST"])
+def update_ship_position(encounter_id: str):
+    """Update a ship's position on the tactical map."""
+    session = get_session()
+    try:
+        data = request.json
+        ship_id = data.get("ship_id")  # "player" or "enemy_0", "enemy_1", etc.
+        q = data.get("q")
+        r = data.get("r")
+
+        if not ship_id or q is None or r is None:
+            return jsonify({"error": "Missing ship_id, q, or r"}), 400
+
+        encounter_record = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter_record:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Load current positions
+        ship_positions_data = json.loads(encounter_record.ship_positions_json or "{}")
+
+        # Update position
+        ship_positions_data[ship_id] = {"q": q, "r": r}
+
+        # Save back to database
+        encounter_record.ship_positions_json = json.dumps(ship_positions_data)
+        session.commit()
+
+        # Build ship positions list with names for response
+        ship_positions = []
+        tactical_map_data = json.loads(encounter_record.tactical_map_json or "{}")
+
+        # Player ship
+        player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
+        if encounter_record.player_ship_id:
+            player_ship = session.query(StarshipRecord).get(encounter_record.player_ship_id)
+            ship_positions.append({
+                "id": "player",
+                "name": player_ship.name if player_ship else "Player Ship",
+                "faction": "player",
+                "position": player_pos
+            })
+
+        # Enemy ships
+        enemy_ids = json.loads(encounter_record.enemy_ship_ids_json or "[]")
+        for i, enemy_id in enumerate(enemy_ids):
+            enemy_ship = session.query(StarshipRecord).get(enemy_id)
+            enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
+            ship_positions.append({
+                "id": f"enemy_{i}",
+                "name": enemy_ship.name if enemy_ship else f"Enemy {i+1}",
+                "faction": "enemy",
+                "position": enemy_pos
+            })
+
+        return jsonify({
+            "success": True,
+            "ship_positions": ship_positions,
+            "message": f"Ship {ship_id} moved to ({q}, {r})"
+        })
+
+    finally:
+        session.close()
+
+
+# ========== MOVEMENT ACTION ENDPOINTS ==========
+
+@api_bp.route("/encounter/<encounter_id>/move/valid-destinations", methods=["GET"])
+def get_valid_move_destinations(encounter_id: str):
+    """Get valid movement destinations for Impulse action."""
+    from sta.mechanics.movement import get_valid_impulse_moves
+    from sta.models.combat import HexCoord, TacticalMap
+
+    session = get_session()
+    try:
+        action = request.args.get("action", "impulse")
+        ship_id = request.args.get("ship_id", "player")
+
+        encounter_record = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter_record:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Load map and positions
+        tactical_map_data = json.loads(encounter_record.tactical_map_json or "{}")
+        ship_positions_data = json.loads(encounter_record.ship_positions_json or "{}")
+
+        # Create TacticalMap model
+        tactical_map = TacticalMap.from_dict(tactical_map_data)
+
+        # Get ship's current position
+        if ship_id == "player":
+            pos_data = ship_positions_data.get("player", {"q": 0, "r": 0})
+        else:
+            pos_data = ship_positions_data.get(ship_id, {"q": 2, "r": -1})
+
+        start = HexCoord(q=pos_data.get("q", 0), r=pos_data.get("r", 0))
+
+        # Get valid moves based on action type
+        if action == "impulse":
+            valid_moves = get_valid_impulse_moves(
+                start=start,
+                tactical_map=tactical_map,
+                max_distance=2,
+                momentum_available=encounter_record.momentum
+            )
+        else:
+            # Thrusters doesn't move hexes - handled separately
+            valid_moves = []
+
+        return jsonify({
+            "action": action,
+            "current_position": {"q": start.q, "r": start.r},
+            "valid_moves": [
+                {
+                    "q": m.coord.q,
+                    "r": m.coord.r,
+                    "cost": m.cost,
+                    "terrain": m.terrain.value
+                }
+                for m in valid_moves
+            ],
+            "momentum_available": encounter_record.momentum
+        })
+
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/move/impulse", methods=["POST"])
+def execute_impulse_move(encounter_id: str):
+    """Execute an Impulse movement action."""
+    from sta.mechanics.movement import execute_impulse_move as do_impulse
+    from sta.models.combat import HexCoord, TacticalMap
+
+    session = get_session()
+    try:
+        data = request.json
+        q = data.get("q")
+        r = data.get("r")
+        use_threat = data.get("use_threat", False)
+        ship_id = data.get("ship_id", "player")
+
+        if q is None or r is None:
+            return jsonify({"error": "Missing q or r coordinates"}), 400
+
+        encounter_record = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter_record:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Load map and positions
+        tactical_map_data = json.loads(encounter_record.tactical_map_json or "{}")
+        ship_positions_data = json.loads(encounter_record.ship_positions_json or "{}")
+
+        # Create TacticalMap model
+        tactical_map = TacticalMap.from_dict(tactical_map_data)
+
+        # Get ship's current position
+        if ship_id == "player":
+            pos_data = ship_positions_data.get("player", {"q": 0, "r": 0})
+        else:
+            pos_data = ship_positions_data.get(ship_id, {"q": 2, "r": -1})
+
+        start = HexCoord(q=pos_data.get("q", 0), r=pos_data.get("r", 0))
+        destination = HexCoord(q=q, r=r)
+
+        # Execute movement
+        result = do_impulse(
+            start=start,
+            destination=destination,
+            tactical_map=tactical_map,
+            momentum_available=encounter_record.momentum,
+            use_threat=use_threat
+        )
+
+        if not result.success:
+            return jsonify({
+                "success": False,
+                "error": result.message
+            }), 400
+
+        # Update ship position in database
+        ship_positions_data[ship_id] = {"q": q, "r": r}
+        encounter_record.ship_positions_json = json.dumps(ship_positions_data)
+
+        # Update momentum/threat
+        if result.momentum_cost > 0:
+            encounter_record.momentum = max(0, encounter_record.momentum - result.momentum_cost)
+        if result.threat_added > 0:
+            encounter_record.threat += result.threat_added
+
+        session.commit()
+
+        # Build response with updated ship positions
+        ship_positions = []
+
+        # Player ship
+        player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
+        if encounter_record.player_ship_id:
+            player_ship = session.query(StarshipRecord).get(encounter_record.player_ship_id)
+            ship_positions.append({
+                "id": "player",
+                "name": player_ship.name if player_ship else "Player Ship",
+                "faction": "player",
+                "position": player_pos
+            })
+
+        # Enemy ships
+        enemy_ids = json.loads(encounter_record.enemy_ship_ids_json or "[]")
+        for i, enemy_id in enumerate(enemy_ids):
+            enemy_ship = session.query(StarshipRecord).get(enemy_id)
+            enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
+            ship_positions.append({
+                "id": f"enemy_{i}",
+                "name": enemy_ship.name if enemy_ship else f"Enemy {i+1}",
+                "faction": "enemy",
+                "position": enemy_pos
+            })
+
+        return jsonify({
+            "success": True,
+            "message": result.message,
+            "new_position": {"q": q, "r": r},
+            "momentum_spent": result.momentum_cost,
+            "threat_added": result.threat_added,
+            "hazard_damage": result.hazard_damage,
+            "path": [{"q": c.q, "r": c.r} for c in result.path],
+            "ship_positions": ship_positions,
+            "momentum": encounter_record.momentum,
+            "threat": encounter_record.threat
+        })
+
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/move/thrusters", methods=["POST"])
+def execute_thrusters_move(encounter_id: str):
+    """Execute a Thrusters action (enter/exit contact)."""
+    from sta.mechanics.movement import execute_thrusters_action
+
+    session = get_session()
+    try:
+        data = request.json
+        action_type = data.get("action_type")  # "enter_contact" or "exit_contact"
+        target_ship = data.get("target_ship")  # Ship name
+        ship_id = data.get("ship_id", "player")
+
+        if not action_type or not target_ship:
+            return jsonify({"error": "Missing action_type or target_ship"}), 400
+
+        encounter_record = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter_record:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # For now, track contact state in a simple JSON field
+        # (Could be expanded to ship_positions_json or a separate field)
+        ship_positions_data = json.loads(encounter_record.ship_positions_json or "{}")
+
+        # Get current contact state
+        contacts_data = ship_positions_data.get("contacts", {})
+        currently_in_contact = contacts_data.get(ship_id)
+
+        result = execute_thrusters_action(
+            action_type=action_type,
+            target_ship=target_ship,
+            currently_in_contact=currently_in_contact
+        )
+
+        if not result.success:
+            return jsonify({
+                "success": False,
+                "error": result.message
+            }), 400
+
+        # Update contact state
+        if action_type == "enter_contact":
+            contacts_data[ship_id] = target_ship
+        elif action_type == "exit_contact":
+            contacts_data.pop(ship_id, None)
+
+        ship_positions_data["contacts"] = contacts_data
+        encounter_record.ship_positions_json = json.dumps(ship_positions_data)
+        session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": result.message,
+            "contact_state": contacts_data.get(ship_id)
+        })
+
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/move/thrusters/valid-actions", methods=["GET"])
+def get_valid_thrusters_actions(encounter_id: str):
+    """Get valid Thrusters actions for a ship."""
+    from sta.mechanics.movement import get_valid_thruster_moves
+
+    session = get_session()
+    try:
+        ship_id = request.args.get("ship_id", "player")
+
+        encounter_record = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter_record:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Load ship positions
+        ship_positions_data = json.loads(encounter_record.ship_positions_json or "{}")
+
+        # Get player's current position
+        player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
+        player_q, player_r = player_pos.get("q", 0), player_pos.get("r", 0)
+
+        # Get current contact state
+        contacts_data = ship_positions_data.get("contacts", {})
+        currently_in_contact = contacts_data.get(ship_id)
+
+        # Find other ships in the same hex
+        ships_in_hex = []
+        enemy_ids = json.loads(encounter_record.enemy_ship_ids_json or "[]")
+
+        for i, enemy_id in enumerate(enemy_ids):
+            enemy_key = f"enemy_{i}"
+            enemy_pos = ship_positions_data.get(enemy_key, {"q": 2, "r": -1 + i})
+            enemy_q, enemy_r = enemy_pos.get("q", 0), enemy_pos.get("r", 0)
+
+            # Check if in same hex
+            if enemy_q == player_q and enemy_r == player_r:
+                # Get ship name
+                enemy_ship = session.query(StarshipRecord).get(enemy_id)
+                ship_name = enemy_ship.name if enemy_ship else f"Enemy {i+1}"
+                ships_in_hex.append({
+                    "id": enemy_key,
+                    "name": ship_name
+                })
+
+        # Get valid actions
+        valid_actions = get_valid_thruster_moves(
+            start=None,  # Not needed for contact checks
+            ships_in_hex=[s["name"] for s in ships_in_hex],
+            currently_in_contact=currently_in_contact
+        )
+
+        # Enhance actions with ship IDs
+        for action in valid_actions:
+            for ship in ships_in_hex:
+                if ship["name"] == action["target"]:
+                    action["target_id"] = ship["id"]
+                    break
+
+        return jsonify({
+            "valid_actions": valid_actions,
+            "currently_in_contact": currently_in_contact,
+            "ships_in_hex": ships_in_hex
         })
 
     finally:

@@ -139,15 +139,15 @@ HELM_MINOR_ACTIONS = [
         name="Impulse",
         action_type=ActionType.MINOR,
         positions=[Position.HELM],
-        description="Move up to 2 zones using impulse engines. Moving only 1 zone reduces terrain cost by 1.",
-        status="NOT_IMPL",
+        description="Move up to 2 hexes using impulse engines. Moving only 1 hex reduces terrain cost by 1.",
+        status="RFT",
     ),
     Action(
         name="Thrusters",
         action_type=ActionType.MINOR,
         positions=[Position.HELM],
-        description="Fine adjustments within current zone. Can safely move into Contact.",
-        status="NOT_IMPL",
+        description="Fine adjustments within current hex. Can safely move into Contact with another ship.",
+        status="RFT",
     ),
 ]
 

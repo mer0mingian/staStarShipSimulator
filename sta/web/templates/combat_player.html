@@ -227,6 +227,24 @@
     </div>
 </div>
 
+<!-- Tactical Map Panel (read-only for player) -->
+<div class="panel" id="tactical-map-panel" style="border-color: var(--lcars-blue);">
+    <h2 style="color: var(--lcars-blue);">TACTICAL MAP</h2>
+    <div id="tactical-map-container" style="text-align: center; min-height: 300px; background: #0a0a0a; border-radius: 10px; padding: 10px;">
+        <p style="color: #666;">Loading tactical map...</p>
+    </div>
+    <div style="display: flex; gap: 15px; margin-top: 10px; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 200px; padding: 10px; background: #111; border-radius: 5px; font-size: 0.85em;">
+            <strong style="color: var(--lcars-tan);">Range:</strong>
+            <span style="color: var(--lcars-green); margin-left: 10px;">Close (same hex)</span>
+            <span style="color: var(--lcars-blue); margin-left: 10px;">Medium (1 hex)</span>
+            <span style="color: var(--lcars-orange); margin-left: 10px;">Long (2 hex)</span>
+            <span style="color: var(--lcars-red); margin-left: 10px;">Extreme (3+ hex)</span>
+        </div>
+        <div id="terrain-legend-container" style="flex: 0 0 auto;"></div>
+    </div>
+</div>
+
 <!-- Actions Panel (only visible on player turn) -->
 <div id="actions-container" style="{% if encounter.current_turn != 'player' %}display: none;{% endif %}">
     <div style="margin-bottom: 10px; padding: 8px; background: #1a1a1a; border-radius: 5px; font-size: 0.85em;">
@@ -401,10 +419,9 @@
         <div>
             <label for="target-select">Select Target</label>
             <select id="target-select" style="width: 100%;">
-                {% for enemy in enemy_ships %}
-                <option value="{{ loop.index0 }}">{{ enemy.name }}</option>
-                {% endfor %}
+                <!-- Populated dynamically from visible ships -->
             </select>
+            <div id="target-range-info" style="font-size: 0.85em; color: var(--lcars-tan); margin-top: 5px;"></div>
         </div>
     </div>
 
@@ -428,9 +445,10 @@
         <div id="attack-details">
             <p><strong>Character Roll (2d20):</strong> Control ({{ player_char.attributes.control if player_char else 9 }}) + Security ({{ player_char.disciplines.security if player_char else 3 }}) = Target {{ (player_char.attributes.control + player_char.disciplines.security) if player_char else 12 }}</p>
             <p><strong>Ship Assist (1d20):</strong> Weapons ({{ player_ship.systems.weapons if player_ship else 7 }}) + Security ({{ player_ship.departments.security if player_ship else 2 }}) = Target {{ (player_ship.systems.weapons + player_ship.departments.security) if player_ship else 9 }}</p>
-            <p>Difficulty: <span id="fire-difficulty">2</span> (Energy) / 3 (Torpedo)</p>
+            <p>Difficulty: <span id="fire-difficulty">2</span> <span id="fire-difficulty-breakdown"></span></p>
             <p>Total Damage: <span id="fire-damage">{{ player_ship.weapons[0].damage + player_ship.weapons_damage_bonus() if player_ship.weapons else 0 }}</span></p>
         </div>
+        <div id="fire-range-warning" style="display: none; margin-top: 10px; padding: 8px; background: #3a1a1a; border: 1px solid var(--lcars-red); border-radius: 5px; color: var(--lcars-red);"></div>
     </div>
 
     <div style="margin-top: 15px;">
@@ -530,6 +548,37 @@
     <button class="btn" onclick="cancelAction()" style="margin-top: 15px; background: #666;">Cancel</button>
 
     <div id="defensive-fire-results" style="margin-top: 15px; display: none;"></div>
+</div>
+
+<!-- Thrusters Action Panel (hidden by default) -->
+<div class="panel" id="thrusters-panel" style="display: none; border-color: var(--lcars-blue);">
+    <h2 style="color: var(--lcars-blue);">THRUSTERS</h2>
+
+    <div style="padding: 10px; background: #1a2a3a; border: 2px solid var(--lcars-blue); border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: var(--lcars-tan);">
+            Fine maneuvering within your current hex. Use thrusters to <strong>enter</strong> or <strong>exit Contact</strong> with other ships in the same location.
+        </p>
+        <p style="margin: 10px 0 0 0; color: var(--lcars-tan); font-size: 0.9em;">
+            Contact allows boarding actions, point-blank transporter use, and towing.
+        </p>
+    </div>
+
+    <div id="thrusters-actions-container">
+        <p style="color: var(--lcars-tan);">Loading available actions...</p>
+    </div>
+
+    <div id="thrusters-no-actions" style="display: none; padding: 15px; background: #2a2a2a; border-radius: 5px;">
+        <p style="margin: 0; color: var(--lcars-tan);">
+            No ships in your current hex to dock with.
+        </p>
+        <p style="margin: 10px 0 0 0; color: #888; font-size: 0.9em;">
+            Use <strong>Impulse</strong> to move to a hex with another ship first.
+        </p>
+    </div>
+
+    <button class="btn" onclick="cancelThrustersAction()" style="margin-top: 15px; background: #666;">Cancel</button>
+
+    <div id="thrusters-results" style="margin-top: 15px; display: none;"></div>
 </div>
 
 <!-- Reroute Power Action Panel (hidden by default) -->
@@ -851,6 +900,9 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Hex Map Visualization -->
+<script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+
 <script>
     const encounterId = '{{ encounter.encounter_id }}';
     const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
@@ -859,6 +911,10 @@
     const weaponsBonus = {{ player_ship.weapons_damage_bonus() if player_ship else 0 }};
     const role = 'player';
     let currentTurn = '{{ encounter.current_turn }}';
+
+    // Tactical Map Data
+    let tacticalMapData = {{ tactical_map | tojson if tactical_map else '{"radius": 3, "tiles": []}' | safe }};
+    let shipPositions = {{ ship_positions | tojson if ship_positions else '[]' | safe }};
 
     // Resistance tracking
     const baseResistance = {{ player_ship.resistance if player_ship else 4 }};
@@ -1163,7 +1219,7 @@
     // Fetch initial turn status on page load
     async function fetchTurnStatus() {
         try {
-            const response = await fetch(`/api/encounter/${encounterId}/status`);
+            const response = await fetch(`/api/encounter/${encounterId}/status?role=player`);
             if (response.ok) {
                 const data = await response.json();
                 updateTurnCounters(
@@ -1318,6 +1374,30 @@
         }, 2000);
     }
 
+    // Show an info toast notification (blue/neutral)
+    function showInfoToast(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #1a2a3a;
+            border: 2px solid var(--lcars-blue);
+            border-radius: 5px;
+            color: var(--lcars-blue);
+            font-weight: bold;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in;
+        `;
+        toast.textContent = `ℹ ${message}`;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
     // Minor action effect descriptions for display
     const MINOR_ACTION_EFFECTS = {
         'Calibrate Weapons': ['+1 damage on next attack'],
@@ -1427,6 +1507,14 @@
             if (BUFF_ACTIONS.includes(name)) {
                 executeBuffAction(name);
                 highlightAction(name, 'minor');
+            } else if (name === 'Impulse') {
+                // Special handling for Impulse movement
+                startImpulseMovement();
+                highlightAction(name, 'minor');
+            } else if (name === 'Thrusters') {
+                // Show Thrusters panel and load available actions
+                showThrustersPanel();
+                highlightAction(name, 'minor');
             }
             return;
         }
@@ -1448,6 +1536,9 @@
             document.getElementById('ram-panel').style.display = 'none';
             document.getElementById('dice-panel').style.display = 'none';
             document.getElementById('fire-results').style.display = 'none';
+
+            // Update target list with visible enemies and calculate range
+            updateFireTargets();
             updateFireDetails();
             updateFireMinorActionBanner();
             document.getElementById('fire-panel').scrollIntoView({behavior: 'smooth'});
@@ -1572,6 +1663,11 @@
             document.getElementById('dice-panel').style.display = 'block';
             document.getElementById('current-action-display').style.display = 'block';
             document.getElementById('current-action-name').textContent = name;
+            // Reset elements that might have been hidden after previous roll
+            document.getElementById('roll-details').style.display = 'block';
+            document.getElementById('dice-results').style.display = 'none';
+            const rollBtn = document.querySelector('#dice-panel > button');
+            if (rollBtn) rollBtn.style.display = 'block';
             document.getElementById('dice-panel').scrollIntoView({behavior: 'smooth'});
         }
     }
@@ -2309,20 +2405,143 @@
         }
     }
 
-    function updateFireDetails() {
-        const weaponSelect = document.getElementById('weapon-select');
-        const selectedOption = weaponSelect.options[weaponSelect.selectedIndex];
-        const baseDamage = parseInt(selectedOption.dataset.damage);
-        const weaponType = selectedOption.dataset.type;
-
-        const totalDamage = baseDamage + weaponsBonus;
-        const difficulty = weaponType === 'torpedo' ? 3 : 2;
-
-        document.getElementById('fire-damage').textContent = totalDamage;
-        document.getElementById('fire-difficulty').textContent = difficulty;
+    // Calculate hex distance between two positions
+    function hexDistance(pos1, pos2) {
+        const q1 = pos1.q, r1 = pos1.r;
+        const q2 = pos2.q, r2 = pos2.r;
+        return (Math.abs(q1 - q2) + Math.abs(q1 + r1 - q2 - r2) + Math.abs(r1 - r2)) / 2;
     }
 
+    // Get range category from hex distance
+    function getRangeCategory(distance) {
+        if (distance === 0) return 'close';
+        if (distance === 1) return 'medium';
+        if (distance === 2) return 'long';
+        return 'extreme';
+    }
+
+    // Weapon range values (max hex distance)
+    const WEAPON_RANGE_MAX = {
+        'close': 0,
+        'medium': 1,
+        'long': 2,
+        'extreme': 999
+    };
+
+    // Get player ship position from shipPositions
+    function getPlayerPosition() {
+        const playerShip = shipPositions.find(s => s.faction === 'player');
+        return playerShip ? playerShip.position : { q: 0, r: 0 };
+    }
+
+    // Get enemy ship positions (visible only)
+    function getVisibleEnemies() {
+        return shipPositions.filter(s => s.faction === 'enemy');
+    }
+
+    // Populate target dropdown with visible enemies
+    function updateFireTargets() {
+        const targetSelect = document.getElementById('target-select');
+        const visibleEnemies = getVisibleEnemies();
+        const playerPos = getPlayerPosition();
+
+        targetSelect.innerHTML = '';
+
+        if (visibleEnemies.length === 0) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No visible targets';
+            option.disabled = true;
+            targetSelect.appendChild(option);
+            document.getElementById('target-range-info').textContent = 'No enemies visible';
+            return;
+        }
+
+        visibleEnemies.forEach((enemy, index) => {
+            const distance = hexDistance(playerPos, enemy.position);
+            const rangeCategory = getRangeCategory(distance);
+
+            const option = document.createElement('option');
+            option.value = enemy.id;  // Use ship id like "enemy_0"
+            option.dataset.q = enemy.position.q;
+            option.dataset.r = enemy.position.r;
+            option.dataset.distance = distance;
+            option.dataset.range = rangeCategory;
+            option.textContent = `${enemy.name} (${rangeCategory.charAt(0).toUpperCase() + rangeCategory.slice(1)} - ${distance} hex${distance !== 1 ? 'es' : ''})`;
+            targetSelect.appendChild(option);
+        });
+
+        updateFireDetails();
+    }
+
+    function updateFireDetails() {
+        const weaponSelect = document.getElementById('weapon-select');
+        const targetSelect = document.getElementById('target-select');
+        const rangeWarning = document.getElementById('fire-range-warning');
+        const rangeInfo = document.getElementById('target-range-info');
+
+        if (!weaponSelect.options.length || !targetSelect.options.length || targetSelect.value === '') {
+            document.getElementById('fire-difficulty').textContent = '-';
+            document.getElementById('fire-difficulty-breakdown').textContent = '';
+            rangeWarning.style.display = 'none';
+            return;
+        }
+
+        const weaponOption = weaponSelect.options[weaponSelect.selectedIndex];
+        const targetOption = targetSelect.options[targetSelect.selectedIndex];
+
+        const baseDamage = parseInt(weaponOption.dataset.damage);
+        const weaponType = weaponOption.dataset.type;
+        const weaponRange = weaponOption.dataset.range;  // e.g. 'medium', 'long'
+
+        const targetDistance = parseInt(targetOption.dataset.distance) || 0;
+        const targetRangeCategory = targetOption.dataset.range || 'close';
+
+        const totalDamage = baseDamage + weaponsBonus;
+
+        // Base difficulty: 2 for energy, 3 for torpedo
+        let baseDifficulty = weaponType === 'torpedo' ? 3 : 2;
+
+        // Range difficulty: +1 for each range band beyond Close (per STA 2e rules)
+        // Close = 0, Medium = +1, Long = +2, Extreme = +3
+        let rangeDifficultyMod = 0;
+        if (targetRangeCategory === 'medium') rangeDifficultyMod = 1;
+        else if (targetRangeCategory === 'long') rangeDifficultyMod = 2;
+        else if (targetRangeCategory === 'extreme') rangeDifficultyMod = 3;
+
+        const totalDifficulty = baseDifficulty + rangeDifficultyMod;
+
+        // Check if target is in range of weapon
+        const weaponMaxHex = WEAPON_RANGE_MAX[weaponRange] || 2;
+        const outOfRange = targetDistance > weaponMaxHex;
+
+        // Update display
+        document.getElementById('fire-damage').textContent = totalDamage;
+        document.getElementById('fire-difficulty').textContent = totalDifficulty;
+
+        // Build difficulty breakdown
+        let breakdown = `(${weaponType === 'torpedo' ? 'Torpedo' : 'Energy'}: ${baseDifficulty}`;
+        if (rangeDifficultyMod > 0) {
+            breakdown += ` + ${rangeDifficultyMod} range`;
+        }
+        breakdown += ')';
+        document.getElementById('fire-difficulty-breakdown').textContent = breakdown;
+
+        // Update range info
+        rangeInfo.innerHTML = `Target at <strong>${targetRangeCategory}</strong> range (${targetDistance} hex${targetDistance !== 1 ? 'es' : ''})`;
+
+        // Show/hide range warning
+        if (outOfRange) {
+            rangeWarning.style.display = 'block';
+            rangeWarning.innerHTML = `<strong>OUT OF RANGE!</strong> ${weaponOption.text.split('(')[0].trim()} has ${weaponRange} range (max ${weaponMaxHex} hex${weaponMaxHex !== 1 ? 'es' : ''}), target is ${targetDistance} hex${targetDistance !== 1 ? 'es' : ''} away.`;
+        } else {
+            rangeWarning.style.display = 'none';
+        }
+    }
+
+    // Initialize targets when fire panel is shown and when positions update
     document.getElementById('weapon-select').addEventListener('change', updateFireDetails);
+    document.getElementById('target-select').addEventListener('change', updateFireDetails);
 
     const shipWeapons = {{ player_ship.systems.weapons if player_ship else 7 }};
     const shipSecurity = {{ player_ship.departments.security if player_ship else 2 }};
@@ -2442,11 +2661,40 @@
         const weaponSelect = document.getElementById('weapon-select');
         const targetSelect = document.getElementById('target-select');
         const selectedWeapon = weaponSelect.options[weaponSelect.selectedIndex];
-        const targetIndex = parseInt(targetSelect.value);
+        const selectedTarget = targetSelect.options[targetSelect.selectedIndex];
+
+        // Extract target index from "enemy_0" format
+        const targetId = targetSelect.value;
+        const targetIndex = parseInt(targetId.replace('enemy_', ''));
+
+        // Check if target is valid
+        if (!targetId || isNaN(targetIndex)) {
+            showErrorToast("No valid target selected!");
+            return;
+        }
+
+        // Check if target is in range
+        const targetDistance = parseInt(selectedTarget.dataset.distance) || 0;
+        const weaponRange = selectedWeapon.dataset.range;
+        const weaponMaxHex = WEAPON_RANGE_MAX[weaponRange] || 2;
+
+        if (targetDistance > weaponMaxHex) {
+            showErrorToast(`Target is out of range! ${selectedWeapon.text.split('(')[0].trim()} has ${weaponRange} range (max ${weaponMaxHex} hex${weaponMaxHex !== 1 ? 'es' : ''}), target is ${targetDistance} hex${targetDistance !== 1 ? 'es' : ''} away.`);
+            return;
+        }
 
         const baseDamage = parseInt(selectedWeapon.dataset.damage);
         const weaponType = selectedWeapon.dataset.type;
-        const difficulty = weaponType === 'torpedo' ? 3 : 2;
+
+        // Calculate difficulty based on weapon type and range (per STA 2e rules)
+        // +1 difficulty per range band beyond Close
+        const targetRangeCategory = selectedTarget.dataset.range || 'close';
+        let baseDifficulty = weaponType === 'torpedo' ? 3 : 2;
+        let rangeDifficultyMod = 0;
+        if (targetRangeCategory === 'medium') rangeDifficultyMod = 1;
+        else if (targetRangeCategory === 'long') rangeDifficultyMod = 2;
+        else if (targetRangeCategory === 'extreme') rangeDifficultyMod = 3;
+        const difficulty = baseDifficulty + rangeDifficultyMod;
         const focus = document.getElementById('fire-focus').checked;
         const bonusDice = parseInt(document.getElementById('fire-bonus').value) || 0;
 
@@ -2887,8 +3135,15 @@
                     updateBonusDiceFromMomentum();
                 }
 
-                if (data.succeeded && execData.success && execData.effect_applied) {
-                    effectMessage = `<br><span style="color: var(--lcars-green);">Effect applied: ${execData.effect_applied}</span>`;
+                if (data.succeeded && execData.success) {
+                    // Show the action result message from the server (includes momentum info)
+                    if (execData.message && execData.message !== `${currentAction.name} succeeded!`) {
+                        effectMessage = `<br><span style="color: var(--lcars-tan);">${execData.message}</span>`;
+                    }
+
+                    if (execData.effect_applied) {
+                        effectMessage += `<br><span style="color: var(--lcars-green);">Effect applied: ${execData.effect_applied}</span>`;
+                    }
 
                     if (execData.resistance_bonus) {
                         currentResistanceBonus += execData.resistance_bonus;
@@ -2911,9 +3166,13 @@
                         clearActionSelections('minor');
                         clearActionSelections('major');
 
-                        // Hide action panels but keep results visible
-                        document.getElementById('dice-panel').style.display = 'none';
+                        // Hide action inputs but keep results visible in the panel
                         document.getElementById('selection-summary').style.display = 'none';
+                        document.getElementById('roll-details').style.display = 'none';
+                        document.getElementById('current-action-display').style.display = 'none';
+                        // Hide the roll button
+                        const rollBtn = document.querySelector('#dice-panel > button');
+                        if (rollBtn) rollBtn.style.display = 'none';
 
                         // Add turn-over indicator to results (will be added after summary.innerHTML is set)
                         setTimeout(() => {
@@ -2933,12 +3192,22 @@
             }
         }
 
+        // Build momentum display - always show for successful rolls
+        let momentumDisplay = '';
+        if (data.succeeded) {
+            if (data.momentum_generated > 0) {
+                momentumDisplay = `<span style="color: var(--lcars-blue);">+${data.momentum_generated} Momentum generated</span>`;
+            } else {
+                momentumDisplay = `<span style="color: #888;">(No extra momentum - just met difficulty)</span>`;
+            }
+        }
+
         summary.innerHTML = `
             <div class="alert ${resultClass}">
                 <strong>${data.succeeded ? 'SUCCESS!' : 'FAILURE'}</strong><br>
                 ${data.successes} successes vs Difficulty ${data.difficulty}<br>
                 ${data.complications > 0 ? `<span style="color: darkred;">${data.complications} complication(s)!</span><br>` : ''}
-                ${data.succeeded && data.momentum_generated > 0 ? `+${data.momentum_generated} Momentum generated` : ''}
+                ${momentumDisplay}
                 ${effectMessage}
             </div>
         `;
@@ -2951,7 +3220,7 @@
     // Poll for turn changes (simple approach)
     setInterval(async () => {
         try {
-            const response = await fetch(`/api/encounter/${encounterId}/status`);
+            const response = await fetch(`/api/encounter/${encounterId}/status?role=player`);
             if (response.ok) {
                 const data = await response.json();
                 if (data.current_turn !== currentTurn) {
@@ -3220,5 +3489,340 @@
         showSuccessToast('Counterattack declined');
         hidePendingAttackPanel();
     }
+
+    // ========== THRUSTERS FUNCTIONS ==========
+
+    // Show the Thrusters panel and load available actions
+    async function showThrustersPanel() {
+        // Hide other panels
+        document.getElementById('fire-panel').style.display = 'none';
+        document.getElementById('defensive-fire-panel').style.display = 'none';
+        document.getElementById('reroute-power-panel').style.display = 'none';
+        document.getElementById('damage-control-panel').style.display = 'none';
+        document.getElementById('ram-panel').style.display = 'none';
+        document.getElementById('dice-panel').style.display = 'none';
+
+        // Show thrusters panel
+        document.getElementById('thrusters-panel').style.display = 'block';
+        document.getElementById('thrusters-results').style.display = 'none';
+        document.getElementById('thrusters-panel').scrollIntoView({behavior: 'smooth'});
+
+        // Load available actions
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/move/thrusters/valid-actions?ship_id=player`);
+            if (!response.ok) {
+                showErrorToast('Failed to load thrusters actions');
+                return;
+            }
+
+            const data = await response.json();
+            const container = document.getElementById('thrusters-actions-container');
+            const noActionsDiv = document.getElementById('thrusters-no-actions');
+
+            if (data.valid_actions.length === 0) {
+                container.style.display = 'none';
+                noActionsDiv.style.display = 'block';
+            } else {
+                container.style.display = 'block';
+                noActionsDiv.style.display = 'none';
+
+                // Build action buttons
+                let html = '';
+                if (data.currently_in_contact) {
+                    html += `<div style="margin-bottom: 15px; padding: 10px; background: #2a3a2a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                        <p style="margin: 0; color: var(--lcars-green);"><strong>CURRENTLY IN CONTACT</strong> with ${data.currently_in_contact}</p>
+                    </div>`;
+                }
+
+                html += '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                for (const action of data.valid_actions) {
+                    const btnColor = action.type === 'enter_contact' ? 'var(--lcars-blue)' : 'var(--lcars-orange)';
+                    const icon = action.type === 'enter_contact' ? '🔗' : '↔️';
+                    // Use friendlier wording: "Dock with" / "Undock from"
+                    const actionLabel = action.type === 'enter_contact'
+                        ? `Dock with ${action.target}`
+                        : `Undock from ${action.target}`;
+                    // Escape special characters in target name for onclick
+                    const escapedTarget = action.target.replace(/'/g, "\\'").replace(/"/g, '\\"');
+                    html += `
+                        <button class="btn" onclick="executeThrustersAction('${action.type}', '${escapedTarget}')"
+                                style="background: ${btnColor}; text-align: left; padding: 15px;">
+                            <strong>${icon} ${actionLabel}</strong>
+                        </button>
+                    `;
+                }
+                html += '</div>';
+
+                container.innerHTML = html;
+            }
+
+        } catch (error) {
+            console.error('Error loading thrusters actions:', error);
+            showErrorToast('Failed to load thrusters actions');
+        }
+    }
+
+    // Execute a thrusters action (enter or exit contact)
+    async function executeThrustersAction(actionType, targetShip) {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/move/thrusters`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    action_type: actionType,
+                    target_ship: targetShip,
+                    ship_id: 'player'
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                showErrorToast(data.error || 'Thrusters action failed');
+                return;
+            }
+
+            // Show success message
+            const resultsDiv = document.getElementById('thrusters-results');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = `
+                <div style="padding: 15px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                    <p style="margin: 0; color: var(--lcars-green);"><strong>SUCCESS!</strong></p>
+                    <p style="margin: 10px 0 0 0; color: var(--lcars-tan);">${data.message}</p>
+                </div>
+            `;
+
+            showSuccessToast(data.message);
+
+            // Refresh the panel to show updated state
+            setTimeout(() => {
+                showThrustersPanel();
+            }, 1500);
+
+        } catch (error) {
+            console.error('Error executing thrusters action:', error);
+            showErrorToast('Failed to execute thrusters action');
+        }
+    }
+
+    // Cancel thrusters action
+    function cancelThrustersAction() {
+        document.getElementById('thrusters-panel').style.display = 'none';
+        clearActionSelections('minor');
+    }
+
+    // ========== IMPULSE MOVEMENT FUNCTIONS ==========
+
+    let impulseMovementActive = false;
+    let validMoveDestinations = [];
+
+    // Start impulse movement mode - fetch valid destinations and highlight them
+    async function startImpulseMovement() {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/move/valid-destinations?action=impulse&ship_id=player`);
+            if (!response.ok) {
+                showErrorToast('Failed to get movement destinations');
+                return;
+            }
+
+            const data = await response.json();
+            validMoveDestinations = data.valid_moves;
+
+            if (validMoveDestinations.length === 0) {
+                showInfoToast('No valid movement destinations available');
+                return;
+            }
+
+            impulseMovementActive = true;
+            showInfoToast(`Impulse: Select a destination hex (${validMoveDestinations.length} options). Click again to cancel.`);
+
+            // Re-render map with valid moves highlighted
+            renderTacticalMapWithMoves();
+
+            // Scroll to map
+            document.getElementById('tactical-map-panel').scrollIntoView({behavior: 'smooth'});
+        } catch (error) {
+            console.error('Error fetching valid moves:', error);
+            showErrorToast('Error fetching movement options');
+        }
+    }
+
+    // Cancel impulse movement mode
+    function cancelImpulseMovement() {
+        impulseMovementActive = false;
+        validMoveDestinations = [];
+        renderTacticalMap();
+        showInfoToast('Movement cancelled');
+    }
+
+    // Execute impulse movement to a destination
+    async function executeImpulseMove(q, r, cost) {
+        try {
+            // Check if player has enough momentum (or offer to use Threat)
+            const currentMomentum = parseInt(document.getElementById('momentum').textContent) || 0;
+
+            let useThreat = false;
+            if (cost > currentMomentum) {
+                if (cost > 0) {
+                    // Offer to use Threat instead
+                    useThreat = confirm(`Not enough Momentum (need ${cost}, have ${currentMomentum}). Add ${cost} Threat instead?`);
+                    if (!useThreat) {
+                        showErrorToast('Movement cancelled - insufficient Momentum');
+                        return;
+                    }
+                }
+            }
+
+            const response = await fetch(`/api/encounter/${encounterId}/move/impulse`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    q: q,
+                    r: r,
+                    use_threat: useThreat,
+                    ship_id: 'player'
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                showErrorToast(data.error || 'Movement failed');
+                return;
+            }
+
+            // Update local state
+            shipPositions = data.ship_positions;
+            document.getElementById('momentum').textContent = data.momentum;
+            document.getElementById('threat').textContent = data.threat;
+
+            // Show success message
+            let message = `Moved to (${q}, ${r})`;
+            if (data.momentum_spent > 0) {
+                message += ` - spent ${data.momentum_spent} Momentum`;
+            }
+            if (data.threat_added > 0) {
+                message += ` - added ${data.threat_added} Threat`;
+            }
+            if (data.hazard_damage > 0) {
+                message += ` - ${data.hazard_damage}CD hazard damage!`;
+                showErrorToast(`Hazardous terrain! Roll ${data.hazard_damage} Challenge Dice for damage.`);
+            }
+            showSuccessToast(message);
+
+            // End movement mode
+            impulseMovementActive = false;
+            validMoveDestinations = [];
+
+            // Re-render map with new positions
+            renderTacticalMap();
+
+            // Note: Minor action doesn't end the turn - player can still take major action
+            usedMinorAction = true;
+            selectedMinorAction = 'Impulse';
+            updateSelectionSummary();
+
+        } catch (error) {
+            console.error('Error executing impulse move:', error);
+            showErrorToast('Error executing movement');
+        }
+    }
+
+    // ========== TACTICAL MAP FUNCTIONS ==========
+
+    // Initialize the tactical map
+    function initTacticalMap() {
+        if (typeof HexMap === 'undefined') {
+            console.error('HexMap not loaded');
+            document.getElementById('tactical-map-container').innerHTML =
+                '<p style="color: var(--lcars-red);">Error: Map visualization not loaded</p>';
+            return;
+        }
+
+        renderTacticalMap();
+
+        // Render terrain legend
+        HexMap.renderLegend('terrain-legend-container');
+    }
+
+    // Render the tactical map (normal mode)
+    function renderTacticalMap() {
+        HexMap.render('tactical-map-container', tacticalMapData, shipPositions, {
+            editable: false,
+            showCoords: false,
+            onShipClick: function(ship, index) {
+                console.log('Ship clicked:', ship.name);
+            },
+            onHexClick: function(q, r, terrain, moveCost) {
+                // In normal mode, clicking a hex does nothing (or shows info)
+                if (impulseMovementActive) {
+                    // Check if this is a valid destination
+                    const move = validMoveDestinations.find(m => m.q === q && m.r === r);
+                    if (move) {
+                        executeImpulseMove(q, r, move.cost);
+                    } else {
+                        showErrorToast('Invalid destination - select a highlighted hex');
+                    }
+                }
+            }
+        });
+    }
+
+    // Render the tactical map with valid movement destinations highlighted
+    function renderTacticalMapWithMoves() {
+        HexMap.render('tactical-map-container', tacticalMapData, shipPositions, {
+            editable: false,
+            showCoords: false,
+            validMoves: validMoveDestinations,  // Pass valid moves for highlighting
+            onShipClick: function(ship, index) {
+                // Clicking player ship cancels movement
+                if (ship.id === 'player' && impulseMovementActive) {
+                    cancelImpulseMovement();
+                }
+            },
+            onHexClick: function(q, r, terrain, moveCost) {
+                if (!impulseMovementActive) return;
+
+                // Check if this is a valid destination
+                const move = validMoveDestinations.find(m => m.q === q && m.r === r);
+                if (move) {
+                    executeImpulseMove(q, r, move.cost);
+                } else {
+                    // Clicking invalid hex cancels movement
+                    cancelImpulseMovement();
+                }
+            }
+        });
+    }
+
+    // Refresh map data from server
+    async function refreshMapData() {
+        // Skip refresh while player is selecting a movement destination
+        if (impulseMovementActive) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/map?role=player`);
+            if (response.ok) {
+                const data = await response.json();
+                tacticalMapData = data.tactical_map;
+                shipPositions = data.ship_positions;
+                renderTacticalMap();
+                // Update fire targets if fire panel is visible
+                if (typeof updateFireTargets === 'function') {
+                    updateFireTargets();
+                }
+            }
+        } catch (error) {
+            console.error('Error refreshing map:', error);
+        }
+    }
+
+    // Initialize tactical map on page load
+    document.addEventListener('DOMContentLoaded', initTacticalMap);
+
+    // Periodically refresh map (every 5 seconds) to sync with GM changes
+    setInterval(refreshMapData, 5000);
 </script>
 {% endblock %}

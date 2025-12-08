@@ -62,6 +62,12 @@ class ActionConfig(TypedDict, total=False):
     # Breach potency on this system adds to task difficulty
     requires_system: Optional[str]  # e.g., "weapons", "sensors", "engines", "structure"
 
+    # Range requirements for targeting enemy ships
+    # max_range: Maximum range in hexes (0=Close, 1=Medium, 2=Long, 999=Extreme/unlimited)
+    # difficulty_per_range: Difficulty increase per hex distance beyond Close (0)
+    max_range: Optional[int]  # Maximum range in hexes to use this action on a target
+    difficulty_per_range: Optional[int]  # Difficulty modifier per hex of distance
+
     # Cost
     momentum_cost: int
     threat_cost: int
@@ -129,6 +135,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
     "Scan For Weakness": {
         "type": "task_roll",
         "requires_system": "sensors",
+        "max_range": 2,  # Long range max (2 hexes)
         "roll": {
             "attribute": "control",
             "discipline": "science",
@@ -150,10 +157,11 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
     "Sensor Sweep": {
         "type": "task_roll",
         "requires_system": "sensors",
+        "difficulty_per_range": 1,  # +1 difficulty per hex beyond Close
         "roll": {
             "attribute": "reason",
             "discipline": "science",
-            "difficulty": 1,
+            "difficulty": 1,  # Base difficulty at Close range
             "focus_eligible": True,
             "ship_assist_system": "sensors",
             "ship_assist_department": "science",
@@ -207,7 +215,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         "roll": {
             "attribute": "control",
             "discipline": "conn",
-            "difficulty": 2,  # Variable based on terrain
+            "difficulty": 1,  # Low difficulty to encourage momentum generation
             "focus_eligible": True,
             "ship_assist_system": "engines",
             "ship_assist_department": "conn",
@@ -220,6 +228,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
     "Ram": {
         "type": "special",  # Special because it deals damage to BOTH ships
         "requires_system": "engines",
+        "max_range": 0,  # Must be at Close range (same hex) to initiate Ram
         "roll": {
             "attribute": "daring",
             "discipline": "conn",
@@ -540,3 +549,76 @@ def get_all_actions_availability(ship) -> dict[str, dict]:
         }
 
     return result
+
+
+# ===== RANGE HELPERS =====
+
+def get_action_max_range(action_name: str) -> Optional[int]:
+    """
+    Get the maximum range in hexes for an action, if applicable.
+
+    Returns:
+        None if no range limit, or int representing max hex distance
+        (0 = Close/same hex, 1 = Medium, 2 = Long)
+    """
+    config = get_action_config(action_name)
+    if config:
+        return config.get("max_range")
+    return None
+
+
+def get_action_difficulty_per_range(action_name: str) -> int:
+    """
+    Get the difficulty modifier per hex of distance for an action.
+
+    Returns:
+        Int representing difficulty increase per hex of distance (0 if none)
+    """
+    config = get_action_config(action_name)
+    if config:
+        return config.get("difficulty_per_range", 0)
+    return 0
+
+
+def check_action_range(action_name: str, hex_distance: int) -> tuple[bool, Optional[str]]:
+    """
+    Check if an action can be performed at the given hex distance.
+
+    Args:
+        action_name: Name of the action
+        hex_distance: Distance in hexes to the target
+
+    Returns:
+        Tuple of (is_valid, reason_if_invalid)
+        - (True, None) if range is valid
+        - (False, "Target out of range") if max_range exceeded
+    """
+    max_range = get_action_max_range(action_name)
+
+    if max_range is None:
+        return (True, None)
+
+    if hex_distance > max_range:
+        range_names = {0: "Close", 1: "Medium", 2: "Long", 999: "Extreme"}
+        max_range_name = range_names.get(max_range, f"{max_range} hex{'es' if max_range != 1 else ''}")
+        current_range_name = range_names.get(hex_distance, f"{hex_distance} hex{'es' if hex_distance != 1 else ''}")
+        return (False, f"Target is out of range! {action_name} requires {max_range_name} range, but target is at {current_range_name} range.")
+
+    return (True, None)
+
+
+def get_range_difficulty_modifier(action_name: str, hex_distance: int) -> int:
+    """
+    Get the difficulty modifier based on distance to target.
+
+    Args:
+        action_name: Name of the action
+        hex_distance: Distance in hexes to the target
+
+    Returns:
+        Int representing additional difficulty from range
+    """
+    per_range = get_action_difficulty_per_range(action_name)
+    if per_range > 0:
+        return hex_distance * per_range
+    return 0

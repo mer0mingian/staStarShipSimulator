@@ -273,6 +273,14 @@ class EncounterRecord(Base):
     # Structure: {"attacker_index": int, "weapon_index": int, "bonus_dice": int, "timestamp": str}
     pending_attack_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
 
+    # Tactical map data (hex grid with terrain)
+    # Structure: {"radius": int, "tiles": [{"coord": {"q": int, "r": int}, "terrain": str, "traits": []}]}
+    tactical_map_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    # Ship positions on the tactical map
+    # Structure: {"player": {"q": int, "r": int}, "enemy_0": {"q": int, "r": int}, ...}
+    ship_positions_json: Mapped[str] = mapped_column(Text, default="{}")
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
