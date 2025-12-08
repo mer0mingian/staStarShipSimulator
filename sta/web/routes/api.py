@@ -591,6 +591,7 @@ def fire_weapon():
     reroll_die_index = data.get("reroll_die_index")  # Index of die to re-roll (if any)
     previous_rolls = data.get("previous_rolls")  # Previous roll results (for re-roll)
     role = data.get("role", "player")  # Default to player
+    character_id = data.get("character_id")  # Optional: override acting character for logging
 
     # Check turn ownership for player fire actions
     if role == "player":
@@ -917,8 +918,9 @@ def fire_weapon():
             # Save cleared effects (Reroute Power consumed even on miss)
             encounter.active_effects_json = json.dumps([e.to_dict() for e in encounter_model.active_effects])
 
-        # Get player character for logging
-        player_char = session.query(CharacterRecord).filter_by(id=encounter.player_character_id).first()
+        # Get player character for logging (use provided character_id or fall back to encounter default)
+        char_id = character_id if character_id else encounter.player_character_id
+        player_char = session.query(CharacterRecord).filter_by(id=char_id).first() if char_id else None
         actor_name = player_char.name if player_char else "Tactical Officer"
 
         # Build description for log
@@ -980,6 +982,7 @@ def ram_action(encounter_id: str):
     difficulty = data.get("difficulty", 2)
     focus = data.get("focus", False)
     bonus_dice = data.get("bonus_dice", 0)
+    character_id = data.get("character_id")  # Optional: override acting character for logging
 
     session = get_session()
     try:
@@ -1198,8 +1201,9 @@ def ram_action(encounter_id: str):
                 "new_momentum": encounter.momentum,  # Include even on miss (bonus dice may have been spent)
             })
 
-        # Get player character for logging
-        player_char = session.query(CharacterRecord).filter_by(id=encounter.player_character_id).first()
+        # Get player character for logging (use provided character_id or fall back to encounter default)
+        char_id = character_id if character_id else encounter.player_character_id
+        player_char = session.query(CharacterRecord).filter_by(id=char_id).first() if char_id else None
         actor_name = player_char.name if player_char else "Helm Officer"
 
         # Build description for log
@@ -1341,6 +1345,7 @@ def execute_action(encounter_id: str):
     data = request.json
     action_name = data.get("action_name")
     role = data.get("role", "player")  # Default to player for backward compatibility
+    character_id = data.get("character_id")  # Optional: override acting character for logging
 
     # Check turn ownership for player actions
     if role == "player":
@@ -1615,8 +1620,9 @@ def execute_action(encounter_id: str):
 
         response = result.to_dict()
 
-        # Get player character for logging
-        player_char = session.query(CharacterRecord).filter_by(id=encounter_record.player_character_id).first()
+        # Get player character for logging (use provided character_id or fall back to encounter default)
+        char_id = character_id if character_id else encounter_record.player_character_id
+        player_char = session.query(CharacterRecord).filter_by(id=char_id).first() if char_id else None
         actor_name = player_char.name if player_char else "Bridge Officer"
 
         # Build task result data for logging
@@ -2795,6 +2801,7 @@ def counterattack(encounter_id: str):
     data = request.json
     weapon_index = data.get("weapon_index", 0)
     target_index = data.get("target_index", 0)  # Which enemy to counterattack
+    character_id = data.get("character_id")  # Optional: override acting character for logging
 
     session = get_session()
     try:
@@ -2817,10 +2824,9 @@ def counterattack(encounter_id: str):
             return jsonify({"error": "Player ship not found"}), 404
         player_ship = player_ship_record.to_model()
 
-        # Load player character
-        player_char_record = session.query(CharacterRecord).filter_by(
-            id=encounter_record.player_character_id
-        ).first()
+        # Load player character (use provided character_id or fall back to encounter default)
+        char_id = character_id if character_id else encounter_record.player_character_id
+        player_char_record = session.query(CharacterRecord).filter_by(id=char_id).first() if char_id else None
         player_char = player_char_record.to_model() if player_char_record else None
 
         # Load target enemy ship

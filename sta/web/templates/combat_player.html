@@ -854,6 +854,7 @@
 <script>
     const encounterId = '{{ encounter.encounter_id }}';
     const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
+    const playerCharId = {{ player_char_db_id if player_char_db_id else 'null' }};
     const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
     const weaponsBonus = {{ player_ship.weapons_damage_bonus() if player_ship else 0 }};
     const role = 'player';
@@ -910,7 +911,7 @@
         const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action_name: actionName })
+            body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
         });
         const data = await response.json();
 
@@ -955,7 +956,7 @@
         const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action_name: actionName })
+            body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
         });
         const data = await response.json();
 
@@ -1764,7 +1765,8 @@
                         roll_succeeded: true,
                         roll_momentum: rollData.momentum_generated,
                         target_system: damageControlTargetSystem,
-                        bonus_dice: bonus
+                        bonus_dice: bonus,
+                        character_id: playerCharId
                     })
                 });
                 const execData = await execResponse.json();
@@ -1854,7 +1856,8 @@
                             roll_dice: rollData.rolls,
                             roll_target: attr + disc,
                             target_system: damageControlTargetSystem,
-                            bonus_dice: bonus
+                            bonus_dice: bonus,
+                            character_id: playerCharId
                         })
                     });
                     const failData = await failResponse.json();
@@ -1904,7 +1907,8 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     action_name: 'Reroute Power',
-                    target_system: targetSystem
+                    target_system: targetSystem,
+                    character_id: playerCharId
                 })
             });
             const data = await response.json();
@@ -2017,7 +2021,8 @@
                     discipline: playerDiscs.conn || 3,
                     difficulty: 2,
                     focus: focus,
-                    bonus_dice: bonusDice
+                    bonus_dice: bonusDice,
+                    character_id: playerCharId
                 })
             });
             const data = await response.json();
@@ -2152,7 +2157,8 @@
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                action_name: actionName
+                action_name: actionName,
+                character_id: playerCharId
             })
         });
         const data = await response.json();
@@ -2183,7 +2189,8 @@
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                action_name: actionName
+                action_name: actionName,
+                character_id: playerCharId
             })
         });
         const data = await response.json();
@@ -2308,7 +2315,8 @@
             body: JSON.stringify({
                 ...lastFireData,
                 reroll_die_index: dieIndex,
-                previous_rolls: lastFireData.previous_rolls
+                previous_rolls: lastFireData.previous_rolls,
+                character_id: playerCharId
             })
         });
         const data = await response.json();
@@ -2369,7 +2377,8 @@
                 discipline: playerDiscs.security,
                 difficulty: difficulty,
                 focus: focus,
-                bonus_dice: bonusDice
+                bonus_dice: bonusDice,
+                character_id: playerCharId
             })
         });
         const data = await response.json();
@@ -2398,7 +2407,8 @@
                 body: JSON.stringify({
                     action_name: 'Defensive Fire',
                     weapon_index: weaponIndex,
-                    role: 'player'
+                    role: 'player',
+                    character_id: playerCharId
                 })
             });
             const data = await response.json();
@@ -2729,7 +2739,8 @@
                         bonus_dice: bonus,
                         roll_succeeded: true,
                         roll_successes: data.successes,
-                        roll_momentum: data.momentum_generated
+                        roll_momentum: data.momentum_generated,
+                        character_id: playerCharId
                     })
                 });
                 const execData = await execResponse.json();
@@ -3010,7 +3021,8 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     weapon_index: weaponIndex,
-                    target_index: targetIndex
+                    target_index: targetIndex,
+                    character_id: playerCharId
                 })
             });
             const data = await response.json();
