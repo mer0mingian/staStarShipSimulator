@@ -18,6 +18,7 @@ from sta.mechanics.action_handlers import (
     execute_reroute_power,
     get_reroute_power_bonus,
     consume_reroute_power_effect,
+    ActionCompletionManager,
 )
 from sta.mechanics.action_config import (
     get_action_config,
@@ -916,26 +917,11 @@ def fire_weapon():
             # Save cleared effects (Reroute Power consumed even on miss)
             encounter.active_effects_json = json.dumps([e.to_dict() for e in encounter_model.active_effects])
 
-        # Fire is a major action - track player turn usage and alternate
-        encounter.player_turns_used += 1
-
-        # Alternate turn to the other side
-        turn_result = alternate_turn_after_action(session, encounter)
-
-        response["current_turn"] = turn_result["current_turn"]
-        response["round"] = turn_result["round"]
-        response["round_advanced"] = turn_result["round_advanced"]
-        response["player_turns_used"] = turn_result["player_turns_used"]
-        response["player_turns_total"] = turn_result["player_turns_total"]
-        response["enemy_turns_used"] = turn_result["enemy_turns_used"]
-        response["enemy_turns_total"] = turn_result["enemy_turns_total"]
-        response["ships_info"] = turn_result["ships_info"]
-        response["turn_ended"] = turn_result["current_turn"] == "enemy"
-
-        # Log the combat action
+        # Get player character for logging
         player_char = session.query(CharacterRecord).filter_by(id=encounter.player_character_id).first()
         actor_name = player_char.name if player_char else "Tactical Officer"
 
+        # Build description for log
         if result.succeeded:
             damage = response.get("total_damage", 0)
             description = f"Fired {weapon.name} at {target_ship.name}: {result.successes} successes vs difficulty {difficulty}. Hit for {damage} damage."
@@ -944,14 +930,16 @@ def fire_weapon():
         else:
             description = f"Fired {weapon.name} at {target_ship.name}: {result.successes} successes vs difficulty {difficulty}. Missed!"
 
-        log_combat_action(
-            session=session,
-            encounter_record=encounter,
+        # Use ActionCompletionManager for consistent logging and turn handling
+        manager = ActionCompletionManager(
+            session, encounter,
+            alternate_turn_after_action, log_combat_action
+        )
+
+        turn_state = manager.complete_player_major(
             actor_name=actor_name,
-            actor_type="player",
             ship_name=player_ship.name,
             action_name=f"Fire {weapon.name}",
-            action_type="major",
             description=description,
             task_result={
                 "rolls": result.rolls,
@@ -962,6 +950,7 @@ def fire_weapon():
             },
             damage_dealt=response.get("total_damage", 0),
         )
+        response.update(turn_state)
 
         session.commit()
 
@@ -1209,24 +1198,11 @@ def ram_action(encounter_id: str):
                 "new_momentum": encounter.momentum,  # Include even on miss (bonus dice may have been spent)
             })
 
-        # Ram is a major action - alternate turn
-        encounter.player_turns_used += 1
-        turn_result = alternate_turn_after_action(session, encounter)
-
-        response["current_turn"] = turn_result["current_turn"]
-        response["round"] = turn_result["round"]
-        response["round_advanced"] = turn_result["round_advanced"]
-        response["player_turns_used"] = turn_result["player_turns_used"]
-        response["player_turns_total"] = turn_result["player_turns_total"]
-        response["enemy_turns_used"] = turn_result["enemy_turns_used"]
-        response["enemy_turns_total"] = turn_result["enemy_turns_total"]
-        response["ships_info"] = turn_result["ships_info"]
-        response["turn_ended"] = turn_result["current_turn"] == "enemy"
-
-        # Log the combat action
+        # Get player character for logging
         player_char = session.query(CharacterRecord).filter_by(id=encounter.player_character_id).first()
         actor_name = player_char.name if player_char else "Helm Officer"
 
+        # Build description for log
         if result.succeeded:
             description = f"Rammed {target_ship.name}: {result.successes} successes vs difficulty {difficulty}. "
             description += f"Dealt {player_collision_damage} collision damage to {target_ship.name}. "
@@ -1238,14 +1214,16 @@ def ram_action(encounter_id: str):
         else:
             description = f"Attempted to ram {target_ship.name}: {result.successes} successes vs difficulty {difficulty}. Failed to connect!"
 
-        log_combat_action(
-            session=session,
-            encounter_record=encounter,
+        # Use ActionCompletionManager for consistent logging and turn handling
+        manager = ActionCompletionManager(
+            session, encounter,
+            alternate_turn_after_action, log_combat_action
+        )
+
+        turn_state = manager.complete_player_major(
             actor_name=actor_name,
-            actor_type="player",
             ship_name=player_ship.name,
             action_name="Ram",
-            action_type="major",
             description=description,
             task_result={
                 "rolls": result.rolls,
@@ -1256,6 +1234,7 @@ def ram_action(encounter_id: str):
             },
             damage_dealt=player_collision_damage if result.succeeded else 0,
         )
+        response.update(turn_state)
 
         session.commit()
 
@@ -1636,33 +1615,11 @@ def execute_action(encounter_id: str):
 
         response = result.to_dict()
 
-        if is_major_action:
-            # Track player turn usage and alternate
-            encounter_record.player_turns_used += 1
-
-            # Alternate turn to the other side
-            turn_result = alternate_turn_after_action(session, encounter_record)
-
-            response["current_turn"] = turn_result["current_turn"]
-            response["round"] = turn_result["round"]
-            response["round_advanced"] = turn_result["round_advanced"]
-            response["player_turns_used"] = turn_result["player_turns_used"]
-            response["player_turns_total"] = turn_result["player_turns_total"]
-            response["enemy_turns_used"] = turn_result["enemy_turns_used"]
-            response["enemy_turns_total"] = turn_result["enemy_turns_total"]
-            response["ships_info"] = turn_result["ships_info"]
-            response["turn_ended"] = turn_result["current_turn"] == "enemy"
-
-        # Always include current momentum (may have been spent on bonus dice)
-        response["momentum"] = encounter_record.momentum
-        response["new_momentum"] = encounter_record.momentum
-
-        # Log the combat action
+        # Get player character for logging
         player_char = session.query(CharacterRecord).filter_by(id=encounter_record.player_character_id).first()
         actor_name = player_char.name if player_char else "Bridge Officer"
 
-        # Build description based on action result
-        description = result.message
+        # Build task result data for logging
         task_result_data = None
         if hasattr(result, 'roll_result') and result.roll_result:
             rr = result.roll_result
@@ -1674,17 +1631,33 @@ def execute_action(encounter_id: str):
                 "succeeded": rr.get("succeeded", True),
             }
 
-        log_combat_action(
-            session=session,
-            encounter_record=encounter_record,
-            actor_name=actor_name,
-            actor_type="player",
-            ship_name=player_ship.name,
-            action_name=action_name,
-            action_type="major" if is_major_action else "minor",
-            description=description,
-            task_result=task_result_data,
+        # Use ActionCompletionManager for consistent logging and turn handling
+        manager = ActionCompletionManager(
+            session, encounter_record,
+            alternate_turn_after_action, log_combat_action
         )
+
+        if is_major_action:
+            turn_state = manager.complete_player_major(
+                actor_name=actor_name,
+                ship_name=player_ship.name,
+                action_name=action_name,
+                description=result.message,
+                task_result=task_result_data,
+            )
+            response.update(turn_state)
+        else:
+            manager.complete_player_minor(
+                actor_name=actor_name,
+                ship_name=player_ship.name,
+                action_name=action_name,
+                description=result.message,
+                task_result=task_result_data,
+            )
+
+        # Always include current momentum (may have been spent on bonus dice)
+        response["momentum"] = encounter_record.momentum
+        response["new_momentum"] = encounter_record.momentum
 
         session.commit()
 
@@ -2044,30 +2017,7 @@ def npc_action(encounter_id: str):
         # Save updated effects
         encounter_record.active_effects_json = json.dumps([e.to_dict() for e in active_effects])
 
-        # Track turn usage for major actions and alternate turns
-        if is_major_action:
-            # Increment this ship's turns used
-            ships_turns_used[str(ship_id)] = ship_turns_used + 1
-            encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
-
-            # Alternate turn to the other side
-            turn_result = alternate_turn_after_action(session, encounter_record)
-
-            result["ship_turns_used"] = ships_turns_used[str(ship_id)]
-            result["ship_turns_total"] = npc_ship_record.scale
-            result["current_turn"] = turn_result["current_turn"]
-            result["round"] = turn_result["round"]
-            result["round_advanced"] = turn_result["round_advanced"]
-            result["enemy_turns_used"] = turn_result["enemy_turns_used"]
-            result["enemy_turns_total"] = turn_result["enemy_turns_total"]
-            result["player_turns_used"] = turn_result["player_turns_used"]
-            result["player_turns_total"] = turn_result["player_turns_total"]
-            result["ships_info"] = turn_result["ships_info"]
-
-            # Turn switched to player (or round ended)
-            result["turn_ended"] = turn_result["current_turn"] == "player"
-
-        # Log the combat action
+        # Build task result data for logging
         crew_quality = npc_ship.crew_quality.value if npc_ship.crew_quality else "Talented"
         actor_name = f"{npc_ship.name} Crew ({crew_quality})"
 
@@ -2082,18 +2032,31 @@ def npc_action(encounter_id: str):
                 "succeeded": rr.get("succeeded", True),
             }
 
-        log_combat_action(
-            session=session,
-            encounter_record=encounter_record,
-            actor_name=actor_name,
-            actor_type="enemy",
-            ship_name=npc_ship.name,
-            action_name=action_name,
-            action_type="major" if is_major_action else "minor",
-            description=result.get("message", f"{npc_ship.name} performed {action_name}"),
-            task_result=task_result_data,
-            threat_spent=result.get("threat_generated", 0),
+        # Use ActionCompletionManager for consistent logging and turn handling
+        manager = ActionCompletionManager(
+            session, encounter_record,
+            alternate_turn_after_action, log_combat_action
         )
+
+        if is_major_action:
+            turn_state = manager.complete_enemy_major(
+                enemy_id=ship_id,
+                enemy_scale=npc_ship_record.scale,
+                actor_name=actor_name,
+                ship_name=npc_ship.name,
+                action_name=action_name,
+                description=result.get("message", f"{npc_ship.name} performed {action_name}"),
+                task_result=task_result_data,
+            )
+            result.update(turn_state)
+        else:
+            manager.complete_enemy_minor(
+                actor_name=actor_name,
+                ship_name=npc_ship.name,
+                action_name=action_name,
+                description=result.get("message", f"{npc_ship.name} performed {action_name}"),
+                task_result=task_result_data,
+            )
 
         session.commit()
 
@@ -2353,36 +2316,20 @@ def gm_attack(encounter_id: str):
                 # Save state (no damage applied)
                 encounter_record.active_effects_json = json.dumps([e.to_dict() for e in encounter_model.active_effects])
 
-                # Track turn usage (attack is a major action) and alternate turns
-                if not can_counterattack:
-                    ships_turns_used[str(enemy_id)] = ship_turns_used + 1
-                    encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
-
-                    # Alternate turn to the other side
-                    turn_result = alternate_turn_after_action(session, encounter_record)
-
-                    response["ship_turns_used"] = ships_turns_used[str(enemy_id)]
-                    response["ship_turns_total"] = enemy_record.scale
-                    response["current_turn"] = turn_result["current_turn"]
-                    response["round"] = turn_result["round"]
-                    response["round_advanced"] = turn_result["round_advanced"]
-                    response["enemy_turns_used"] = turn_result["enemy_turns_used"]
-                    response["enemy_turns_total"] = turn_result["enemy_turns_total"]
-                    response["player_turns_used"] = turn_result["player_turns_used"]
-                    response["player_turns_total"] = turn_result["player_turns_total"]
-                    response["ships_info"] = turn_result["ships_info"]
-                    response["turn_ended"] = turn_result["current_turn"] == "player"
-
-                # Log the missed attack
+                # Use ActionCompletionManager for consistent logging and turn handling
                 crew_quality = enemy_ship.crew_quality.value if enemy_ship.crew_quality else "Talented"
-                log_combat_action(
-                    session=session,
-                    encounter_record=encounter_record,
+                manager = ActionCompletionManager(
+                    session, encounter_record,
+                    alternate_turn_after_action, log_combat_action
+                )
+
+                # Log the missed attack, skip turn advance if counterattack is available
+                turn_state = manager.complete_enemy_major(
+                    enemy_id=enemy_id,
+                    enemy_scale=enemy_record.scale,
                     actor_name=f"{enemy_ship.name} Crew ({crew_quality})",
-                    actor_type="enemy",
                     ship_name=enemy_ship.name,
                     action_name=f"Fire {weapon.name}",
-                    action_type="major",
                     description=f"Fired {weapon.name} at {player_ship.name}: Attack defended! ({attacker_successes} vs {defender_successes} successes)",
                     task_result={
                         "attacker_rolls": attacker_rolls,
@@ -2392,7 +2339,9 @@ def gm_attack(encounter_id: str):
                         "defender_wins": True,
                     },
                     damage_dealt=0,
+                    skip_turn_advance=can_counterattack,
                 )
+                response.update(turn_state)
 
                 session.commit()
 
@@ -2480,39 +2429,24 @@ def gm_attack(encounter_id: str):
             "message": f"{enemy_ship.name} hit {player_ship.name} for {total_damage} damage!"
         })
 
-        # Track turn usage (attack is a major action) and alternate turns
-        ships_turns_used[str(enemy_id)] = ship_turns_used + 1
-        encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
-
-        # Alternate turn to the other side
-        turn_result = alternate_turn_after_action(session, encounter_record)
-
-        response["ship_turns_used"] = ships_turns_used[str(enemy_id)]
-        response["ship_turns_total"] = enemy_record.scale
-        response["current_turn"] = turn_result["current_turn"]
-        response["round"] = turn_result["round"]
-        response["round_advanced"] = turn_result["round_advanced"]
-        response["enemy_turns_used"] = turn_result["enemy_turns_used"]
-        response["enemy_turns_total"] = turn_result["enemy_turns_total"]
-        response["player_turns_used"] = turn_result["player_turns_used"]
-        response["player_turns_total"] = turn_result["player_turns_total"]
-        response["ships_info"] = turn_result["ships_info"]
-        response["turn_ended"] = turn_result["current_turn"] == "player"
-
-        # Log the successful attack
+        # Build description for log
         crew_quality = enemy_ship.crew_quality.value if enemy_ship.crew_quality else "Talented"
         description = f"Fired {weapon.name} at {player_ship.name}: Hit for {total_damage} damage!"
         if breaches_caused > 0:
             description += f" Caused {breaches_caused} breach(es) to {', '.join(systems_hit)}."
 
-        log_combat_action(
-            session=session,
-            encounter_record=encounter_record,
+        # Use ActionCompletionManager for consistent logging and turn handling
+        manager = ActionCompletionManager(
+            session, encounter_record,
+            alternate_turn_after_action, log_combat_action
+        )
+
+        turn_state = manager.complete_enemy_major(
+            enemy_id=enemy_id,
+            enemy_scale=enemy_record.scale,
             actor_name=f"{enemy_ship.name} Crew ({crew_quality})",
-            actor_type="enemy",
             ship_name=enemy_ship.name,
             action_name=f"Fire {weapon.name}",
-            action_type="major",
             description=description,
             task_result={
                 "attacker_rolls": response.get("attacker_rolls", []),
@@ -2520,6 +2454,7 @@ def gm_attack(encounter_id: str):
             } if has_defensive_effect else None,
             damage_dealt=total_damage,
         )
+        response.update(turn_state)
 
         session.commit()
 
@@ -2705,28 +2640,20 @@ def resolve_defensive_roll(encounter_id: str):
                 response["current_momentum"] = encounter_record.momentum
                 response["message"] += f" May spend 2 Momentum to counterattack with {counterattack_weapon.name}."
 
-            # Track turn usage and alternate if no counterattack
-            if not can_counterattack:
-                ships_turns_used[str(enemy_id)] = ship_turns_used + 1
-                encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
-                turn_result = alternate_turn_after_action(session, encounter_record)
-                response.update({
-                    "ship_turns_used": ships_turns_used[str(enemy_id)],
-                    "ship_turns_total": enemy_record.scale,
-                    "current_turn": turn_result["current_turn"],
-                    "round": turn_result["round"],
-                })
-
-            # Log the defended attack
+            # Use ActionCompletionManager for consistent logging and turn handling
             crew_quality = enemy_ship.crew_quality.value if enemy_ship.crew_quality else "Talented"
-            log_combat_action(
-                session=session,
-                encounter_record=encounter_record,
+            manager = ActionCompletionManager(
+                session, encounter_record,
+                alternate_turn_after_action, log_combat_action
+            )
+
+            # Log the defended attack, skip turn advance if counterattack is available
+            turn_state = manager.complete_enemy_major(
+                enemy_id=enemy_id,
+                enemy_scale=enemy_record.scale,
                 actor_name=f"{enemy_ship.name} Crew ({crew_quality})",
-                actor_type="enemy",
                 ship_name=enemy_ship.name,
                 action_name=f"Fire {weapon.name}",
-                action_type="major",
                 description=f"Fired {weapon.name} at {player_ship.name}: Attack defended! ({attacker_successes} vs {defender_successes} successes)",
                 task_result={
                     "attacker_rolls": attacker_rolls,
@@ -2736,7 +2663,9 @@ def resolve_defensive_roll(encounter_id: str):
                     "defender_wins": True,
                 },
                 damage_dealt=0,
+                skip_turn_advance=can_counterattack,
             )
+            response.update(turn_state)
 
             session.commit()
             return jsonify(response)
@@ -2804,11 +2733,6 @@ def resolve_defensive_roll(encounter_id: str):
         ]
         player_ship_record.breaches_json = json.dumps(breaches_data)
 
-        # Track turn usage and alternate
-        ships_turns_used[str(enemy_id)] = ship_turns_used + 1
-        encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
-        turn_result = alternate_turn_after_action(session, encounter_record)
-
         response.update({
             "base_damage": base_damage,
             "effective_resistance": effective_resistance,
@@ -2821,26 +2745,26 @@ def resolve_defensive_roll(encounter_id: str):
             "systems_hit": systems_hit,
             "target_shields_remaining": player_ship.shields,
             "message": f"{enemy_ship.name} hit {player_ship.name} for {total_damage} damage!",
-            "ship_turns_used": ships_turns_used[str(enemy_id)],
-            "ship_turns_total": enemy_record.scale,
-            "current_turn": turn_result["current_turn"],
-            "round": turn_result["round"],
         })
 
-        # Log the attack
+        # Build description for log
         crew_quality = enemy_ship.crew_quality.value if enemy_ship.crew_quality else "Talented"
         description = f"Fired {weapon.name} at {player_ship.name}: Hit for {total_damage} damage!"
         if breaches_caused > 0:
             description += f" Caused {breaches_caused} breach(es) to {', '.join(systems_hit)}."
 
-        log_combat_action(
-            session=session,
-            encounter_record=encounter_record,
+        # Use ActionCompletionManager for consistent logging and turn handling
+        manager = ActionCompletionManager(
+            session, encounter_record,
+            alternate_turn_after_action, log_combat_action
+        )
+
+        turn_state = manager.complete_enemy_major(
+            enemy_id=enemy_id,
+            enemy_scale=enemy_record.scale,
             actor_name=f"{enemy_ship.name} Crew ({crew_quality})",
-            actor_type="enemy",
             ship_name=enemy_ship.name,
             action_name=f"Fire {weapon.name}",
-            action_type="major",
             description=description,
             task_result={
                 "attacker_rolls": attacker_rolls,
@@ -2851,6 +2775,7 @@ def resolve_defensive_roll(encounter_id: str):
             },
             damage_dealt=total_damage,
         )
+        response.update(turn_state)
 
         session.commit()
         return jsonify(response)
@@ -3043,28 +2968,7 @@ def counterattack(encounter_id: str):
         else:
             response["message"] = "Counterattack missed!"
 
-        # Track turn usage for the enemy that attacked (their attack triggered this counterattack)
-        ships_turns_used = json.loads(encounter_record.ships_turns_used_json)
-        ship_turns_used = ships_turns_used.get(str(target_id), 0)
-        ships_turns_used[str(target_id)] = ship_turns_used + 1
-        encounter_record.ships_turns_used_json = json.dumps(ships_turns_used)
-
-        # Alternate turn to the other side
-        turn_result = alternate_turn_after_action(session, encounter_record)
-
-        response["ship_turns_used"] = ships_turns_used[str(target_id)]
-        response["ship_turns_total"] = target_record.scale
-        response["current_turn"] = turn_result["current_turn"]
-        response["round"] = turn_result["round"]
-        response["round_advanced"] = turn_result["round_advanced"]
-        response["enemy_turns_used"] = turn_result["enemy_turns_used"]
-        response["enemy_turns_total"] = turn_result["enemy_turns_total"]
-        response["player_turns_used"] = turn_result["player_turns_used"]
-        response["player_turns_total"] = turn_result["player_turns_total"]
-        response["ships_info"] = turn_result["ships_info"]
-        response["turn_ended"] = turn_result["current_turn"] == "player"
-
-        # Log the counterattack
+        # Build description for log
         actor_name = player_char.name if player_char else "Tactical Officer"
         if succeeded:
             damage = response.get("total_damage", 0)
@@ -3074,14 +2978,19 @@ def counterattack(encounter_id: str):
         else:
             description = f"Counterattack with {weapon.name} at {target_ship.name}: {successes} successes vs difficulty {difficulty}. Missed!"
 
-        log_combat_action(
-            session=session,
-            encounter_record=encounter_record,
+        # Use ActionCompletionManager for consistent logging and turn handling
+        # Counterattack is special: player action that ends the ENEMY's turn
+        manager = ActionCompletionManager(
+            session, encounter_record,
+            alternate_turn_after_action, log_combat_action
+        )
+
+        turn_state = manager.complete_counterattack(
+            enemy_id=target_id,
+            enemy_scale=target_record.scale,
             actor_name=actor_name,
-            actor_type="player",
-            ship_name=player_ship.name,
+            player_ship_name=player_ship.name,
             action_name=f"Counterattack ({weapon.name})",
-            action_type="major",
             description=description,
             task_result={
                 "rolls": rolls,
@@ -3093,6 +3002,7 @@ def counterattack(encounter_id: str):
             damage_dealt=response.get("total_damage", 0),
             momentum_spent=2,
         )
+        response.update(turn_state)
 
         session.commit()
         return jsonify(response)
