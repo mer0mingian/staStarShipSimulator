@@ -2725,7 +2725,7 @@
 
         let effectMessage = '';
 
-        if (data.succeeded && currentAction?.name) {
+        if (currentAction?.name) {
             try {
                 const execResponse = await fetch(`/api/encounter/${encounterId}/execute-action`, {
                     method: 'POST',
@@ -2737,9 +2737,12 @@
                         difficulty: diff,
                         focus: focus,
                         bonus_dice: bonus,
-                        roll_succeeded: true,
+                        roll_succeeded: data.succeeded,
                         roll_successes: data.successes,
-                        roll_momentum: data.momentum_generated,
+                        roll_momentum: data.succeeded ? data.momentum_generated : 0,
+                        roll_complications: data.complications,
+                        roll_dice: data.rolls,
+                        roll_target: data.target_number,
                         character_id: playerCharId
                     })
                 });
@@ -2751,12 +2754,43 @@
                     updateBonusDiceFromMomentum();
                 }
 
-                if (execData.success && execData.effect_applied) {
+                if (data.succeeded && execData.success && execData.effect_applied) {
                     effectMessage = `<br><span style="color: var(--lcars-green);">Effect applied: ${execData.effect_applied}</span>`;
 
                     if (execData.resistance_bonus) {
                         currentResistanceBonus += execData.resistance_bonus;
                         updateResistanceDisplay();
+                    }
+                }
+
+                // Update turn display from execute-action response (handles turn advancement)
+                if (currentAction && currentAction.type === 'major') {
+                    if (execData.current_turn) {
+                        // Delay UI update to show results first
+                        setTimeout(() => {
+                            updateTurnDisplay(execData.current_turn, execData.round, execData);
+
+                            // Clear action state for new turn
+                            activeMinorAction = null;
+                            selectedMajorAction = null;
+                            updateFireMinorActionBanner();
+                            updateMajorActionHighlights();
+                            updateSelectionSummary();
+                            clearActionSelections('minor');
+                            clearActionSelections('major');
+
+                            // Hide panels
+                            document.getElementById('dice-panel').style.display = 'none';
+                            document.getElementById('dice-results').style.display = 'none';
+                            document.getElementById('selection-summary').style.display = 'none';
+                        }, 2000);
+                    }
+
+                    if (execData.player_turns_used !== undefined) {
+                        updateTurnCounters(
+                            execData.player_turns_used, execData.player_turns_total,
+                            execData.enemy_turns_used, execData.enemy_turns_total
+                        );
                     }
                 }
             } catch (err) {
@@ -2773,14 +2807,6 @@
                 ${effectMessage}
             </div>
         `;
-
-        // If this was a major action (from the dice panel), end the turn after a short delay
-        // to let the player see the results
-        if (currentAction && currentAction.type === 'major') {
-            setTimeout(async () => {
-                await nextTurn();
-            }, 2000); // 2 second delay to show results before ending turn
-        }
     }
 
     // Track pending attack state
