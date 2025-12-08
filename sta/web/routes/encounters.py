@@ -233,6 +233,89 @@ def combat(encounter_id: str):
                 id=encounter.campaign_id
             ).first()
 
+        # Load tactical map data
+        tactical_map_data = json.loads(encounter.tactical_map_json or "{}")
+        if not tactical_map_data or "radius" not in tactical_map_data:
+            tactical_map_data = {"radius": 3, "tiles": []}
+
+        # Visibility helper functions
+        VISIBILITY_BLOCKING_TERRAIN = ["dust_cloud", "dense_nebula"]
+
+        def get_terrain_at_position(tactical_map, q, r):
+            """Get terrain type at a hex position."""
+            tiles = tactical_map.get("tiles", [])
+            for tile in tiles:
+                coord = tile.get("coord", {})
+                if coord.get("q") == q and coord.get("r") == r:
+                    return tile.get("terrain", "open")
+            return "open"
+
+        def get_detected_positions(effects):
+            """Get positions that have been detected via Sensor Sweep."""
+            detected = []
+            for effect in effects:
+                if hasattr(effect, 'detected_position') and effect.detected_position:
+                    detected.append(effect.detected_position)
+            return detected
+
+        def is_enemy_visible(player_pos, enemy_pos, tactical_map, detected_positions):
+            """Check if an enemy ship is visible to the player."""
+            enemy_q = enemy_pos.get("q", 0)
+            enemy_r = enemy_pos.get("r", 0)
+            player_q = player_pos.get("q", 0)
+            player_r = player_pos.get("r", 0)
+
+            # Get terrain at enemy position
+            enemy_terrain = get_terrain_at_position(tactical_map, enemy_q, enemy_r)
+
+            # If enemy is not in visibility-blocked terrain, they're visible
+            if enemy_terrain not in VISIBILITY_BLOCKING_TERRAIN:
+                return True
+
+            # Enemy is in visibility-blocked terrain
+            # Check if player is in the same hex
+            if player_q == enemy_q and player_r == enemy_r:
+                return True
+
+            # Check if position has been detected via Sensor Sweep
+            for detected in detected_positions:
+                if detected.get("q") == enemy_q and detected.get("r") == enemy_r:
+                    return True
+
+            return False
+
+        # Load ship positions and build list with ship info
+        ship_positions_data = json.loads(encounter.ship_positions_json or "{}")
+        ship_positions = []
+
+        # Player ship position
+        player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
+        if player_ship:
+            ship_positions.append({
+                "id": "player",
+                "name": player_ship.name,
+                "faction": "player",
+                "position": player_pos
+            })
+
+        # Get detected positions for visibility filtering
+        detected_positions = get_detected_positions(active_effects) if role == "player" else []
+
+        # Enemy ship positions (filter by visibility for player role)
+        for i, enemy in enumerate(enemy_ships):
+            enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
+
+            # For player role, only show visible enemies
+            if role == "player" and not is_enemy_visible(player_pos, enemy_pos, tactical_map_data, detected_positions):
+                continue  # Skip hidden enemy
+
+            ship_positions.append({
+                "id": f"enemy_{i}",
+                "name": enemy.name,
+                "faction": "enemy",
+                "position": enemy_pos
+            })
+
         # Select template based on role
         template = "combat_gm.html" if role == "gm" else "combat_player.html"
 
@@ -251,6 +334,8 @@ def combat(encounter_id: str):
             active_effects=active_effects,
             resistance_bonus=resistance_bonus,
             role=role,
+            tactical_map=tactical_map_data,
+            ship_positions=ship_positions,
         )
     finally:
         session.close()

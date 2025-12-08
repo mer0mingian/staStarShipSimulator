@@ -23,6 +23,45 @@ class Range(Enum):
     EXTREME = "extreme"  # 3+ zones away
 
 
+class TerrainType(Enum):
+    """Types of space terrain for tactical map hexes.
+
+    Each terrain type has a momentum cost to leave and may have
+    special properties (hazardous, blocks visibility).
+    """
+    OPEN = "open"                        # No effects, 0 momentum
+    DEBRIS_FIELD = "debris_field"        # 1 Momentum, hazardous
+    DUST_CLOUD = "dust_cloud"            # 1 Momentum, blocks visibility
+    PLANETARY_GRAVITY = "planetary_gravity"  # 1 Momentum
+    ASTEROID_FIELD = "asteroid_field"    # 1 Momentum, hazardous
+    DENSE_NEBULA = "dense_nebula"        # 2 Momentum, blocks visibility
+    STELLAR_GRAVITY = "stellar_gravity"  # 2 Momentum
+
+    @property
+    def movement_cost(self) -> int:
+        """Momentum cost to leave this terrain type."""
+        costs = {
+            TerrainType.OPEN: 0,
+            TerrainType.DEBRIS_FIELD: 1,
+            TerrainType.DUST_CLOUD: 1,
+            TerrainType.PLANETARY_GRAVITY: 1,
+            TerrainType.ASTEROID_FIELD: 1,
+            TerrainType.DENSE_NEBULA: 2,
+            TerrainType.STELLAR_GRAVITY: 2,
+        }
+        return costs.get(self, 0)
+
+    @property
+    def is_hazardous(self) -> bool:
+        """Whether adding Threat instead of Momentum causes damage."""
+        return self in {TerrainType.DEBRIS_FIELD, TerrainType.ASTEROID_FIELD}
+
+    @property
+    def blocks_visibility(self) -> bool:
+        """Whether this terrain blocks long-range visibility."""
+        return self in {TerrainType.DUST_CLOUD, TerrainType.DENSE_NEBULA}
+
+
 class ActionType(Enum):
     """Types of actions characters can take."""
     MINOR = "minor"

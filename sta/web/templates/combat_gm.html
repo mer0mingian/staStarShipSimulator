@@ -475,6 +475,76 @@
     </div>
 </div>
 
+<!-- Tactical Map Panel -->
+<div class="panel" style="border-color: var(--lcars-blue);">
+    <h2 style="color: var(--lcars-blue);">TACTICAL MAP</h2>
+
+    <!-- Map Display -->
+    <div id="tactical-map-container" style="text-align: center; min-height: 300px; background: #0a0a0a; border-radius: 10px; padding: 10px;">
+        <p style="color: #666;">Loading tactical map...</p>
+    </div>
+
+    <!-- Range & Terrain Legends -->
+    <div style="display: flex; gap: 15px; margin-top: 10px; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 200px; padding: 10px; background: #111; border-radius: 5px; font-size: 0.85em;">
+            <strong style="color: var(--lcars-tan);">Range:</strong>
+            <span style="color: var(--lcars-green); margin-left: 10px;">Close (same hex)</span>
+            <span style="color: var(--lcars-blue); margin-left: 10px;">Medium (1 hex)</span>
+            <span style="color: var(--lcars-orange); margin-left: 10px;">Long (2 hex)</span>
+            <span style="color: var(--lcars-red); margin-left: 10px;">Extreme (3+ hex)</span>
+        </div>
+        <div id="terrain-legend-container" style="flex: 0 0 auto;"></div>
+    </div>
+
+    <!-- GM Map Editor (Collapsible) -->
+    <details style="margin-top: 15px;">
+        <summary style="cursor: pointer; color: var(--lcars-purple); font-weight: bold;">
+            MAP EDITOR
+        </summary>
+        <div style="margin-top: 15px; padding: 15px; background: #1a1a2a; border-radius: 5px;">
+            <!-- Terrain Painting -->
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; color: var(--lcars-tan);">Paint Terrain</label>
+                <select id="terrain-palette" style="width: 100%;">
+                    <option value="open">Open Space (no cost)</option>
+                    <option value="planetary_gravity">Planetary Gravity Well (1 Momentum)</option>
+                    <option value="dust_cloud">Dust Cloud (1 Momentum, blocks visibility)</option>
+                    <option value="debris_field">Debris Field (1 Momentum, hazardous)</option>
+                    <option value="asteroid_field">Asteroid Field (1 Momentum, hazardous)</option>
+                    <option value="dense_nebula">Dense Nebula (2 Momentum, blocks visibility)</option>
+                    <option value="stellar_gravity">Stellar Gravity Well (2 Momentum)</option>
+                </select>
+            </div>
+
+            <!-- Ship Placement -->
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; color: var(--lcars-tan);">Move Ship</label>
+                <select id="ship-to-place" style="width: 100%;">
+                    <option value="">-- Select ship to move --</option>
+                    <option value="player">Player Ship ({{ player_ship.name if player_ship else 'N/A' }})</option>
+                    {% for enemy in enemy_ships %}
+                    <option value="enemy_{{ loop.index0 }}">{{ enemy.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Editor Mode -->
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button class="btn btn-small" id="editor-mode-terrain" onclick="setEditorMode('terrain')" style="background: var(--lcars-purple);">
+                    Paint Terrain
+                </button>
+                <button class="btn btn-small" id="editor-mode-ship" onclick="setEditorMode('ship')" style="background: var(--lcars-tan);">
+                    Move Ship
+                </button>
+            </div>
+
+            <p style="color: #888; font-size: 0.85em;">
+                Click on a hex to apply the selected terrain or move the selected ship.
+            </p>
+        </div>
+    </details>
+</div>
+
 <!-- Combat Log Panel -->
 <details class="panel" style="border-color: var(--lcars-orange); margin-top: 15px;" open>
     <summary style="cursor: pointer; color: var(--lcars-orange); font-weight: bold;">
@@ -595,12 +665,22 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Hex Map Visualization -->
+<script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+
 <script>
     const encounterId = '{{ encounter.encounter_id }}';
     const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
     const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
     const role = 'gm';
     let currentTurn = '{{ encounter.current_turn }}';
+
+    // Tactical Map Data
+    let tacticalMapData = {{ tactical_map | tojson if tactical_map else '{"radius": 3, "tiles": []}' | safe }};
+    let shipPositions = {{ ship_positions | tojson if ship_positions else '[]' | safe }};
+    let editorMode = 'terrain';  // 'terrain' or 'ship'
+    let selectedTerrain = 'open';
+    let selectedShipToMove = null;
 
     // Ship turn tracking
     let shipsInfo = [];  // Will be populated from API
@@ -690,7 +770,7 @@
     // Fetch initial turn status on page load
     async function fetchTurnStatus() {
         try {
-            const response = await fetch(`/api/encounter/${encounterId}/status`);
+            const response = await fetch(`/api/encounter/${encounterId}/status?role=gm`);
             if (response.ok) {
                 const data = await response.json();
                 updateTurnCounters(
@@ -893,7 +973,7 @@
 
         attackResolutionPollInterval = setInterval(async () => {
             try {
-                const response = await fetch(`/api/encounter/${encounterId}/status`);
+                const response = await fetch(`/api/encounter/${encounterId}/status?role=gm`);
                 if (response.ok) {
                     const data = await response.json();
 
@@ -1555,7 +1635,7 @@
     // Poll for turn changes and updates
     setInterval(async () => {
         try {
-            const response = await fetch(`/api/encounter/${encounterId}/status`);
+            const response = await fetch(`/api/encounter/${encounterId}/status?role=gm`);
             if (response.ok) {
                 const data = await response.json();
                 if (data.current_turn !== currentTurn) {
@@ -1765,5 +1845,154 @@
             alert('Error ending encounter: ' + error.message);
         }
     }
+
+    // ========== TACTICAL MAP FUNCTIONS ==========
+
+    // Initialize the tactical map
+    function initTacticalMap() {
+        if (typeof HexMap === 'undefined') {
+            console.error('HexMap not loaded');
+            document.getElementById('tactical-map-container').innerHTML =
+                '<p style="color: var(--lcars-red);">Error: Map visualization not loaded</p>';
+            return;
+        }
+
+        renderTacticalMap();
+
+        // Render terrain legend
+        HexMap.renderLegend('terrain-legend-container');
+
+        // Set up editor controls
+        document.getElementById('terrain-palette').addEventListener('change', (e) => {
+            selectedTerrain = e.target.value;
+            editorMode = 'terrain';
+            updateEditorModeButtons();
+        });
+
+        document.getElementById('ship-to-place').addEventListener('change', (e) => {
+            selectedShipToMove = e.target.value;
+            if (selectedShipToMove) {
+                editorMode = 'ship';
+            }
+            updateEditorModeButtons();
+        });
+    }
+
+    // Render the tactical map with current data
+    function renderTacticalMap() {
+        HexMap.render('tactical-map-container', tacticalMapData, shipPositions, {
+            editable: true,
+            onHexClick: handleMapHexClick,
+            onShipClick: handleMapShipClick,
+            showCoords: false
+        });
+    }
+
+    // Handle hex click in editor mode
+    async function handleMapHexClick(q, r, currentTerrain, moveCost) {
+        if (editorMode === 'terrain') {
+            await updateMapTerrain(q, r, selectedTerrain);
+        } else if (editorMode === 'ship' && selectedShipToMove) {
+            await updateShipPosition(selectedShipToMove, q, r);
+        }
+    }
+
+    // Handle ship click on map
+    function handleMapShipClick(ship, index) {
+        console.log('Ship clicked:', ship.name);
+        // Could show ship details or select for movement
+    }
+
+    // Set editor mode
+    function setEditorMode(mode) {
+        editorMode = mode;
+        updateEditorModeButtons();
+
+        if (mode === 'terrain') {
+            document.getElementById('ship-to-place').value = '';
+            selectedShipToMove = null;
+        }
+    }
+
+    // Update editor mode button styles
+    function updateEditorModeButtons() {
+        const terrainBtn = document.getElementById('editor-mode-terrain');
+        const shipBtn = document.getElementById('editor-mode-ship');
+
+        if (editorMode === 'terrain') {
+            terrainBtn.style.background = 'var(--lcars-purple)';
+            shipBtn.style.background = 'var(--lcars-tan)';
+        } else {
+            terrainBtn.style.background = 'var(--lcars-tan)';
+            shipBtn.style.background = 'var(--lcars-purple)';
+        }
+    }
+
+    // Update terrain at a hex coordinate
+    async function updateMapTerrain(q, r, terrain) {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/map/terrain`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ q, r, terrain })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                tacticalMapData = data.tactical_map;
+                renderTacticalMap();
+                showToast(`Terrain updated to ${terrain.replace('_', ' ')}`, 'success');
+            } else {
+                const error = await response.json();
+                showToast('Error: ' + (error.error || 'Failed to update terrain'), 'error');
+            }
+        } catch (error) {
+            showToast('Error updating terrain: ' + error.message, 'error');
+        }
+    }
+
+    // Update ship position on the map
+    async function updateShipPosition(shipId, q, r) {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/map/ship-position`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ship_id: shipId, q, r })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                shipPositions = data.ship_positions;
+                renderTacticalMap();
+                showToast(`Ship moved to (${q}, ${r})`, 'success');
+            } else {
+                const error = await response.json();
+                showToast('Error: ' + (error.error || 'Failed to move ship'), 'error');
+            }
+        } catch (error) {
+            showToast('Error moving ship: ' + error.message, 'error');
+        }
+    }
+
+    // Refresh map data from server
+    async function refreshMapData() {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/map?role=gm`);
+            if (response.ok) {
+                const data = await response.json();
+                tacticalMapData = data.tactical_map;
+                shipPositions = data.ship_positions;
+                renderTacticalMap();
+            }
+        } catch (error) {
+            console.error('Error refreshing map:', error);
+        }
+    }
+
+    // Initialize tactical map on page load
+    document.addEventListener('DOMContentLoaded', initTacticalMap);
+
+    // Periodically refresh map (every 5 seconds) to sync with other clients
+    setInterval(refreshMapData, 5000);
 </script>
 {% endblock %}

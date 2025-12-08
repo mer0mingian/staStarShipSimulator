@@ -5,10 +5,177 @@ from typing import Optional, Literal
 from datetime import datetime
 import uuid
 
-from .enums import Position, Range, ActionType
+from .enums import Position, Range, ActionType, TerrainType
 from .character import Character
 from .starship import Starship
 
+
+# ===== Hexagonal Grid Data Structures =====
+
+@dataclass
+class HexCoord:
+    """Axial hexagonal coordinate.
+
+    Uses axial coordinate system (q, r) which is simpler than cube coordinates
+    while still allowing easy distance calculations and neighbor finding.
+    """
+    q: int = 0  # Column
+    r: int = 0  # Row
+
+    def distance_to(self, other: "HexCoord") -> int:
+        """Calculate hex distance to another coordinate.
+
+        Uses axial-to-cube conversion for distance calculation.
+        In cube coordinates: x = q, y = -q-r, z = r
+        Distance = (|dx| + |dy| + |dz|) / 2
+        """
+        return (abs(self.q - other.q) +
+                abs(self.q + self.r - other.q - other.r) +
+                abs(self.r - other.r)) // 2
+
+    def neighbors(self) -> list["HexCoord"]:
+        """Get all 6 adjacent hex coordinates.
+
+        Directions (flat-top hexagon):
+        0: East (+1, 0)
+        1: Northeast (+1, -1)
+        2: Northwest (0, -1)
+        3: West (-1, 0)
+        4: Southwest (-1, +1)
+        5: Southeast (0, +1)
+        """
+        directions = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
+        return [HexCoord(self.q + dq, self.r + dr) for dq, dr in directions]
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {"q": self.q, "r": self.r}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "HexCoord":
+        """Create from dictionary."""
+        return cls(q=data.get("q", 0), r=data.get("r", 0))
+
+    def __hash__(self):
+        return hash((self.q, self.r))
+
+    def __eq__(self, other):
+        if isinstance(other, HexCoord):
+            return self.q == other.q and self.r == other.r
+        return False
+
+
+@dataclass
+class HexTile:
+    """A single hex tile on the tactical map."""
+    coord: HexCoord
+    terrain: TerrainType = TerrainType.OPEN
+    traits: list[str] = field(default_factory=list)
+
+    @property
+    def movement_cost(self) -> int:
+        """Momentum cost to leave this hex."""
+        return self.terrain.movement_cost
+
+    @property
+    def is_hazardous(self) -> bool:
+        """Whether adding Threat instead of paying Momentum causes damage."""
+        return self.terrain.is_hazardous
+
+    @property
+    def blocks_visibility(self) -> bool:
+        """Whether this terrain blocks long-range visibility."""
+        return self.terrain.blocks_visibility
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "coord": self.coord.to_dict(),
+            "terrain": self.terrain.value,
+            "traits": self.traits,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "HexTile":
+        """Create from dictionary."""
+        return cls(
+            coord=HexCoord.from_dict(data["coord"]),
+            terrain=TerrainType(data.get("terrain", "open")),
+            traits=data.get("traits", []),
+        )
+
+
+@dataclass
+class TacticalMap:
+    """The hexagonal tactical map for an encounter.
+
+    Uses axial coordinates with a hexagonal shape (radius from center).
+    Default radius of 3 creates 37 hexes total.
+    """
+    radius: int = 3  # Map radius in hexes from center (0,0)
+    tiles: dict = field(default_factory=dict)  # (q, r) -> HexTile
+
+    def __post_init__(self):
+        """Initialize default tiles if empty."""
+        if not self.tiles:
+            self._generate_default_tiles()
+
+    def _generate_default_tiles(self):
+        """Generate a hexagonal grid of open tiles."""
+        for q in range(-self.radius, self.radius + 1):
+            r1 = max(-self.radius, -q - self.radius)
+            r2 = min(self.radius, -q + self.radius)
+            for r in range(r1, r2 + 1):
+                coord = HexCoord(q, r)
+                self.tiles[(q, r)] = HexTile(coord=coord)
+
+    def get_tile(self, coord: HexCoord) -> Optional[HexTile]:
+        """Get tile at coordinate, or None if out of bounds."""
+        return self.tiles.get((coord.q, coord.r))
+
+    def set_terrain(self, coord: HexCoord, terrain: TerrainType) -> bool:
+        """Set terrain at a coordinate. Returns True if successful."""
+        key = (coord.q, coord.r)
+        if key in self.tiles:
+            self.tiles[key].terrain = terrain
+            return True
+        return False
+
+    def is_valid_coord(self, coord: HexCoord) -> bool:
+        """Check if coordinate is within map bounds."""
+        return (coord.q, coord.r) in self.tiles
+
+    def get_all_coords(self) -> list[HexCoord]:
+        """Get all valid coordinates on the map."""
+        return [HexCoord(q, r) for q, r in self.tiles.keys()]
+
+    def to_dict(self) -> dict:
+        """Serialize for JSON storage.
+
+        Only saves non-open tiles to reduce storage size.
+        """
+        return {
+            "radius": self.radius,
+            "tiles": [
+                tile.to_dict() for tile in self.tiles.values()
+                if tile.terrain != TerrainType.OPEN or tile.traits
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "TacticalMap":
+        """Create from dictionary."""
+        if not data:
+            return cls()
+        map_obj = cls(radius=data.get("radius", 3))
+        # Restore non-open tiles
+        for tile_data in data.get("tiles", []):
+            tile = HexTile.from_dict(tile_data)
+            map_obj.tiles[(tile.coord.q, tile.coord.r)] = tile
+        return map_obj
+
+
+# ===== Combat Data Structures =====
 
 @dataclass
 class ActiveEffect:
@@ -36,6 +203,7 @@ class ActiveEffect:
     weapon_index: Optional[int] = None  # For Defensive Fire - which weapon to use for counterattack
     is_opposed: bool = False  # For Defensive Fire / Evasive Action - attacks become opposed rolls
     target_system: Optional[str] = None  # For Reroute Power - which system receives the boost
+    detected_position: Optional[dict] = None  # For Sensor Sweep - position of detected ship {"q": int, "r": int}
 
     # Metadata
     created_round: int = 1
@@ -62,6 +230,7 @@ class ActiveEffect:
             "weapon_index": self.weapon_index,
             "is_opposed": self.is_opposed,
             "target_system": self.target_system,
+            "detected_position": self.detected_position,
             "created_round": self.created_round,
         }
 
@@ -83,6 +252,7 @@ class ActiveEffect:
             weapon_index=data.get("weapon_index"),
             is_opposed=data.get("is_opposed", False),
             target_system=data.get("target_system"),
+            detected_position=data.get("detected_position"),
             created_round=data.get("created_round", 1),
         )
 
@@ -133,13 +303,14 @@ class ShipCombatant:
     """A ship participating in combat with its current state."""
     ship: Starship
     faction: str = "player"  # "player" or "enemy"
-    zone: int = 0  # Zone position on the map
+    position: HexCoord = field(default_factory=HexCoord)  # Hex position on tactical map
     has_acted: bool = False
     minor_actions_used: int = 0
     major_actions_used: int = 0
     evasive_action_active: bool = False
     attack_pattern_active: bool = False
     calibrate_weapons_active: bool = False
+    in_contact_with: Optional[str] = None  # Ship name if docked/landed with another
 
     @property
     def minor_actions_remaining(self) -> int:
@@ -164,8 +335,12 @@ class ShipCombatant:
         self.reset_turn()
 
     def range_to(self, other: "ShipCombatant") -> Range:
-        """Calculate range to another combatant based on zones."""
-        distance = abs(self.zone - other.zone)
+        """Calculate range to another combatant based on hex distance."""
+        # Contact is a special state, not based on distance
+        if self.in_contact_with == other.ship.name:
+            return Range.CONTACT
+
+        distance = self.position.distance_to(other.position)
         if distance == 0:
             return Range.CLOSE
         elif distance == 1:
@@ -173,6 +348,10 @@ class ShipCombatant:
         elif distance == 2:
             return Range.LONG
         return Range.EXTREME
+
+    def hex_distance_to(self, other: "ShipCombatant") -> int:
+        """Get raw hex distance to another combatant."""
+        return self.position.distance_to(other.position)
 
 
 @dataclass
@@ -188,6 +367,9 @@ class Encounter:
 
     # Enemy ships
     enemy_ships: list[ShipCombatant] = field(default_factory=list)
+
+    # Tactical map
+    tactical_map: TacticalMap = field(default_factory=TacticalMap)
 
     # Shared resources
     momentum: int = 0
