@@ -143,6 +143,7 @@ def combat(encounter_id: str):
 
         # Load player character - from campaign membership if available, otherwise from encounter
         player_char = None
+        player_char_db_id = None
         player_ship = None
         player_ship_db_id = None
         current_campaign_player = None  # Track this for position lookup later
@@ -172,6 +173,7 @@ def combat(encounter_id: str):
                 ).first()
                 if char_record:
                     player_char = char_record.to_model()
+                    player_char_db_id = char_record.id
 
         # Fall back to encounter's player character if no campaign character found
         if not player_char and encounter.player_character_id:
@@ -180,6 +182,7 @@ def combat(encounter_id: str):
             ).first()
             if char_record:
                 player_char = char_record.to_model()
+                player_char_db_id = char_record.id
 
         if encounter.player_ship_id:
             ship_record = session.query(StarshipRecord).filter_by(
@@ -238,6 +241,7 @@ def combat(encounter_id: str):
             encounter=encounter,
             campaign=campaign,
             player_char=player_char,
+            player_char_db_id=player_char_db_id,
             player_ship=player_ship,
             player_ship_db_id=player_ship_db_id,
             enemy_ships=enemy_ships,

@@ -854,6 +854,7 @@
 <script>
     const encounterId = '{{ encounter.encounter_id }}';
     const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
+    const playerCharId = {{ player_char_db_id if player_char_db_id else 'null' }};
     const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
     const weaponsBonus = {{ player_ship.weapons_damage_bonus() if player_ship else 0 }};
     const role = 'player';
@@ -910,7 +911,7 @@
         const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action_name: actionName })
+            body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
         });
         const data = await response.json();
 
@@ -955,7 +956,7 @@
         const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action_name: actionName })
+            body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
         });
         const data = await response.json();
 
@@ -1112,6 +1113,51 @@
                 data.enemy_turns_used, data.enemy_turns_total
             );
         }
+    }
+
+    // Add turn-over indicator to a results element
+    function addTurnOverIndicator(elementId, newTurn, turnData = null) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+
+        // Remove any existing turn-over indicator
+        const existing = element.querySelector('.turn-over-indicator');
+        if (existing) existing.remove();
+
+        // Add new indicator
+        const indicator = document.createElement('div');
+        indicator.className = 'turn-over-indicator';
+        indicator.style.cssText = 'margin-top: 15px; padding: 12px; border-radius: 5px; text-align: center; font-weight: bold;';
+
+        if (newTurn === 'enemy') {
+            indicator.style.background = 'linear-gradient(135deg, #2a1a1a 0%, #3a2020 100%)';
+            indicator.style.border = '2px solid var(--lcars-red)';
+            indicator.innerHTML = `
+                <div style="color: var(--lcars-red); font-size: 1.1em;">ACTION COMPLETE</div>
+                <div style="color: var(--lcars-tan); margin-top: 5px;">Enemy Turn - Waiting for GM...</div>
+            `;
+        } else {
+            // Check if enemy is out of turns (player gets consecutive turns)
+            const enemyOutOfTurns = turnData && turnData.enemy_turns_used >= turnData.enemy_turns_total;
+            const playerTurnsRemaining = turnData ? (turnData.player_turns_total - turnData.player_turns_used) : null;
+
+            indicator.style.background = 'linear-gradient(135deg, #1a2a1a 0%, #203a20 100%)';
+            indicator.style.border = '2px solid var(--lcars-green)';
+
+            if (enemyOutOfTurns && playerTurnsRemaining > 0) {
+                indicator.innerHTML = `
+                    <div style="color: var(--lcars-green); font-size: 1.1em;">ACTION COMPLETE - CONTINUE!</div>
+                    <div style="color: var(--lcars-tan); margin-top: 5px;">Enemy out of turns - You have ${playerTurnsRemaining} turn(s) remaining</div>
+                `;
+            } else {
+                indicator.innerHTML = `
+                    <div style="color: var(--lcars-green); font-size: 1.1em;">YOUR TURN</div>
+                    <div style="color: var(--lcars-tan); margin-top: 5px;">Select your next action</div>
+                `;
+            }
+        }
+
+        element.appendChild(indicator);
     }
 
     // Fetch initial turn status on page load
@@ -1764,7 +1810,8 @@
                         roll_succeeded: true,
                         roll_momentum: rollData.momentum_generated,
                         target_system: damageControlTargetSystem,
-                        bonus_dice: bonus
+                        bonus_dice: bonus,
+                        character_id: playerCharId
                     })
                 });
                 const execData = await execResponse.json();
@@ -1815,6 +1862,17 @@
                 if (execData.current_turn) {
                     currentTurn = execData.current_turn;
                     updateTurnDisplay(execData.current_turn, execData.round, execData);
+
+                    // Clear action state
+                    activeMinorAction = null;
+                    selectedMajorAction = null;
+                    updateFireMinorActionBanner();
+                    updateMajorActionHighlights();
+                    clearActionSelections('minor');
+                    clearActionSelections('major');
+
+                    // Add turn indicator to results (keep panel visible)
+                    addTurnOverIndicator('damage-control-results', execData.current_turn, execData);
                 }
 
                 // Update turn counters
@@ -1824,11 +1882,6 @@
                         execData.enemy_turns_used, execData.enemy_turns_total
                     );
                 }
-
-                // Hide the panel after success
-                setTimeout(() => {
-                    document.getElementById('damage-control-panel').style.display = 'none';
-                }, 2000);
             } else {
                 resultsDiv.innerHTML = `
                     <div style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
@@ -1854,7 +1907,8 @@
                             roll_dice: rollData.rolls,
                             roll_target: attr + disc,
                             target_system: damageControlTargetSystem,
-                            bonus_dice: bonus
+                            bonus_dice: bonus,
+                            character_id: playerCharId
                         })
                     });
                     const failData = await failResponse.json();
@@ -1863,6 +1917,17 @@
                     if (failData.current_turn) {
                         currentTurn = failData.current_turn;
                         updateTurnDisplay(failData.current_turn, failData.round, failData);
+
+                        // Clear action state
+                        activeMinorAction = null;
+                        selectedMajorAction = null;
+                        updateFireMinorActionBanner();
+                        updateMajorActionHighlights();
+                        clearActionSelections('minor');
+                        clearActionSelections('major');
+
+                        // Add turn indicator to results (keep panel visible)
+                        addTurnOverIndicator('damage-control-results', failData.current_turn, failData);
                     }
 
                     if (failData.player_turns_used !== undefined) {
@@ -1873,14 +1938,7 @@
                     }
                 } catch (e) {
                     console.error('Failed to record failed action:', e);
-                    // Fallback to nextTurn if execute-action fails
-                    await nextTurn();
                 }
-
-                // Hide the panel after failure
-                setTimeout(() => {
-                    document.getElementById('damage-control-panel').style.display = 'none';
-                }, 2000);
             }
         } catch (err) {
             resultsDiv.style.display = 'block';
@@ -1904,7 +1962,8 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     action_name: 'Reroute Power',
-                    target_system: targetSystem
+                    target_system: targetSystem,
+                    character_id: playerCharId
                 })
             });
             const data = await response.json();
@@ -2017,7 +2076,8 @@
                     discipline: playerDiscs.conn || 3,
                     difficulty: 2,
                     focus: focus,
-                    bonus_dice: bonusDice
+                    bonus_dice: bonusDice,
+                    character_id: playerCharId
                 })
             });
             const data = await response.json();
@@ -2127,16 +2187,28 @@
                 showErrorToast('Ram failed! Target evaded the collision.');
             }
 
-            // Handle turn changes
-            if (data.turn_ended) {
-                currentTurn = 'enemy';
-                updateTurnDisplay();
-                showSuccessToast("Enemy turn!");
+            // Handle turn state from response
+            if (data.current_turn) {
+                updateTurnDisplay(data.current_turn, data.round, data);
+
+                // Clear action state
+                activeMinorAction = null;
+                selectedMajorAction = null;
+                updateFireMinorActionBanner();
+                updateMajorActionHighlights();
+                clearActionSelections('minor');
+                clearActionSelections('major');
+
+                // Add turn indicator to ram results
+                addTurnOverIndicator('ram-results', data.current_turn, data);
             }
 
-            // Mark action as complete
-            selectedMajorAction = 'Ram';
-            updateSelectionSummary();
+            if (data.player_turns_used !== undefined) {
+                updateTurnCounters(
+                    data.player_turns_used, data.player_turns_total,
+                    data.enemy_turns_used, data.enemy_turns_total
+                );
+            }
 
         } catch (err) {
             resultsDiv.innerHTML = `
@@ -2152,7 +2224,8 @@
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                action_name: actionName
+                action_name: actionName,
+                character_id: playerCharId
             })
         });
         const data = await response.json();
@@ -2183,14 +2256,25 @@
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                action_name: actionName
+                action_name: actionName,
+                character_id: playerCharId
             })
         });
         const data = await response.json();
 
         if (data.success) {
-            // Show success message
-            showSuccessToast(`${actionName} activated! ${data.message || ''}`);
+            // Show results in dice panel
+            const resultsDiv = document.getElementById('dice-results');
+            const displayDiv = document.getElementById('dice-display');
+            document.getElementById('dice-panel').style.display = 'block';
+            resultsDiv.style.display = 'block';
+
+            displayDiv.innerHTML = `
+                <div class="alert alert-success" style="padding: 15px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                    <strong style="color: var(--lcars-green);">${actionName.toUpperCase()} ACTIVATED!</strong>
+                    <p style="margin-top: 10px;">${data.message || 'Effect applied successfully.'}</p>
+                </div>
+            `;
 
             // Update resistance display if applicable
             if (data.resistance_bonus) {
@@ -2198,8 +2282,28 @@
                 updateResistanceDisplay();
             }
 
-            // End the turn since this is a major action
-            await nextTurn();
+            // Handle turn state from response
+            if (data.current_turn) {
+                updateTurnDisplay(data.current_turn, data.round, data);
+
+                // Clear action state
+                activeMinorAction = null;
+                selectedMajorAction = null;
+                updateFireMinorActionBanner();
+                updateMajorActionHighlights();
+                clearActionSelections('minor');
+                clearActionSelections('major');
+
+                // Add turn indicator
+                addTurnOverIndicator('dice-display', data.current_turn, data);
+            }
+
+            if (data.player_turns_used !== undefined) {
+                updateTurnCounters(
+                    data.player_turns_used, data.player_turns_total,
+                    data.enemy_turns_used, data.enemy_turns_total
+                );
+            }
         } else {
             showErrorToast(data.error || `${actionName} failed!`);
         }
@@ -2308,7 +2412,8 @@
             body: JSON.stringify({
                 ...lastFireData,
                 reroll_die_index: dieIndex,
-                previous_rolls: lastFireData.previous_rolls
+                previous_rolls: lastFireData.previous_rolls,
+                character_id: playerCharId
             })
         });
         const data = await response.json();
@@ -2369,7 +2474,8 @@
                 discipline: playerDiscs.security,
                 difficulty: difficulty,
                 focus: focus,
-                bonus_dice: bonusDice
+                bonus_dice: bonusDice,
+                character_id: playerCharId
             })
         });
         const data = await response.json();
@@ -2377,6 +2483,42 @@
         lastFireData.previous_rolls = data.rolls;
 
         displayFireResults(data, targetIndex, focus, bonusDice, difficulty);
+
+        // Debug: log turn state from fire response
+        console.log('Fire response turn state:', {
+            current_turn: data.current_turn,
+            round: data.round,
+            player_turns_used: data.player_turns_used,
+            player_turns_total: data.player_turns_total,
+            enemy_turns_used: data.enemy_turns_used,
+            enemy_turns_total: data.enemy_turns_total,
+            turn_ended: data.turn_ended
+        });
+
+        // Handle turn state from response
+        if (data.current_turn) {
+            updateTurnDisplay(data.current_turn, data.round, data);
+
+            // Clear action state
+            activeMinorAction = null;
+            selectedMajorAction = null;
+            updateFireMinorActionBanner();
+            updateMajorActionHighlights();
+            clearActionSelections('minor');
+            clearActionSelections('major');
+
+            // Add turn indicator to fire results
+            addTurnOverIndicator('fire-results', data.current_turn, data);
+        } else {
+            console.warn('Fire response missing current_turn!', data);
+        }
+
+        if (data.player_turns_used !== undefined) {
+            updateTurnCounters(
+                data.player_turns_used, data.player_turns_total,
+                data.enemy_turns_used, data.enemy_turns_total
+            );
+        }
     }
 
     async function executeDefensiveFire() {
@@ -2398,7 +2540,8 @@
                 body: JSON.stringify({
                     action_name: 'Defensive Fire',
                     weapon_index: weaponIndex,
-                    role: 'player'
+                    role: 'player',
+                    character_id: playerCharId
                 })
             });
             const data = await response.json();
@@ -2715,7 +2858,7 @@
 
         let effectMessage = '';
 
-        if (data.succeeded && currentAction?.name) {
+        if (currentAction?.name) {
             try {
                 const execResponse = await fetch(`/api/encounter/${encounterId}/execute-action`, {
                     method: 'POST',
@@ -2727,9 +2870,13 @@
                         difficulty: diff,
                         focus: focus,
                         bonus_dice: bonus,
-                        roll_succeeded: true,
+                        roll_succeeded: data.succeeded,
                         roll_successes: data.successes,
-                        roll_momentum: data.momentum_generated
+                        roll_momentum: data.succeeded ? data.momentum_generated : 0,
+                        roll_complications: data.complications,
+                        roll_dice: data.rolls,
+                        roll_target: data.target_number,
+                        character_id: playerCharId
                     })
                 });
                 const execData = await execResponse.json();
@@ -2740,12 +2887,45 @@
                     updateBonusDiceFromMomentum();
                 }
 
-                if (execData.success && execData.effect_applied) {
+                if (data.succeeded && execData.success && execData.effect_applied) {
                     effectMessage = `<br><span style="color: var(--lcars-green);">Effect applied: ${execData.effect_applied}</span>`;
 
                     if (execData.resistance_bonus) {
                         currentResistanceBonus += execData.resistance_bonus;
                         updateResistanceDisplay();
+                    }
+                }
+
+                // Update turn display from execute-action response (handles turn advancement)
+                if (currentAction && currentAction.type === 'major') {
+                    if (execData.current_turn) {
+                        // Update turn display immediately
+                        updateTurnDisplay(execData.current_turn, execData.round, execData);
+
+                        // Clear action state
+                        activeMinorAction = null;
+                        selectedMajorAction = null;
+                        updateFireMinorActionBanner();
+                        updateMajorActionHighlights();
+                        updateSelectionSummary();
+                        clearActionSelections('minor');
+                        clearActionSelections('major');
+
+                        // Hide action panels but keep results visible
+                        document.getElementById('dice-panel').style.display = 'none';
+                        document.getElementById('selection-summary').style.display = 'none';
+
+                        // Add turn-over indicator to results (will be added after summary.innerHTML is set)
+                        setTimeout(() => {
+                            addTurnOverIndicator('dice-summary', execData.current_turn, execData);
+                        }, 100);
+                    }
+
+                    if (execData.player_turns_used !== undefined) {
+                        updateTurnCounters(
+                            execData.player_turns_used, execData.player_turns_total,
+                            execData.enemy_turns_used, execData.enemy_turns_total
+                        );
                     }
                 }
             } catch (err) {
@@ -2762,14 +2942,6 @@
                 ${effectMessage}
             </div>
         `;
-
-        // If this was a major action (from the dice panel), end the turn after a short delay
-        // to let the player see the results
-        if (currentAction && currentAction.type === 'major') {
-            setTimeout(async () => {
-                await nextTurn();
-            }, 2000); // 2 second delay to show results before ending turn
-        }
     }
 
     // Track pending attack state
@@ -3010,7 +3182,8 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     weapon_index: weaponIndex,
-                    target_index: targetIndex
+                    target_index: targetIndex,
+                    character_id: playerCharId
                 })
             });
             const data = await response.json();

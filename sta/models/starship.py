@@ -173,21 +173,20 @@ class Starship:
         return self.get_breach_potency(system) >= (self.scale // 2)
 
     def has_critical_damage(self) -> bool:
-        """Check if ship has critical damage (total breaches > Scale)."""
-        return self.total_breach_potency() > self.scale
+        """Check if ship has critical damage (total breaches >= Scale)."""
+        return self.total_breach_potency() >= self.scale
 
     def is_destroyed(self) -> bool:
         """
         Check if ship is destroyed.
         Per STA 2e rules:
-        - Critical damage = total breaches > Scale (ship disabled)
-        - Additional breaches after critical = ship destroyed
+        - Critical damage = total breaches >= Scale (ship disabled)
+        - Breaches exceeding Scale = ship destroyed
         - NPC vessels may be destroyed immediately at GM discretion
 
-        We consider a ship destroyed when total breaches > Scale + 1
-        (one breach past critical damage threshold).
+        Ship is destroyed when total breaches exceed Scale.
         """
-        return self.total_breach_potency() > self.scale + 1
+        return self.total_breach_potency() > self.scale
 
     def has_warp_core_breach_risk(self) -> bool:
         """
