@@ -126,10 +126,13 @@
                                     </span>
                                 {% endif %}
                             </div>
-                            <div>
+                            <div style="display: flex; gap: 5px;">
                                 {% if player.is_gm %}
                                     <span class="action-type" style="color: var(--lcars-purple);">Game Master</span>
                                 {% elif is_gm %}
+                                    <button class="btn btn-small" onclick="editPlayer({{ player.id }})" title="Edit player">
+                                        Edit
+                                    </button>
                                     <button class="btn btn-small btn-danger" onclick="removePlayer({{ player.id }}, '{{ player.player_name }}')" title="Remove player">
                                         &times;
                                     </button>
@@ -227,6 +230,9 @@
                             {% endif %}
                         </div>
                         <div style="display: flex; gap: 5px;">
+                            <button class="btn btn-small" onclick="editShip({{ ship.ship_id }})">
+                                View/Edit
+                            </button>
                             {% if not ship.is_active %}
                                 <button class="btn btn-small btn-success" onclick="setActiveShip({{ ship.ship_id }})">
                                     Set Active
@@ -266,8 +272,14 @@
                     <span class="action-type">Draft</span>
                 </div>
                 <div style="display: flex; gap: 5px;">
+                    <button class="btn btn-small" onclick="editEncounter('{{ enc.encounter_id }}')">
+                        Edit
+                    </button>
                     <button class="btn btn-small btn-success" onclick="activateEncounter('{{ enc.encounter_id }}')">
                         Activate
+                    </button>
+                    <button class="btn btn-small btn-danger" onclick="deleteEncounter('{{ enc.encounter_id }}', '{{ enc.name }}')">
+                        &times;
                     </button>
                 </div>
             </li>
@@ -400,6 +412,139 @@
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                 <button type="button" class="btn btn-small" style="background: #666;" onclick="hideAddShipModal()">Cancel</button>
                 <button type="submit" class="btn btn-small">Create Ship</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Player Modal -->
+<div id="edit-player-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+        <h2>Edit Character</h2>
+        <form id="edit-player-form" onsubmit="savePlayer(event)">
+            <input type="hidden" id="edit-player-id">
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <label for="edit-char-name">Character Name</label>
+                    <input type="text" id="edit-char-name" required style="width: 100%;">
+                </div>
+                <div>
+                    <label for="edit-char-rank">Rank</label>
+                    <input type="text" id="edit-char-rank" style="width: 100%;">
+                </div>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                <div>
+                    <label for="edit-char-species">Species</label>
+                    <input type="text" id="edit-char-species" style="width: 100%;">
+                </div>
+                <div>
+                    <label for="edit-char-role">Role</label>
+                    <input type="text" id="edit-char-role" style="width: 100%;">
+                </div>
+            </div>
+
+            <h3 style="color: var(--lcars-orange); margin: 15px 0 10px 0; font-size: 1em;">Attributes (7-12)</h3>
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                <div><label>Control</label><input type="number" id="edit-attr-control" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Daring</label><input type="number" id="edit-attr-daring" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Fitness</label><input type="number" id="edit-attr-fitness" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Insight</label><input type="number" id="edit-attr-insight" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Presence</label><input type="number" id="edit-attr-presence" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Reason</label><input type="number" id="edit-attr-reason" min="7" max="12" value="9" style="width: 100%;"></div>
+            </div>
+
+            <h3 style="color: var(--lcars-blue); margin: 15px 0 10px 0; font-size: 1em;">Disciplines (1-5)</h3>
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                <div><label>Command</label><input type="number" id="edit-disc-command" min="1" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Conn</label><input type="number" id="edit-disc-conn" min="1" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Engineering</label><input type="number" id="edit-disc-engineering" min="1" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Medicine</label><input type="number" id="edit-disc-medicine" min="1" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Science</label><input type="number" id="edit-disc-science" min="1" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Security</label><input type="number" id="edit-disc-security" min="1" max="5" value="2" style="width: 100%;"></div>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-small" style="background: #666;" onclick="hideEditPlayerModal()">Cancel</button>
+                <button type="submit" class="btn btn-small">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Ship Modal -->
+<div id="edit-ship-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+        <h2>Edit Ship</h2>
+        <form id="edit-ship-form" onsubmit="saveShip(event)">
+            <input type="hidden" id="edit-ship-id">
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <label for="edit-ship-name">Ship Name</label>
+                    <input type="text" id="edit-ship-name" required style="width: 100%;">
+                </div>
+                <div>
+                    <label for="edit-ship-class">Ship Class</label>
+                    <input type="text" id="edit-ship-class" required style="width: 100%;">
+                </div>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                <div>
+                    <label for="edit-ship-registry">Registry</label>
+                    <input type="text" id="edit-ship-registry" style="width: 100%;">
+                </div>
+                <div>
+                    <label for="edit-ship-scale">Scale (1-6)</label>
+                    <input type="number" id="edit-ship-scale" min="1" max="6" value="4" style="width: 100%;">
+                </div>
+            </div>
+
+            <h3 style="color: var(--lcars-blue); margin: 15px 0 10px 0; font-size: 1em;">Systems</h3>
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                <div><label>Comms</label><input type="number" id="edit-sys-comms" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Computers</label><input type="number" id="edit-sys-computers" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Engines</label><input type="number" id="edit-sys-engines" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Sensors</label><input type="number" id="edit-sys-sensors" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Structure</label><input type="number" id="edit-sys-structure" min="7" max="12" value="9" style="width: 100%;"></div>
+                <div><label>Weapons</label><input type="number" id="edit-sys-weapons" min="7" max="12" value="9" style="width: 100%;"></div>
+            </div>
+
+            <h3 style="color: var(--lcars-tan); margin: 15px 0 10px 0; font-size: 1em;">Departments</h3>
+            <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                <div><label>Command</label><input type="number" id="edit-dept-command" min="0" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Conn</label><input type="number" id="edit-dept-conn" min="0" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Engineering</label><input type="number" id="edit-dept-engineering" min="0" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Medicine</label><input type="number" id="edit-dept-medicine" min="0" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Science</label><input type="number" id="edit-dept-science" min="0" max="5" value="2" style="width: 100%;"></div>
+                <div><label>Security</label><input type="number" id="edit-dept-security" min="0" max="5" value="2" style="width: 100%;"></div>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-small" style="background: #666;" onclick="hideEditShipModal()">Cancel</button>
+                <button type="submit" class="btn btn-small">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Encounter Modal -->
+<div id="edit-encounter-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 400px; width: 90%;">
+        <h2>Edit Encounter</h2>
+        <form id="edit-encounter-form" onsubmit="saveEncounter(event)">
+            <input type="hidden" id="edit-encounter-id">
+            <div style="margin-bottom: 15px;">
+                <label for="edit-encounter-name">Encounter Name</label>
+                <input type="text" id="edit-encounter-name" required style="width: 100%;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label for="edit-encounter-threat">Starting Threat</label>
+                <input type="number" id="edit-encounter-threat" min="0" max="10" value="2" style="width: 100%;">
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-small" style="background: #666;" onclick="hideEditEncounterModal()">Cancel</button>
+                <button type="submit" class="btn btn-small">Save Changes</button>
             </div>
         </form>
     </div>
@@ -626,6 +771,256 @@ async function activateEncounter(encounterId) {
         }
     } catch (error) {
         alert('Error activating encounter: ' + error.message);
+    }
+}
+
+async function deleteEncounter(encounterId, encounterName) {
+    if (!confirm(`Delete encounter "${encounterName}"? This cannot be undone.`)) return;
+
+    try {
+        const response = await fetch(`/campaigns/api/encounter/${encounterId}`, {
+            method: 'DELETE'
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error deleting encounter: ' + error.message);
+    }
+}
+
+// Edit Player Functions
+async function editPlayer(playerId) {
+    try {
+        const url = `/campaigns/api/campaign/${campaignId}/player/${playerId}`;
+        console.log('Fetching player from:', url);
+        const response = await fetch(url);
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Error response:', errorText);
+            alert('Error loading player data: ' + response.status);
+            return;
+        }
+        const player = await response.json();
+        console.log('Player data:', player);
+
+        document.getElementById('edit-player-id').value = player.id;
+        document.getElementById('edit-char-name').value = player.character?.name || player.player_name;
+        document.getElementById('edit-char-rank').value = player.character?.rank || '';
+        document.getElementById('edit-char-species').value = player.character?.species || '';
+        document.getElementById('edit-char-role').value = player.character?.role || '';
+
+        if (player.character) {
+            document.getElementById('edit-attr-control').value = player.character.attributes?.control || 9;
+            document.getElementById('edit-attr-daring').value = player.character.attributes?.daring || 9;
+            document.getElementById('edit-attr-fitness').value = player.character.attributes?.fitness || 9;
+            document.getElementById('edit-attr-insight').value = player.character.attributes?.insight || 9;
+            document.getElementById('edit-attr-presence').value = player.character.attributes?.presence || 9;
+            document.getElementById('edit-attr-reason').value = player.character.attributes?.reason || 9;
+
+            document.getElementById('edit-disc-command').value = player.character.disciplines?.command || 2;
+            document.getElementById('edit-disc-conn').value = player.character.disciplines?.conn || 2;
+            document.getElementById('edit-disc-engineering').value = player.character.disciplines?.engineering || 2;
+            document.getElementById('edit-disc-medicine').value = player.character.disciplines?.medicine || 2;
+            document.getElementById('edit-disc-science').value = player.character.disciplines?.science || 2;
+            document.getElementById('edit-disc-security').value = player.character.disciplines?.security || 2;
+        }
+
+        document.getElementById('edit-player-modal').style.display = 'flex';
+    } catch (error) {
+        alert('Error loading player: ' + error.message);
+    }
+}
+
+function hideEditPlayerModal() {
+    document.getElementById('edit-player-modal').style.display = 'none';
+}
+
+async function savePlayer(event) {
+    event.preventDefault();
+    const playerId = document.getElementById('edit-player-id').value;
+
+    const data = {
+        name: document.getElementById('edit-char-name').value,
+        rank: document.getElementById('edit-char-rank').value,
+        species: document.getElementById('edit-char-species').value,
+        role: document.getElementById('edit-char-role').value,
+        attributes: {
+            control: parseInt(document.getElementById('edit-attr-control').value),
+            daring: parseInt(document.getElementById('edit-attr-daring').value),
+            fitness: parseInt(document.getElementById('edit-attr-fitness').value),
+            insight: parseInt(document.getElementById('edit-attr-insight').value),
+            presence: parseInt(document.getElementById('edit-attr-presence').value),
+            reason: parseInt(document.getElementById('edit-attr-reason').value),
+        },
+        disciplines: {
+            command: parseInt(document.getElementById('edit-disc-command').value),
+            conn: parseInt(document.getElementById('edit-disc-conn').value),
+            engineering: parseInt(document.getElementById('edit-disc-engineering').value),
+            medicine: parseInt(document.getElementById('edit-disc-medicine').value),
+            science: parseInt(document.getElementById('edit-disc-science').value),
+            security: parseInt(document.getElementById('edit-disc-security').value),
+        }
+    };
+
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/player/${playerId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const result = await response.json();
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error saving player: ' + error.message);
+    }
+}
+
+// Edit Ship Functions
+async function editShip(shipId) {
+    try {
+        const url = `/campaigns/api/ship/${shipId}`;
+        console.log('Fetching ship from:', url);
+        const response = await fetch(url);
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Error response:', errorText);
+            alert('Error loading ship data: ' + response.status);
+            return;
+        }
+        const ship = await response.json();
+        console.log('Ship data:', ship);
+
+        document.getElementById('edit-ship-id').value = ship.id;
+        document.getElementById('edit-ship-name').value = ship.name || '';
+        document.getElementById('edit-ship-class').value = ship.ship_class || '';
+        document.getElementById('edit-ship-registry').value = ship.registry || '';
+        document.getElementById('edit-ship-scale').value = ship.scale || 4;
+
+        document.getElementById('edit-sys-comms').value = ship.systems?.comms || 9;
+        document.getElementById('edit-sys-computers').value = ship.systems?.computers || 9;
+        document.getElementById('edit-sys-engines').value = ship.systems?.engines || 9;
+        document.getElementById('edit-sys-sensors').value = ship.systems?.sensors || 9;
+        document.getElementById('edit-sys-structure').value = ship.systems?.structure || 9;
+        document.getElementById('edit-sys-weapons').value = ship.systems?.weapons || 9;
+
+        document.getElementById('edit-dept-command').value = ship.departments?.command || 2;
+        document.getElementById('edit-dept-conn').value = ship.departments?.conn || 2;
+        document.getElementById('edit-dept-engineering').value = ship.departments?.engineering || 2;
+        document.getElementById('edit-dept-medicine').value = ship.departments?.medicine || 2;
+        document.getElementById('edit-dept-science').value = ship.departments?.science || 2;
+        document.getElementById('edit-dept-security').value = ship.departments?.security || 2;
+
+        document.getElementById('edit-ship-modal').style.display = 'flex';
+    } catch (error) {
+        alert('Error loading ship: ' + error.message);
+    }
+}
+
+function hideEditShipModal() {
+    document.getElementById('edit-ship-modal').style.display = 'none';
+}
+
+async function saveShip(event) {
+    event.preventDefault();
+    const shipId = document.getElementById('edit-ship-id').value;
+
+    const data = {
+        name: document.getElementById('edit-ship-name').value,
+        ship_class: document.getElementById('edit-ship-class').value,
+        registry: document.getElementById('edit-ship-registry').value,
+        scale: parseInt(document.getElementById('edit-ship-scale').value),
+        systems: {
+            comms: parseInt(document.getElementById('edit-sys-comms').value),
+            computers: parseInt(document.getElementById('edit-sys-computers').value),
+            engines: parseInt(document.getElementById('edit-sys-engines').value),
+            sensors: parseInt(document.getElementById('edit-sys-sensors').value),
+            structure: parseInt(document.getElementById('edit-sys-structure').value),
+            weapons: parseInt(document.getElementById('edit-sys-weapons').value),
+        },
+        departments: {
+            command: parseInt(document.getElementById('edit-dept-command').value),
+            conn: parseInt(document.getElementById('edit-dept-conn').value),
+            engineering: parseInt(document.getElementById('edit-dept-engineering').value),
+            medicine: parseInt(document.getElementById('edit-dept-medicine').value),
+            science: parseInt(document.getElementById('edit-dept-science').value),
+            security: parseInt(document.getElementById('edit-dept-security').value),
+        }
+    };
+
+    try {
+        const response = await fetch(`/campaigns/api/ship/${shipId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const result = await response.json();
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error saving ship: ' + error.message);
+    }
+}
+
+// Edit Encounter Functions
+async function editEncounter(encounterId) {
+    try {
+        const response = await fetch(`/campaigns/api/encounter/${encounterId}`);
+        if (!response.ok) {
+            alert('Error loading encounter data');
+            return;
+        }
+        const encounter = await response.json();
+
+        document.getElementById('edit-encounter-id').value = encounter.encounter_id;
+        document.getElementById('edit-encounter-name').value = encounter.name || '';
+        document.getElementById('edit-encounter-threat').value = encounter.threat || 2;
+
+        document.getElementById('edit-encounter-modal').style.display = 'flex';
+    } catch (error) {
+        alert('Error loading encounter: ' + error.message);
+    }
+}
+
+function hideEditEncounterModal() {
+    document.getElementById('edit-encounter-modal').style.display = 'none';
+}
+
+async function saveEncounter(event) {
+    event.preventDefault();
+    const encounterId = document.getElementById('edit-encounter-id').value;
+
+    const data = {
+        name: document.getElementById('edit-encounter-name').value,
+        threat: parseInt(document.getElementById('edit-encounter-threat').value),
+    };
+
+    try {
+        const response = await fetch(`/campaigns/api/encounter/${encounterId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const result = await response.json();
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error saving encounter: ' + error.message);
     }
 }
 </script>

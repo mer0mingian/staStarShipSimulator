@@ -672,6 +672,24 @@ def fire_weapon():
         if reroute_bonus != 0:
             difficulty = max(0, difficulty + reroute_bonus)  # Apply modifier (negative = easier)
 
+        # Check for Attack Pattern effect (-1 difficulty for ship's attacks)
+        attack_pattern_modifier = 0
+        for effect in encounter_model.get_effects("attack") + encounter_model.get_effects("all"):
+            if effect.source_action == "Attack Pattern" and effect.difficulty_modifier != 0:
+                attack_pattern_modifier = effect.difficulty_modifier
+                break
+        if attack_pattern_modifier != 0:
+            difficulty = max(0, difficulty + attack_pattern_modifier)
+
+        # Check for Evasive Action effect (+1 difficulty for ship's own attacks)
+        evasive_action_modifier = 0
+        for effect in encounter_model.get_effects("defense"):
+            if effect.source_action == "Evasive Action":
+                evasive_action_modifier = 1  # +1 difficulty penalty for attacking while evasive
+                break
+        if evasive_action_modifier != 0:
+            difficulty = difficulty + evasive_action_modifier
+
         # Check Targeting Solution effects
         attack_effects = encounter_model.get_effects("attack")
         has_targeting_solution = any(e.can_reroll or e.can_choose_system for e in attack_effects)
@@ -1425,18 +1443,70 @@ def execute_action(encounter_id: str):
                 encounter.momentum = encounter_record.momentum
 
             # Check if roll was already done by the frontend
-            if data.get("roll_succeeded"):
-                # Apply success effects without re-rolling
-                momentum_generated = data.get("roll_momentum", 0)
-                result = apply_task_roll_success(
-                    action_name,
-                    encounter,
-                    player_ship,
-                    momentum_generated,
-                    config
-                )
+            if "roll_succeeded" in data:
+                # Frontend already did the roll - handle success or failure
+                if data.get("roll_succeeded"):
+                    # Apply success effects without re-rolling
+                    momentum_generated = data.get("roll_momentum", 0)
+                    result = apply_task_roll_success(
+                        action_name,
+                        encounter,
+                        player_ship,
+                        momentum_generated,
+                        config
+                    )
+
+                    # Special handling for Damage Control - actually patch the breach
+                    if action_name == "Damage Control":
+                        target_system = data.get("target_system")
+                        if not target_system:
+                            return jsonify({"error": "target_system required for Damage Control"}), 400
+
+                        try:
+                            system_type = SystemType(target_system.lower())
+                        except ValueError:
+                            return jsonify({"error": f"Invalid system: {target_system}"}), 400
+
+                        # Check if there's actually a breach on this system
+                        breach_potency = player_ship.get_breach_potency(system_type)
+                        if breach_potency == 0:
+                            result.message += f" But {target_system} has no breach to repair!"
+                        else:
+                            # Patch the breach (reduces potency by 1)
+                            patched = player_ship.patch_breach(system_type, 1)
+                            result.message = f"Damage Control succeeded! Patched {target_system.upper()} breach."
+                            result.data["system_patched"] = target_system
+                            result.data["breach_patched"] = patched
+                            result.data["remaining_breach_potency"] = player_ship.get_breach_potency(system_type)
+
+                            # Save updated breaches to database
+                            player_ship_record.breaches_json = json.dumps([
+                                {"system": b.system.value, "potency": b.potency}
+                                for b in player_ship.breaches
+                            ])
+                else:
+                    # Roll failed - create a failure result (no effects applied)
+                    from sta.mechanics.action_handlers import ActionExecutionResult
+                    roll_successes = data.get("roll_successes", 0)
+                    roll_complications = data.get("roll_complications", 0)
+                    result = ActionExecutionResult(
+                        False,
+                        f"{action_name} failed! ({roll_successes} successes)"
+                    )
+                    if roll_complications > 0:
+                        result.message += f" {roll_complications} complication(s)!"
+
+                    # Store roll info for logging
+                    result.roll_result = {
+                        "rolls": data.get("roll_dice", []),
+                        "target_number": data.get("roll_target", 0),
+                        "successes": roll_successes,
+                        "complications": roll_complications,
+                        "succeeded": False,
+                    }
+
             else:
-                # Do the full roll
+                # No roll info provided - do the full roll on backend
                 if not character:
                     return jsonify({"error": "Character required for task roll"}), 400
 
@@ -1455,6 +1525,35 @@ def execute_action(encounter_id: str):
                     bonus_dice,
                     config
                 )
+
+                # Special handling for Damage Control - actually patch the breach
+                if action_name == "Damage Control" and result.success:
+                    target_system = data.get("target_system")
+                    if not target_system:
+                        return jsonify({"error": "target_system required for Damage Control"}), 400
+
+                    try:
+                        system_type = SystemType(target_system.lower())
+                    except ValueError:
+                        return jsonify({"error": f"Invalid system: {target_system}"}), 400
+
+                    # Check if there's actually a breach on this system
+                    breach_potency = player_ship.get_breach_potency(system_type)
+                    if breach_potency == 0:
+                        result.message += f" But {target_system} has no breach to repair!"
+                    else:
+                        # Patch the breach (reduces potency by 1)
+                        patched = player_ship.patch_breach(system_type, 1)
+                        result.message = f"Damage Control succeeded! Patched {target_system.upper()} breach."
+                        result.data["system_patched"] = target_system
+                        result.data["breach_patched"] = patched
+                        result.data["remaining_breach_potency"] = player_ship.get_breach_potency(system_type)
+
+                        # Save updated breaches to database
+                        player_ship_record.breaches_json = json.dumps([
+                            {"system": b.system.value, "potency": b.potency}
+                            for b in player_ship.breaches
+                        ])
 
         elif is_toggle_action(action_name):
             # Toggle action - update ship state
@@ -2192,6 +2291,14 @@ def gm_attack(encounter_id: str):
             if enemy_assist_roll == 20:
                 attacker_complications += 1
 
+            # Check for Attack Pattern effect - gives enemies easier attacks (-1 Difficulty = +1 success in opposed roll)
+            attack_pattern_active = False
+            for effect in encounter_model.get_effects("all"):
+                if effect.source_action == "Attack Pattern":
+                    attack_pattern_active = True
+                    attacker_successes += 1  # Simulates -1 Difficulty advantage
+                    break
+
             # Opposed roll: defender wins if they have equal or more successes
             defender_wins = defender_successes >= attacker_successes
 
@@ -2210,12 +2317,24 @@ def gm_attack(encounter_id: str):
                 "attacker_successes": attacker_successes,
                 "attacker_complications": attacker_complications,
                 "defender_wins": defender_wins,
+                "attack_pattern_active": attack_pattern_active,
             })
 
             if defender_wins:
                 # Attack misses!
                 response["attack_result"] = "missed"
                 response["message"] = f"{player_ship.name} successfully defended! Attack misses."
+
+                # Generate momentum from excess successes (defender's successes beyond attacker's)
+                momentum_generated = max(0, defender_successes - attacker_successes)
+                if momentum_generated > 0:
+                    old_momentum = encounter_record.momentum
+                    encounter_record.momentum = min(6, encounter_record.momentum + momentum_generated)
+                    actual_momentum_added = encounter_record.momentum - old_momentum
+                    if actual_momentum_added > 0:
+                        response["momentum_generated"] = actual_momentum_added
+                        response["new_momentum"] = encounter_record.momentum
+                        response["message"] += f" +{actual_momentum_added} Momentum!"
 
                 # Check for counterattack option (Defensive Fire only)
                 can_counterattack = False

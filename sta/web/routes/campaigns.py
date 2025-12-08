@@ -158,6 +158,15 @@ def campaign_dashboard(campaign_id: str):
             if current_player:
                 is_gm = current_player.is_gm
 
+        # Route based on user's role:
+        # - Not in campaign yet → join page
+        # - Player (not GM) → player dashboard
+        # - GM → full dashboard (continue below)
+        if not current_player:
+            return redirect(url_for("campaigns.join_campaign", campaign_id=campaign_id))
+        if not is_gm:
+            return redirect(url_for("campaigns.player_dashboard", campaign_id=campaign_id))
+
         # Load players with character data
         player_records = session.query(CampaignPlayerRecord).filter_by(
             campaign_id=campaign.id,
@@ -237,7 +246,7 @@ def campaign_dashboard(campaign_id: str):
 
 @campaigns_bp.route("/<campaign_id>/join", methods=["GET", "POST"])
 def join_campaign(campaign_id: str):
-    """Join a campaign as a player."""
+    """Join a campaign as a player - select an existing character."""
     session = get_session()
     try:
         campaign = session.query(CampaignRecord).filter_by(
@@ -246,7 +255,7 @@ def join_campaign(campaign_id: str):
 
         if not campaign:
             flash("Campaign not found")
-            return redirect(url_for("campaigns.campaign_list"))
+            return redirect(url_for("campaigns.player_home"))
 
         # Check if already joined via cookie
         session_token = request.cookies.get("sta_session_token")
@@ -256,39 +265,140 @@ def join_campaign(campaign_id: str):
                 campaign_id=campaign.id
             ).first()
             if existing:
-                return redirect(url_for("campaigns.campaign_dashboard", campaign_id=campaign_id))
+                return redirect(url_for("campaigns.player_dashboard", campaign_id=campaign_id))
 
         if request.method == "POST":
-            player_name = request.form.get("player_name", "Player")
-            position = request.form.get("position", "captain")
+            player_id = request.form.get("player_id")
 
-            # Generate session token
-            player_token = secrets.token_urlsafe(32)
+            if player_id:
+                # Claim existing character
+                player = session.query(CampaignPlayerRecord).filter_by(
+                    id=int(player_id),
+                    campaign_id=campaign.id,
+                    is_gm=False
+                ).first()
 
-            # Create player record
-            player = CampaignPlayerRecord(
-                campaign_id=campaign.id,
-                player_name=player_name,
-                session_token=player_token,
-                position=position,
-                is_gm=False,
-            )
-            session.add(player)
-            session.commit()
+                if player:
+                    # Generate new session token for this player
+                    player_token = secrets.token_urlsafe(32)
+                    player.session_token = player_token
+                    session.commit()
 
-            response = redirect(url_for("campaigns.campaign_dashboard", campaign_id=campaign_id))
-            response.set_cookie("sta_session_token", player_token, max_age=60*60*24*365)
-            return response
+                    response = redirect(url_for("campaigns.player_dashboard", campaign_id=campaign_id))
+                    response.set_cookie("sta_session_token", player_token, max_age=60*60*24*365)
+                    return response
 
-        # GET - show join form
-        positions = [p.value for p in Position]
+            flash("Please select a character")
+            return redirect(url_for("campaigns.join_campaign", campaign_id=campaign_id))
+
+        # GET - show character selection
+        # Get available characters (non-GM players with characters)
+        available_players = session.query(CampaignPlayerRecord).filter_by(
+            campaign_id=campaign.id,
+            is_gm=False,
+            is_active=True
+        ).all()
+
+        # Load character data for each player
+        players_with_chars = []
+        for p in available_players:
+            char = None
+            if p.character_id:
+                char_record = session.query(CharacterRecord).filter_by(id=p.character_id).first()
+                if char_record:
+                    char = char_record.to_model()
+            players_with_chars.append({
+                "id": p.id,
+                "player_name": p.player_name,
+                "character": char,
+            })
+
         return render_template(
             "campaign_join.html",
             campaign=campaign,
+            players=players_with_chars,
+        )
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/<campaign_id>/player")
+def player_dashboard(campaign_id: str):
+    """Player-specific dashboard - shows their character and active encounter."""
+    session = get_session()
+    try:
+        campaign = session.query(CampaignRecord).filter_by(
+            campaign_id=campaign_id
+        ).first()
+
+        if not campaign:
+            flash("Campaign not found")
+            return redirect(url_for("campaigns.player_home"))
+
+        # Get current player from session token
+        session_token = request.cookies.get("sta_session_token")
+        if not session_token:
+            return redirect(url_for("campaigns.join_campaign", campaign_id=campaign_id))
+
+        current_player = session.query(CampaignPlayerRecord).filter_by(
+            session_token=session_token,
+            campaign_id=campaign.id
+        ).first()
+
+        if not current_player:
+            return redirect(url_for("campaigns.join_campaign", campaign_id=campaign_id))
+
+        # If this is the GM, redirect to the full dashboard
+        if current_player.is_gm:
+            return redirect(url_for("campaigns.campaign_dashboard", campaign_id=campaign_id))
+
+        # Load character data
+        character = None
+        if current_player.character_id:
+            char_record = session.query(CharacterRecord).filter_by(
+                id=current_player.character_id
+            ).first()
+            if char_record:
+                character = char_record.to_model()
+
+        # Load active ship
+        active_ship = None
+        if campaign.active_ship_id:
+            ship_record = session.query(StarshipRecord).filter_by(
+                id=campaign.active_ship_id
+            ).first()
+            if ship_record:
+                active_ship = ship_record.to_model()
+
+        # Load active encounter
+        active_encounter = session.query(EncounterRecord).filter_by(
+            campaign_id=campaign.id,
+            status="active"
+        ).first()
+
+        # Get positions for selection
+        positions = [p.value for p in Position]
+
+        return render_template(
+            "player_dashboard.html",
+            campaign=campaign,
+            player=current_player,
+            character=character,
+            active_ship=active_ship,
+            active_encounter=active_encounter,
             positions=positions,
         )
     finally:
         session.close()
+
+
+@campaigns_bp.route("/<campaign_id>/switch-character")
+def switch_character(campaign_id: str):
+    """Clear player session to allow switching to a different character."""
+    # Clear the session cookie for this campaign
+    response = redirect(url_for("campaigns.join_campaign", campaign_id=campaign_id))
+    response.delete_cookie("sta_session_token")
+    return response
 
 
 # =============================================================================
@@ -596,10 +706,9 @@ def api_list_players(campaign_id: str):
 
 @campaigns_bp.route("/api/campaign/<campaign_id>/player/<int:player_id>/position", methods=["PUT"])
 def api_update_player_position(campaign_id: str, player_id: int):
-    """API: Update player's bridge position (GM only)."""
+    """API: Update player's bridge position (player can update their own)."""
     session = get_session()
     try:
-        # Verify GM
         session_token = request.cookies.get("sta_session_token")
         if not session_token:
             return jsonify({"error": "Not authenticated"}), 401
@@ -611,14 +720,18 @@ def api_update_player_position(campaign_id: str, player_id: int):
         if not campaign:
             return jsonify({"error": "Campaign not found"}), 404
 
-        gm = session.query(CampaignPlayerRecord).filter_by(
+        # Get current user
+        current_user = session.query(CampaignPlayerRecord).filter_by(
             session_token=session_token,
-            campaign_id=campaign.id,
-            is_gm=True
+            campaign_id=campaign.id
         ).first()
 
-        if not gm:
-            return jsonify({"error": "Only GM can change positions"}), 403
+        if not current_user:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        # Players can only update their own position (or GM can update any)
+        if not current_user.is_gm and current_user.id != player_id:
+            return jsonify({"error": "Can only update your own position"}), 403
 
         # Update player position
         player = session.query(CampaignPlayerRecord).filter_by(
@@ -679,6 +792,139 @@ def api_remove_player(campaign_id: str, player_id: int):
         player.is_active = False
         session.commit()
 
+        return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/player/<int:player_id>", methods=["GET"])
+def api_get_player(campaign_id: str, player_id: int):
+    """API: Get player details with character data."""
+    session = get_session()
+    try:
+        campaign = session.query(CampaignRecord).filter_by(
+            campaign_id=campaign_id
+        ).first()
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        player = session.query(CampaignPlayerRecord).filter_by(
+            id=player_id,
+            campaign_id=campaign.id
+        ).first()
+
+        if not player:
+            return jsonify({"error": "Player not found"}), 404
+
+        # Load character data
+        character_data = None
+        if player.character_id:
+            char_record = session.query(CharacterRecord).filter_by(
+                id=player.character_id
+            ).first()
+            if char_record:
+                char = char_record.to_model()
+                character_data = {
+                    "name": char.name,
+                    "rank": char.rank,
+                    "species": char.species,
+                    "role": char.role,
+                    "attributes": {
+                        "control": char.attributes.control,
+                        "daring": char.attributes.daring,
+                        "fitness": char.attributes.fitness,
+                        "insight": char.attributes.insight,
+                        "presence": char.attributes.presence,
+                        "reason": char.attributes.reason,
+                    },
+                    "disciplines": {
+                        "command": char.disciplines.command,
+                        "conn": char.disciplines.conn,
+                        "engineering": char.disciplines.engineering,
+                        "medicine": char.disciplines.medicine,
+                        "science": char.disciplines.science,
+                        "security": char.disciplines.security,
+                    }
+                }
+
+        return jsonify({
+            "id": player.id,
+            "player_name": player.player_name,
+            "position": player.position,
+            "is_gm": player.is_gm,
+            "character_id": player.character_id,
+            "character": character_data,
+        })
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/player/<int:player_id>", methods=["PUT"])
+def api_update_player(campaign_id: str, player_id: int):
+    """API: Update player and character data (GM only)."""
+    session = get_session()
+    try:
+        # Verify GM
+        session_token = request.cookies.get("sta_session_token")
+        if not session_token:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        campaign = session.query(CampaignRecord).filter_by(
+            campaign_id=campaign_id
+        ).first()
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        gm = session.query(CampaignPlayerRecord).filter_by(
+            session_token=session_token,
+            campaign_id=campaign.id,
+            is_gm=True
+        ).first()
+
+        if not gm:
+            return jsonify({"error": "Only GM can update players"}), 403
+
+        player = session.query(CampaignPlayerRecord).filter_by(
+            id=player_id,
+            campaign_id=campaign.id
+        ).first()
+
+        if not player:
+            return jsonify({"error": "Player not found"}), 404
+
+        data = request.get_json()
+
+        # Update player name
+        if "name" in data:
+            player.player_name = data["name"]
+
+        # Update character data
+        if player.character_id:
+            char_record = session.query(CharacterRecord).filter_by(
+                id=player.character_id
+            ).first()
+            if char_record:
+                # Update character fields directly on record
+                char_record.name = data.get("name", char_record.name)
+                char_record.rank = data.get("rank", char_record.rank)
+                char_record.species = data.get("species", char_record.species)
+                char_record.role = data.get("role", char_record.role)
+
+                # Update attributes JSON
+                if "attributes" in data:
+                    current_attrs = json.loads(char_record.attributes_json)
+                    current_attrs.update(data["attributes"])
+                    char_record.attributes_json = json.dumps(current_attrs)
+
+                # Update disciplines JSON
+                if "disciplines" in data:
+                    current_discs = json.loads(char_record.disciplines_json)
+                    current_discs.update(data["disciplines"])
+                    char_record.disciplines_json = json.dumps(current_discs)
+
+        session.commit()
         return jsonify({"success": True})
     finally:
         session.close()
@@ -1013,5 +1259,154 @@ def api_update_encounter_status(encounter_id: str):
         session.commit()
 
         return jsonify({"success": True, "status": new_status})
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/ship/<int:ship_id>", methods=["GET"])
+def api_get_ship(ship_id: int):
+    """API: Get ship details."""
+    session = get_session()
+    try:
+        ship_record = session.query(StarshipRecord).filter_by(id=ship_id).first()
+
+        if not ship_record:
+            return jsonify({"error": "Ship not found"}), 404
+
+        ship = ship_record.to_model()
+        return jsonify({
+            "id": ship_record.id,
+            "name": ship.name,
+            "ship_class": ship.ship_class,
+            "registry": ship.registry,
+            "scale": ship.scale,
+            "systems": {
+                "comms": ship.systems.comms,
+                "computers": ship.systems.computers,
+                "engines": ship.systems.engines,
+                "sensors": ship.systems.sensors,
+                "structure": ship.systems.structure,
+                "weapons": ship.systems.weapons,
+            },
+            "departments": {
+                "command": ship.departments.command,
+                "conn": ship.departments.conn,
+                "engineering": ship.departments.engineering,
+                "medicine": ship.departments.medicine,
+                "science": ship.departments.science,
+                "security": ship.departments.security,
+            }
+        })
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/ship/<int:ship_id>", methods=["PUT"])
+def api_update_ship(ship_id: int):
+    """API: Update ship details (GM only)."""
+    session = get_session()
+    try:
+        ship_record = session.query(StarshipRecord).filter_by(id=ship_id).first()
+
+        if not ship_record:
+            return jsonify({"error": "Ship not found"}), 404
+
+        data = request.get_json()
+
+        # Update basic fields
+        if "name" in data:
+            ship_record.name = data["name"]
+        if "ship_class" in data:
+            ship_record.ship_class = data["ship_class"]
+        if "registry" in data:
+            ship_record.registry = data["registry"]
+        if "scale" in data:
+            ship_record.scale = data["scale"]
+
+        # Update systems JSON
+        if "systems" in data:
+            current_systems = json.loads(ship_record.systems_json)
+            current_systems.update(data["systems"])
+            ship_record.systems_json = json.dumps(current_systems)
+
+        # Update departments JSON
+        if "departments" in data:
+            current_depts = json.loads(ship_record.departments_json)
+            current_depts.update(data["departments"])
+            ship_record.departments_json = json.dumps(current_depts)
+
+        session.commit()
+        return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/encounter/<encounter_id>", methods=["GET"])
+def api_get_encounter(encounter_id: str):
+    """API: Get encounter details."""
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        return jsonify({
+            "encounter_id": encounter.encounter_id,
+            "name": encounter.name,
+            "status": encounter.status,
+            "round": encounter.round,
+            "threat": encounter.threat,
+        })
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/encounter/<encounter_id>", methods=["PUT"])
+def api_update_encounter(encounter_id: str):
+    """API: Update encounter details (GM only)."""
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        data = request.get_json()
+
+        # Update fields
+        if "name" in data:
+            encounter.name = data["name"]
+        if "threat" in data:
+            encounter.threat = data["threat"]
+
+        session.commit()
+        return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/encounter/<encounter_id>", methods=["DELETE"])
+def api_delete_encounter(encounter_id: str):
+    """API: Delete encounter (GM only, draft only)."""
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        if encounter.status != "draft":
+            return jsonify({"error": "Can only delete draft encounters"}), 400
+
+        session.delete(encounter)
+        session.commit()
+        return jsonify({"success": True})
     finally:
         session.close()

@@ -222,6 +222,29 @@ class Starship:
                 return
         self.breaches.append(Breach(system=system, potency=potency))
 
+    def patch_breach(self, system: SystemType, amount: int = 1) -> int:
+        """
+        Patch (reduce) a breach on a system.
+        Per STA rules, Damage Control patches a breach - removing its penalties
+        but not fully repairing the system until after combat.
+
+        Args:
+            system: The system to patch
+            amount: How much to reduce the breach potency (default 1)
+
+        Returns:
+            The amount actually patched (may be less if breach potency was lower)
+        """
+        for i, breach in enumerate(self.breaches):
+            if breach.system == system:
+                actual_reduction = min(amount, breach.potency)
+                breach.potency -= actual_reduction
+                # Remove the breach entirely if potency reaches 0
+                if breach.potency <= 0:
+                    self.breaches.pop(i)
+                return actual_reduction
+        return 0  # No breach found on this system
+
     def take_damage(self, damage: int) -> dict:
         """
         Apply damage to the ship. Shields absorb first, then hull.
