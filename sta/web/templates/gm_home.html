@@ -12,7 +12,7 @@
     <ul class="action-list">
         {% for campaign in my_campaigns %}
             <li>
-                <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+                <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id, role='gm') }}"
                    style="color: inherit; text-decoration: none; display: block;">
                     <strong>{{ campaign.name }}</strong>
                     <div style="display: flex; justify-content: space-between; align-items: center;">

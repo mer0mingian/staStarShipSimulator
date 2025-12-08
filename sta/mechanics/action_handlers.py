@@ -612,3 +612,354 @@ def apply_effects_to_defense(
     # and might apply to multiple attacks
 
     return modified_resistance, [], effect_details
+
+
+# =============================================================================
+# ACTION COMPLETION MANAGER
+# =============================================================================
+# Centralized handler for action completion - ensures consistent logging and
+# turn management across all action endpoints.
+# =============================================================================
+
+import json
+
+
+class ActionCompletionManager:
+    """
+    Centralized handler for action completion - ensures consistent logging and turn management.
+
+    This class eliminates the need for each action endpoint to manually handle:
+    1. Logging the action to the combat log
+    2. Tracking turn usage
+    3. Alternating turns between sides
+
+    Usage:
+        manager = ActionCompletionManager(session, encounter_record)
+
+        # For player major action (e.g., Fire, Ram):
+        turn_state = manager.complete_player_major(log_config)
+        response.update(turn_state)
+
+        # For player minor action (e.g., Calibrate Weapons):
+        manager.complete_player_minor(log_config)
+
+        # For enemy action with possible counterattack:
+        turn_state = manager.complete_enemy_major(
+            enemy_id=enemy_id,
+            enemy_scale=enemy_record.scale,
+            log_config=log_config,
+            skip_turn_advance=can_counterattack
+        )
+        response.update(turn_state)
+
+    Special cases:
+        - Pending defensive roll: Don't use this manager, handle at endpoint level
+          (create pending_attack, return early without logging)
+        - Counterattack: Use complete_enemy_major with the ENEMY's id (since we're
+          completing the enemy's turn, not starting a new player turn)
+    """
+
+    def __init__(self, session, encounter_record, alternate_turn_fn, log_combat_fn):
+        """
+        Initialize the ActionCompletionManager.
+
+        Args:
+            session: Database session
+            encounter_record: The EncounterRecord for this encounter
+            alternate_turn_fn: Function to alternate turns (passed in to avoid circular imports)
+            log_combat_fn: Function to log combat actions (passed in to avoid circular imports)
+        """
+        self.session = session
+        self.encounter = encounter_record
+        self.alternate_turn = alternate_turn_fn
+        self.log_combat = log_combat_fn
+
+    def complete_player_major(
+        self,
+        actor_name: str,
+        ship_name: str,
+        action_name: str,
+        description: str,
+        task_result: dict = None,
+        damage_dealt: int = 0,
+        momentum_spent: int = 0,
+        threat_spent: int = 0,
+    ) -> dict:
+        """
+        Complete a player major action: log and end turn.
+
+        Args:
+            actor_name: Name of the character taking the action
+            ship_name: Name of the player's ship
+            action_name: Name of the action (e.g., "Fire Phasers", "Ram")
+            description: Human-readable description of what happened
+            task_result: Optional dict with roll results
+            damage_dealt: Amount of damage dealt (if any)
+            momentum_spent: Momentum spent on this action
+            threat_spent: Threat spent on this action
+
+        Returns:
+            Dict with turn state to merge into response
+        """
+        # Log the action
+        self.log_combat(
+            session=self.session,
+            encounter_record=self.encounter,
+            actor_name=actor_name,
+            actor_type="player",
+            ship_name=ship_name,
+            action_name=action_name,
+            action_type="major",
+            description=description,
+            task_result=task_result,
+            damage_dealt=damage_dealt,
+            momentum_spent=momentum_spent,
+            threat_spent=threat_spent,
+        )
+
+        # Track turn usage
+        self.encounter.player_turns_used += 1
+
+        # Alternate turn
+        turn_result = self.alternate_turn(self.session, self.encounter)
+
+        return {
+            "current_turn": turn_result["current_turn"],
+            "round": turn_result["round"],
+            "round_advanced": turn_result["round_advanced"],
+            "player_turns_used": turn_result["player_turns_used"],
+            "player_turns_total": turn_result["player_turns_total"],
+            "enemy_turns_used": turn_result["enemy_turns_used"],
+            "enemy_turns_total": turn_result["enemy_turns_total"],
+            "ships_info": turn_result["ships_info"],
+            "turn_ended": turn_result["current_turn"] == "enemy",
+        }
+
+    def complete_player_minor(
+        self,
+        actor_name: str,
+        ship_name: str,
+        action_name: str,
+        description: str,
+        task_result: dict = None,
+        momentum_spent: int = 0,
+        threat_spent: int = 0,
+    ) -> dict:
+        """
+        Complete a player minor action: log but don't end turn.
+
+        Args:
+            actor_name: Name of the character taking the action
+            ship_name: Name of the player's ship
+            action_name: Name of the action
+            description: Human-readable description of what happened
+            task_result: Optional dict with roll results
+            momentum_spent: Momentum spent on this action
+            threat_spent: Threat spent on this action
+
+        Returns:
+            Empty dict (no turn state change)
+        """
+        # Log the action
+        self.log_combat(
+            session=self.session,
+            encounter_record=self.encounter,
+            actor_name=actor_name,
+            actor_type="player",
+            ship_name=ship_name,
+            action_name=action_name,
+            action_type="minor",
+            description=description,
+            task_result=task_result,
+            damage_dealt=0,
+            momentum_spent=momentum_spent,
+            threat_spent=threat_spent,
+        )
+
+        # No turn change for minor actions
+        return {}
+
+    def complete_enemy_major(
+        self,
+        enemy_id: int,
+        enemy_scale: int,
+        actor_name: str,
+        ship_name: str,
+        action_name: str,
+        description: str,
+        task_result: dict = None,
+        damage_dealt: int = 0,
+        skip_turn_advance: bool = False,
+    ) -> dict:
+        """
+        Complete an enemy major action: log and optionally end turn.
+
+        Args:
+            enemy_id: Database ID of the enemy ship
+            enemy_scale: Scale of the enemy ship (for turn tracking)
+            actor_name: Name of the enemy crew/captain
+            ship_name: Name of the enemy ship
+            action_name: Name of the action
+            description: Human-readable description of what happened
+            task_result: Optional dict with roll results
+            damage_dealt: Amount of damage dealt (if any)
+            skip_turn_advance: If True, don't advance turn (for counterattack-available scenario)
+
+        Returns:
+            Dict with turn state to merge into response (empty if skip_turn_advance)
+        """
+        # Log the action
+        self.log_combat(
+            session=self.session,
+            encounter_record=self.encounter,
+            actor_name=actor_name,
+            actor_type="enemy",
+            ship_name=ship_name,
+            action_name=action_name,
+            action_type="major",
+            description=description,
+            task_result=task_result,
+            damage_dealt=damage_dealt,
+            momentum_spent=0,
+            threat_spent=0,
+        )
+
+        if skip_turn_advance:
+            # Counterattack is available - don't advance turn yet
+            # Turn will be advanced when counterattack resolves or is declined
+            return {}
+
+        # Track turn usage
+        ships_turns_used = json.loads(self.encounter.ships_turns_used_json)
+        ship_turns_used = ships_turns_used.get(str(enemy_id), 0)
+        ships_turns_used[str(enemy_id)] = ship_turns_used + 1
+        self.encounter.ships_turns_used_json = json.dumps(ships_turns_used)
+
+        # Alternate turn
+        turn_result = self.alternate_turn(self.session, self.encounter)
+
+        return {
+            "ship_turns_used": ships_turns_used[str(enemy_id)],
+            "ship_turns_total": enemy_scale,
+            "current_turn": turn_result["current_turn"],
+            "round": turn_result["round"],
+            "round_advanced": turn_result["round_advanced"],
+            "enemy_turns_used": turn_result["enemy_turns_used"],
+            "enemy_turns_total": turn_result["enemy_turns_total"],
+            "player_turns_used": turn_result["player_turns_used"],
+            "player_turns_total": turn_result["player_turns_total"],
+            "ships_info": turn_result["ships_info"],
+            "turn_ended": turn_result["current_turn"] == "player",
+        }
+
+    def complete_counterattack(
+        self,
+        enemy_id: int,
+        enemy_scale: int,
+        actor_name: str,
+        player_ship_name: str,
+        action_name: str,
+        description: str,
+        task_result: dict = None,
+        damage_dealt: int = 0,
+        momentum_spent: int = 0,
+    ) -> dict:
+        """
+        Complete a counterattack action.
+
+        Counterattack is special because:
+        - It's a PLAYER action (logs as player)
+        - But it ends the ENEMY's turn (tracks enemy turn usage)
+
+        Args:
+            enemy_id: Database ID of the enemy ship that was being countered
+            enemy_scale: Scale of the enemy ship
+            actor_name: Name of the player character
+            player_ship_name: Name of the player's ship
+            action_name: Name of the action (e.g., "Counterattack (Phasers)")
+            description: Human-readable description
+            task_result: Optional dict with roll results
+            damage_dealt: Amount of damage dealt
+            momentum_spent: Momentum spent (usually 2 for counterattack)
+
+        Returns:
+            Dict with turn state to merge into response
+        """
+        # Log as player action
+        self.log_combat(
+            session=self.session,
+            encounter_record=self.encounter,
+            actor_name=actor_name,
+            actor_type="player",
+            ship_name=player_ship_name,
+            action_name=action_name,
+            action_type="major",
+            description=description,
+            task_result=task_result,
+            damage_dealt=damage_dealt,
+            momentum_spent=momentum_spent,
+            threat_spent=0,
+        )
+
+        # Track ENEMY turn usage (counterattack finishes the enemy's attack turn)
+        ships_turns_used = json.loads(self.encounter.ships_turns_used_json)
+        ship_turns_used = ships_turns_used.get(str(enemy_id), 0)
+        ships_turns_used[str(enemy_id)] = ship_turns_used + 1
+        self.encounter.ships_turns_used_json = json.dumps(ships_turns_used)
+
+        # Alternate turn
+        turn_result = self.alternate_turn(self.session, self.encounter)
+
+        return {
+            "ship_turns_used": ships_turns_used[str(enemy_id)],
+            "ship_turns_total": enemy_scale,
+            "current_turn": turn_result["current_turn"],
+            "round": turn_result["round"],
+            "round_advanced": turn_result["round_advanced"],
+            "enemy_turns_used": turn_result["enemy_turns_used"],
+            "enemy_turns_total": turn_result["enemy_turns_total"],
+            "player_turns_used": turn_result["player_turns_used"],
+            "player_turns_total": turn_result["player_turns_total"],
+            "ships_info": turn_result["ships_info"],
+            "turn_ended": turn_result["current_turn"] == "player",
+        }
+
+    def complete_enemy_minor(
+        self,
+        actor_name: str,
+        ship_name: str,
+        action_name: str,
+        description: str,
+        task_result: dict = None,
+    ) -> dict:
+        """
+        Complete an enemy minor action: log but don't end turn.
+
+        Args:
+            actor_name: Name of the enemy crew
+            ship_name: Name of the enemy ship
+            action_name: Name of the action
+            description: Human-readable description
+            task_result: Optional dict with roll results
+
+        Returns:
+            Empty dict (no turn state change)
+        """
+        # Log the action
+        self.log_combat(
+            session=self.session,
+            encounter_record=self.encounter,
+            actor_name=actor_name,
+            actor_type="enemy",
+            ship_name=ship_name,
+            action_name=action_name,
+            action_type="minor",
+            description=description,
+            task_result=task_result,
+            damage_dealt=0,
+            momentum_spent=0,
+            threat_spent=0,
+        )
+
+        # No turn change for minor actions
+        return {}

@@ -52,29 +52,13 @@ def gm_home():
     """GM home - campaigns to manage."""
     session = get_session()
     try:
-        # Check for GM's campaigns via session token
-        session_token = request.cookies.get("sta_session_token")
-        my_campaigns = []
-        other_campaigns = []
-
+        # Single-GM mode: all campaigns are accessible to the GM
         all_campaigns = session.query(CampaignRecord).filter_by(is_active=True).all()
-
-        if session_token:
-            my_gm_memberships = session.query(CampaignPlayerRecord).filter_by(
-                session_token=session_token,
-                is_gm=True,
-                is_active=True
-            ).all()
-            my_campaign_ids = [m.campaign_id for m in my_gm_memberships]
-            my_campaigns = [c for c in all_campaigns if c.id in my_campaign_ids]
-            other_campaigns = [c for c in all_campaigns if c.id not in my_campaign_ids]
-        else:
-            other_campaigns = all_campaigns
 
         return render_template(
             "gm_home.html",
-            my_campaigns=my_campaigns,
-            other_campaigns=other_campaigns,
+            my_campaigns=all_campaigns,
+            other_campaigns=[],
         )
     finally:
         session.close()
@@ -136,6 +120,9 @@ def new_campaign():
 @campaigns_bp.route("/<campaign_id>")
 def campaign_dashboard(campaign_id: str):
     """Campaign dashboard - hub for players, ships, encounters."""
+    # Check for role override (single-GM mode)
+    role = request.args.get("role", "")
+
     session = get_session()
     try:
         campaign = session.query(CampaignRecord).filter_by(
@@ -146,26 +133,31 @@ def campaign_dashboard(campaign_id: str):
             flash("Campaign not found")
             return redirect(url_for("campaigns.campaign_list"))
 
-        # Get current user from session token
-        session_token = request.cookies.get("sta_session_token")
-        current_player = None
-        is_gm = False
-        if session_token:
-            current_player = session.query(CampaignPlayerRecord).filter_by(
-                session_token=session_token,
-                campaign_id=campaign.id
-            ).first()
-            if current_player:
-                is_gm = current_player.is_gm
+        # Single-GM mode: if role=gm, skip membership checks
+        if role == "gm":
+            is_gm = True
+            current_player = None
+        else:
+            # Get current user from session token
+            session_token = request.cookies.get("sta_session_token")
+            current_player = None
+            is_gm = False
+            if session_token:
+                current_player = session.query(CampaignPlayerRecord).filter_by(
+                    session_token=session_token,
+                    campaign_id=campaign.id
+                ).first()
+                if current_player:
+                    is_gm = current_player.is_gm
 
-        # Route based on user's role:
-        # - Not in campaign yet → join page
-        # - Player (not GM) → player dashboard
-        # - GM → full dashboard (continue below)
-        if not current_player:
-            return redirect(url_for("campaigns.join_campaign", campaign_id=campaign_id))
-        if not is_gm:
-            return redirect(url_for("campaigns.player_dashboard", campaign_id=campaign_id))
+            # Route based on user's role:
+            # - Not in campaign yet → join page
+            # - Player (not GM) → player dashboard
+            # - GM → full dashboard (continue below)
+            if not current_player:
+                return redirect(url_for("campaigns.join_campaign", campaign_id=campaign_id))
+            if not is_gm:
+                return redirect(url_for("campaigns.player_dashboard", campaign_id=campaign_id))
 
         # Load players with character data
         player_records = session.query(CampaignPlayerRecord).filter_by(
