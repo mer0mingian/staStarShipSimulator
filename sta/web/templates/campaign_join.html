@@ -2,40 +2,123 @@
 
 {% block title %}Join {{ campaign.name }} - STA Starship Simulator{% endblock %}
 
-{% block header %}Join Campaign{% endblock %}
+{% block header %}Select Your Character{% endblock %}
 
 {% block content %}
-<div class="panel" style="max-width: 500px; margin: 0 auto;">
+<div class="panel" style="border-color: var(--lcars-purple); margin-bottom: 20px;">
     <h2>{{ campaign.name }}</h2>
     {% if campaign.description %}
-        <p style="color: var(--lcars-tan); margin-bottom: 20px;">{{ campaign.description }}</p>
+        <p style="color: var(--lcars-tan);">{{ campaign.description }}</p>
     {% endif %}
+</div>
 
-    <form method="POST" action="{{ url_for('campaigns.join_campaign', campaign_id=campaign.campaign_id) }}">
-        <div style="margin-bottom: 15px;">
-            <label for="player_name">Your Name</label>
-            <input type="text" id="player_name" name="player_name" required
-                   style="width: 100%;" placeholder="Enter your name">
+{% if players %}
+<form method="POST" action="{{ url_for('campaigns.join_campaign', campaign_id=campaign.campaign_id) }}">
+    <div class="panel">
+        <h2>Available Characters</h2>
+        <p style="color: var(--lcars-tan); margin-bottom: 15px;">Select the character you want to play:</p>
+
+        <div class="character-list">
+            {% for player in players %}
+                <label class="character-card" style="display: block; background: #222; border-radius: 5px; padding: 15px; margin-bottom: 10px; cursor: pointer; border: 2px solid transparent;">
+                    <input type="radio" name="player_id" value="{{ player.id }}" required style="margin-right: 10px;">
+                    <div style="display: inline-block; vertical-align: top; width: calc(100% - 30px);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <strong style="font-size: 1.1em;">{{ player.player_name }}</strong>
+                            {% if player.character %}
+                                <span style="color: var(--lcars-tan); font-size: 0.85em;">
+                                    {{ player.character.rank or '' }} {{ player.character.species or '' }}
+                                </span>
+                            {% endif %}
+                        </div>
+                        {% if player.character %}
+                            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; font-size: 0.75em;">
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">CTL</div>
+                                    <div>{{ player.character.attributes.control }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">DAR</div>
+                                    <div>{{ player.character.attributes.daring }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">FIT</div>
+                                    <div>{{ player.character.attributes.fitness }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">INS</div>
+                                    <div>{{ player.character.attributes.insight }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">PRE</div>
+                                    <div>{{ player.character.attributes.presence }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-orange);">REA</div>
+                                    <div>{{ player.character.attributes.reason }}</div>
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; font-size: 0.75em; margin-top: 5px;">
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">CMD</div>
+                                    <div>{{ player.character.disciplines.command }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">CON</div>
+                                    <div>{{ player.character.disciplines.conn }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">ENG</div>
+                                    <div>{{ player.character.disciplines.engineering }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">MED</div>
+                                    <div>{{ player.character.disciplines.medicine }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">SCI</div>
+                                    <div>{{ player.character.disciplines.science }}</div>
+                                </div>
+                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                    <div style="color: var(--lcars-blue);">SEC</div>
+                                    <div>{{ player.character.disciplines.security }}</div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <p style="color: var(--lcars-tan); font-size: 0.85em; font-style: italic;">No character stats</p>
+                        {% endif %}
+                    </div>
+                </label>
+            {% endfor %}
         </div>
 
-        <div style="margin-bottom: 15px;">
-            <label for="position">Bridge Position</label>
-            <select id="position" name="position" style="width: 100%;">
-                {% for pos in positions %}
-                    <option value="{{ pos }}">{{ pos.title() }}</option>
-                {% endfor %}
-            </select>
-            <p style="color: var(--lcars-tan); font-size: 0.9em; margin-top: 5px;">
-                The GM can reassign positions later
-            </p>
-        </div>
-
-        <div style="display: flex; gap: 10px; justify-content: flex-end;">
-            <a href="{{ url_for('campaigns.campaign_list') }}" class="btn btn-small" style="background: #666;">
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+            <a href="{{ url_for('campaigns.player_home') }}" class="btn btn-small" style="background: #666;">
                 Cancel
             </a>
-            <button type="submit" class="btn">Join Campaign</button>
+            <button type="submit" class="btn">Select Character</button>
         </div>
-    </form>
+    </div>
+</form>
+{% else %}
+<div class="panel" style="border-color: var(--lcars-tan);">
+    <h2>No Characters Available</h2>
+    <p style="color: var(--lcars-tan);">
+        The Game Master hasn't created any characters for this campaign yet.
+        Please ask Q to create characters before you can join.
+    </p>
+    <div style="margin-top: 15px;">
+        <a href="{{ url_for('campaigns.player_home') }}" class="btn btn-small" style="background: #666;">
+            Back
+        </a>
+    </div>
 </div>
+{% endif %}
+
+<style>
+.character-card:has(input:checked) {
+    border-color: var(--lcars-green) !important;
+    background: #2a2a2a !important;
+}
+</style>
 {% endblock %}

@@ -141,11 +141,40 @@ def combat(encounter_id: str):
             flash("Encounter not found")
             return redirect(url_for("main.index"))
 
-        # Load player character and ship
+        # Load player character - from campaign membership if available, otherwise from encounter
         player_char = None
         player_ship = None
         player_ship_db_id = None
-        if encounter.player_character_id:
+        current_campaign_player = None  # Track this for position lookup later
+
+        # Check if this is a campaign encounter and player has a campaign membership
+        if encounter.campaign_id and role == "player":
+            session_token = request.cookies.get("sta_session_token")
+            if session_token:
+                from sta.database import CampaignPlayerRecord
+                current_campaign_player = session.query(CampaignPlayerRecord).filter_by(
+                    session_token=session_token,
+                    campaign_id=encounter.campaign_id
+                ).first()
+
+            # If player role but no campaign membership, redirect to join the campaign
+            if not current_campaign_player:
+                # Get campaign_id string for redirect
+                campaign = session.query(CampaignRecord).filter_by(id=encounter.campaign_id).first()
+                if campaign:
+                    flash("Please join the campaign first to access this encounter.")
+                    return redirect(url_for("campaigns.join_campaign", campaign_id=campaign.campaign_id))
+
+            if current_campaign_player and current_campaign_player.character_id:
+                # Use player's own character from their campaign membership
+                char_record = session.query(CharacterRecord).filter_by(
+                    id=current_campaign_player.character_id
+                ).first()
+                if char_record:
+                    player_char = char_record.to_model()
+
+        # Fall back to encounter's player character if no campaign character found
+        if not player_char and encounter.player_character_id:
             char_record = session.query(CharacterRecord).filter_by(
                 id=encounter.player_character_id
             ).first()
@@ -171,9 +200,16 @@ def combat(encounter_id: str):
                 enemy_ships.append(enemy_record.to_model())
                 enemy_ship_db_ids.append(eid)
 
-        # Get available actions for player's position
+        # Get player's position - from campaign membership if available, otherwise from encounter
         from sta.mechanics.actions import get_actions_for_position
-        position = Position(encounter.player_position)
+
+        # Use campaign position if available (from earlier lookup), otherwise fall back to encounter's position
+        player_campaign_position = None
+        if current_campaign_player and current_campaign_player.position and current_campaign_player.position != "unassigned":
+            player_campaign_position = current_campaign_player.position
+
+        position_value = player_campaign_position if player_campaign_position else encounter.player_position
+        position = Position(position_value)
         actions = get_actions_for_position(position)
 
         # Load active effects

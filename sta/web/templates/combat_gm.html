@@ -1632,15 +1632,35 @@
                 }
 
                 const isPlayer = entry.actor_type === 'player';
-                const bgColor = isPlayer ? '#1a2a1a' : '#2a1a1a';
-                const borderColor = isPlayer ? 'var(--lcars-green)' : 'var(--lcars-red)';
+                // Check if this action failed (from task_result or description)
+                const isFailed = (entry.task_result && entry.task_result.succeeded === false) ||
+                                 entry.description.toLowerCase().includes('failed');
+
+                // Failed actions get red styling regardless of actor type
+                let bgColor, borderColor;
+                if (isFailed) {
+                    bgColor = '#2a1a1a';
+                    borderColor = 'var(--lcars-red)';
+                } else {
+                    bgColor = isPlayer ? '#1a2a1a' : '#2a1a1a';
+                    borderColor = isPlayer ? 'var(--lcars-green)' : 'var(--lcars-red)';
+                }
                 const actionTypeColor = entry.action_type === 'major' ? 'var(--lcars-orange)' : 'var(--lcars-tan)';
+
+                // Format timestamp
+                const timestamp = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '';
+
+                const failedLabel = isFailed ? '<span style="font-size: 0.75em; color: var(--lcars-red); font-weight: bold; margin-right: 5px;">FAILED</span>' : '';
 
                 html += `
                     <div style="padding: 8px; background: ${bgColor}; border-left: 3px solid ${borderColor}; margin: 5px 0; border-radius: 0 5px 5px 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <strong style="color: ${borderColor};">${entry.actor_name}</strong>
-                            <span style="font-size: 0.75em; color: ${actionTypeColor}; text-transform: uppercase;">${entry.action_type}</span>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                ${failedLabel}
+                                <span style="font-size: 0.7em; color: #666;">${timestamp}</span>
+                                <span style="font-size: 0.75em; color: ${actionTypeColor}; text-transform: uppercase;">${entry.action_type}</span>
+                            </div>
                         </div>
                         <div style="color: var(--lcars-blue); font-size: 0.9em; margin: 3px 0;">
                             ${entry.ship_name} → <strong>${entry.action_name}</strong>
