@@ -52,29 +52,13 @@ def gm_home():
     """GM home - campaigns to manage."""
     session = get_session()
     try:
-        # Check for GM's campaigns via session token
-        session_token = request.cookies.get("sta_session_token")
-        my_campaigns = []
-        other_campaigns = []
-
+        # Single-GM mode: all campaigns are accessible to the GM
         all_campaigns = session.query(CampaignRecord).filter_by(is_active=True).all()
-
-        if session_token:
-            my_gm_memberships = session.query(CampaignPlayerRecord).filter_by(
-                session_token=session_token,
-                is_gm=True,
-                is_active=True
-            ).all()
-            my_campaign_ids = [m.campaign_id for m in my_gm_memberships]
-            my_campaigns = [c for c in all_campaigns if c.id in my_campaign_ids]
-            other_campaigns = [c for c in all_campaigns if c.id not in my_campaign_ids]
-        else:
-            other_campaigns = all_campaigns
 
         return render_template(
             "gm_home.html",
-            my_campaigns=my_campaigns,
-            other_campaigns=other_campaigns,
+            my_campaigns=all_campaigns,
+            other_campaigns=[],
         )
     finally:
         session.close()
