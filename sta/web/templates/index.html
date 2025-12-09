@@ -5,70 +5,151 @@
 {% block header %}Welcome to Star Trek Adventures{% endblock %}
 
 {% block content %}
-<div style="max-width: 600px; margin: 0 auto; text-align: center;">
-    <div class="panel" style="padding: 30px;">
-        <h2 style="margin-bottom: 20px;">Select Your Role</h2>
-        <p style="color: var(--lcars-tan); margin-bottom: 30px;">
-            How would you like to participate in today's session?
-        </p>
-
-        <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
-            <a href="{{ url_for('campaigns.player_home') }}" class="role-card" style="flex: 1; min-width: 200px; max-width: 250px;">
-                <div style="font-size: 3em; margin-bottom: 10px;">🎮</div>
-                <div style="font-size: 1.3em; font-weight: bold; color: var(--lcars-orange); margin-bottom: 10px;">
-                    Player
-                </div>
-                <div style="color: var(--lcars-tan); font-size: 0.9em;">
-                    Join a campaign and take your station on the bridge
-                </div>
-            </a>
-
-            <a href="{{ url_for('campaigns.gm_home') }}" class="role-card" style="flex: 1; min-width: 200px; max-width: 250px;">
-                <div style="font-size: 3em; margin-bottom: 10px;">🎲</div>
-                <div style="font-size: 1.3em; font-weight: bold; color: var(--lcars-purple); margin-bottom: 10px;">
-                    Game Master
-                </div>
-                <div style="color: var(--lcars-tan); font-size: 0.9em;">
-                    Create and run campaigns for your crew
-                </div>
-            </a>
-        </div>
+<div style="max-width: 700px; margin: 0 auto;">
+    <!-- Main Selection Panel -->
+    <div class="lcars-bar-capped">
+        <div class="bar-cap"></div>
+        <div class="bar-content">Select Your Role</div>
+        <div class="bar-cap"></div>
     </div>
 
-    <div class="panel" style="margin-top: 20px; padding: 15px; border-color: var(--lcars-tan);">
-        <p style="color: var(--lcars-tan); font-size: 0.9em; margin: 0;">
-            Star Trek Adventures 2nd Edition Starship Combat Simulator
-        </p>
+    <p class="text-center mb-3" style="color: var(--lcars-almond);">
+        How would you like to participate in today's session?
+    </p>
+
+    <div class="lcars-grid-2" style="max-width: 600px; margin: 0 auto;">
+        <!-- Player Card -->
+        <a href="{{ url_for('campaigns.player_home') }}" class="role-card role-player">
+            <div class="role-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+            </div>
+            <div class="role-title">Player</div>
+            <div class="role-desc">Join a campaign and take your station on the bridge</div>
+            <div class="role-pill">
+                <span class="lcars-pill pill-orange">Connect</span>
+            </div>
+        </a>
+
+        <!-- GM Card -->
+        <a href="{{ url_for('campaigns.gm_home') }}" class="role-card role-gm">
+            <div class="role-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                </svg>
+            </div>
+            <div class="role-title">Game Master</div>
+            <div class="role-desc">Create and run campaigns for your crew</div>
+            <div class="role-pill">
+                <span class="lcars-pill pill-violet">Command</span>
+            </div>
+        </a>
+    </div>
+
+    <!-- Info Panel -->
+    <div class="lcars-panel panel-blue mt-3" style="text-align: center;">
+        <div class="lcars-pills" style="justify-content: center;">
+            <span class="lcars-pill pill-ice">STA 2E</span>
+            <span class="lcars-pill pill-gold">Starship Combat</span>
+            <span class="lcars-pill pill-violet">Simulator</span>
+        </div>
     </div>
 </div>
 
 <style>
     .role-card {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
         padding: 30px 20px;
-        background: #1a1a1a;
-        border: 2px solid var(--lcars-orange);
-        border-radius: 15px;
+        background: var(--lcars-panel-bg);
+        border: 3px solid var(--lcars-butterscotch);
+        border-radius: 20px;
         text-decoration: none;
         transition: all 0.2s ease;
     }
 
     .role-card:hover {
-        background: #2a2a2a;
-        border-color: var(--lcars-blue);
-        transform: translateY(-3px);
+        transform: translateY(-4px);
+        box-shadow: 0 8px 30px rgba(255, 153, 0, 0.2);
+        filter: brightness(110%);
+        text-decoration: none;
     }
 
-    .role-card:first-child:hover {
+    .role-player {
         border-color: var(--lcars-orange);
     }
 
-    .role-card:last-child {
-        border-color: var(--lcars-purple);
+    .role-player:hover {
+        border-color: var(--lcars-gold);
+        box-shadow: 0 8px 30px rgba(255, 153, 0, 0.3);
     }
 
-    .role-card:last-child:hover {
-        border-color: var(--lcars-blue);
+    .role-gm {
+        border-color: var(--lcars-african-violet);
+    }
+
+    .role-gm:hover {
+        border-color: var(--lcars-lilac);
+        box-shadow: 0 8px 30px rgba(204, 153, 255, 0.3);
+    }
+
+    .role-icon {
+        width: 80px;
+        height: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 15px;
+        border-radius: 50%;
+        background: #1a1a1a;
+    }
+
+    .role-player .role-icon {
+        color: var(--lcars-orange);
+        border: 3px solid var(--lcars-orange);
+    }
+
+    .role-gm .role-icon {
+        color: var(--lcars-african-violet);
+        border: 3px solid var(--lcars-african-violet);
+    }
+
+    .role-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+    }
+
+    .role-player .role-title {
+        color: var(--lcars-orange);
+    }
+
+    .role-gm .role-title {
+        color: var(--lcars-african-violet);
+    }
+
+    .role-desc {
+        color: var(--lcars-almond);
+        font-size: 0.95rem;
+        text-align: center;
+        margin-bottom: 15px;
+    }
+
+    .role-pill {
+        margin-top: auto;
+    }
+
+    @media (max-width: 600px) {
+        .lcars-grid-2 {
+            grid-template-columns: 1fr;
+        }
+
+        .role-card {
+            padding: 25px 15px;
+        }
     }
 </style>
 {% endblock %}

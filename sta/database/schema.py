@@ -351,6 +351,8 @@ class CampaignPlayerRecord(Base):
 
     # Bridge position assignment
     position: Mapped[str] = mapped_column(String(20), default="captain")
+    # Pending position change (takes effect at start of next turn)
+    pending_position: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default=None)
 
     is_gm: Mapped[bool] = mapped_column(default=False)
     is_active: Mapped[bool] = mapped_column(default=True)

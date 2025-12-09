@@ -700,11 +700,24 @@ def next_turn(encounter_id: str):
 
         enemy_info = get_enemy_turn_info(session, encounter)
         player_info = get_player_turn_info(session, encounter)
+        multiplayer_info = get_multiplayer_turn_info(session, encounter)
 
         # Mark current side as having used all their turns
         if encounter.current_turn == "player":
             # Player passes - mark all their turns as used
-            encounter.player_turns_used = player_info["total_turns"]
+            if multiplayer_info["is_multiplayer"]:
+                # In multiplayer mode, mark all players as having acted
+                players_turns_used = json.loads(encounter.players_turns_used_json or "{}")
+                for player_data in multiplayer_info["players_info"]:
+                    if not player_data.get("has_acted", False):
+                        players_turns_used[str(player_data["player_id"])] = {
+                            "acted": True,
+                            "acted_at": datetime.now().isoformat(),
+                        }
+                encounter.players_turns_used_json = json.dumps(players_turns_used)
+            else:
+                # Legacy single-player mode
+                encounter.player_turns_used = player_info["total_turns"]
         else:
             # Enemy passes - mark all enemy turns as used
             ships_turns_used = json.loads(encounter.ships_turns_used_json)
@@ -991,6 +1004,7 @@ def fire_weapon():
     previous_rolls = data.get("previous_rolls")  # Previous roll results (for re-roll)
     role = data.get("role", "player")  # Default to player
     character_id = data.get("character_id")  # Optional: override acting character for logging
+    player_id = data.get("player_id")  # Campaign player ID for multiplayer turn tracking
 
     # Check turn ownership for player fire actions
     if role == "player":
@@ -1366,6 +1380,7 @@ def fire_weapon():
                 "succeeded": result.succeeded,
             },
             damage_dealt=response.get("total_damage", 0),
+            player_id=player_id,
         )
         response.update(turn_state)
 
@@ -2077,6 +2092,123 @@ def execute_action(encounter_id: str):
                 if result.success:
                     player_ship_record.has_reserve_power = player_ship.has_reserve_power
 
+            elif action_name == "Change Position":
+                # Change Position - set pending_position on the player's campaign record
+                new_position = data.get("new_position")
+                if new_position is None:
+                    return jsonify({"error": "new_position required for Change Position"}), 400
+
+                # Get the current player from their session token
+                session_token = request.cookies.get("sta_session_token")
+                if not session_token:
+                    return jsonify({"error": "Not authenticated"}), 401
+
+                # Find the player's campaign record
+                if encounter_record.campaign_id:
+                    from sta.database.schema import CampaignPlayerRecord
+                    campaign_player = session.query(CampaignPlayerRecord).filter_by(
+                        campaign_id=encounter_record.campaign_id,
+                        session_token=session_token
+                    ).first()
+
+                    if not campaign_player:
+                        return jsonify({"error": "Player not found in campaign"}), 404
+
+                    current_position = campaign_player.position
+                    player_name = campaign_player.player_name
+
+                    # Use the handler to validate
+                    from sta.mechanics.action_handlers import execute_change_position
+                    result = execute_change_position(player_name, current_position, new_position)
+
+                    if result.success:
+                        # Set the pending position
+                        campaign_player.pending_position = new_position.lower()
+                        result.data["pending_position"] = new_position.lower()
+                else:
+                    return jsonify({"error": "Change Position requires a campaign context"}), 400
+
+            elif action_name == "Override":
+                # Override - execute an action from another station with +1 difficulty
+                target_station = data.get("target_station")
+                target_action = data.get("target_action")
+
+                if not target_station:
+                    return jsonify({"error": "target_station required for Override"}), 400
+                if not target_action:
+                    return jsonify({"error": "target_action required for Override"}), 400
+
+                # Check that player is not Captain
+                session_token = request.cookies.get("sta_session_token")
+                if session_token and encounter_record.campaign_id:
+                    from sta.database.schema import CampaignPlayerRecord
+                    campaign_player = session.query(CampaignPlayerRecord).filter_by(
+                        campaign_id=encounter_record.campaign_id,
+                        session_token=session_token
+                    ).first()
+
+                    if campaign_player and campaign_player.position == "captain":
+                        return jsonify({"error": "Captain cannot use Override"}), 400
+
+                # Get the target action config
+                from sta.mechanics.action_config import get_action_config as get_target_config
+                target_config = get_target_config(target_action)
+                if not target_config:
+                    return jsonify({"error": f"Unknown action: {target_action}"}), 400
+
+                # Get Override difficulty modifier
+                from sta.mechanics.action_handlers import get_override_difficulty_modifier
+                override_modifier = get_override_difficulty_modifier()
+
+                # For task roll actions, add +1 to difficulty
+                if target_config.get("type") == "task_roll":
+                    # Modify the difficulty in the roll config
+                    roll_config = target_config.get("roll", {})
+                    base_difficulty = roll_config.get("difficulty", 1)
+                    modified_difficulty = base_difficulty + override_modifier
+
+                    # Create override result
+                    from sta.mechanics.action_handlers import ActionExecutionResult
+
+                    # Check if roll was already done by frontend
+                    if "roll_succeeded" in data:
+                        if data.get("roll_succeeded"):
+                            momentum_generated = data.get("roll_momentum", 0)
+                            result = apply_task_roll_success(
+                                target_action,
+                                encounter,
+                                player_ship,
+                                momentum_generated,
+                                target_config
+                            )
+                            result.message = f"Override: {result.message} (+1 Difficulty)"
+                        else:
+                            roll_successes = data.get("roll_successes", 0)
+                            roll_complications = data.get("roll_complications", 0)
+                            result = ActionExecutionResult(
+                                False,
+                                f"Override: {target_action} failed! ({roll_successes} successes, needed {modified_difficulty})"
+                            )
+                            if roll_complications > 0:
+                                result.message += f" {roll_complications} complication(s)!"
+                    else:
+                        # Backend rolls not fully supported for Override yet
+                        return jsonify({"error": "Override requires frontend roll"}), 400
+
+                    result.data["override_target"] = target_action
+                    result.data["override_station"] = target_station
+                    result.data["difficulty_modifier"] = override_modifier
+
+                elif target_config.get("type") == "buff":
+                    # Buff actions don't have difficulty - just execute them
+                    result = execute_buff_action(target_action, encounter, player_ship, target_config)
+                    result.message = f"Override: {result.message}"
+                    result.data["override_target"] = target_action
+                    result.data["override_station"] = target_station
+
+                else:
+                    return jsonify({"error": f"Cannot override action type: {target_config.get('type')}"}), 400
+
             else:
                 return jsonify({"error": f"Special action not implemented: {action_name}"}), 400
 
@@ -2092,9 +2224,10 @@ def execute_action(encounter_id: str):
             player_ship_record.has_reserve_power = player_ship.has_reserve_power
 
         # Determine if this is a major action (uses a turn)
-        # buff and toggle actions are minor; task_roll and special are major
+        # buff and toggle actions are minor; task_roll and most special actions are major
+        # Exception: Change Position is a special action but is minor
         action_type = config.get("type")
-        is_major_action = action_type in ("task_roll", "special")
+        is_major_action = action_type in ("task_roll", "special") and action_name != "Change Position"
 
         response = result.to_dict()
 
@@ -2497,6 +2630,92 @@ def npc_action(encounter_id: str):
                     result["message"] = f"{npc_ship.name} failed to ram!"
             else:
                 result["message"] = f"{npc_ship.name}: {action_name} - special action (not implemented)"
+
+        elif action_type == "sensor_sweep":
+            # NPC Sensor Sweep - reveals the scanning ship's position and adjacent hexes
+            # This allows the GM to see player ships in those zones (if in fog)
+            ship_positions_data = json.loads(encounter_record.ship_positions_json or "{}")
+            enemy_key = f"enemy_{ship_index}"
+            enemy_pos = ship_positions_data.get(enemy_key, {"q": 0, "r": 0})
+            player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
+
+            # Calculate hex distance between enemy and player
+            def hex_distance(q1, r1, q2, r2):
+                return (abs(q1 - q2) + abs(q1 + r1 - q2 - r2) + abs(r1 - r2)) // 2
+
+            distance = hex_distance(
+                enemy_pos.get("q", 0), enemy_pos.get("r", 0),
+                player_pos.get("q", 0), player_pos.get("r", 0)
+            )
+
+            # Ships in same hex always see each other - no roll needed
+            if distance == 0:
+                result["message"] = f"{npc_ship.name}: Player ship detected in same sector!"
+                result["player_detected"] = True
+                result["detected_position"] = player_pos
+            else:
+                # Perform the roll using NPC crew quality
+                target_number = attribute + department
+                num_dice = 2 + bonus_dice
+
+                rolls = [random.randint(1, 20) for _ in range(num_dice)]
+                successes = 0
+                complications = 0
+
+                for roll in rolls:
+                    if roll == 1:
+                        successes += 2  # Critical success
+                    elif roll <= 2 and focus:
+                        successes += 2  # Focus makes 2 also a crit
+                    elif roll <= target_number:
+                        successes += 1
+                    if roll == 20:
+                        complications += 1
+
+                succeeded = successes >= difficulty
+                momentum_generated = max(0, successes - difficulty) if succeeded else 0
+
+                result["roll_results"] = {
+                    "rolls": rolls,
+                    "target": target_number,
+                    "successes": successes,
+                    "complications": complications,
+                    "difficulty": difficulty,
+                    "succeeded": succeeded,
+                    "momentum_generated": momentum_generated,
+                    "has_focus": focus,
+                }
+
+                if succeeded:
+                    # Create detection effect - stores the SCANNER's position
+                    # This reveals the scanner's hex and all adjacent hexes for visibility checks
+                    new_effect = ActiveEffect(
+                        source_action="Sensor Sweep",
+                        source_ship=f"enemy_{ship_index}",  # Mark as enemy source
+                        applies_to="sensor",
+                        duration="end_of_round",  # Detection lasts until end of current round
+                        detected_position={"q": enemy_pos.get("q", 0), "r": enemy_pos.get("r", 0)},
+                    )
+                    active_effects.append(new_effect)
+
+                    # Check if player is within detection range (adjacent = distance 1)
+                    player_in_range = distance <= 1
+                    if player_in_range:
+                        result["message"] = f"{npc_ship.name}: Sensor Sweep detected player ship in adjacent sector!"
+                        result["player_detected"] = True
+                        result["detected_position"] = player_pos
+                    else:
+                        result["message"] = f"{npc_ship.name}: Sensor Sweep complete - no contacts in adjacent sectors."
+                        result["player_detected"] = False
+
+                    # Generate threat from momentum
+                    if momentum_generated > 0:
+                        encounter_record.threat += momentum_generated
+                        result["threat_generated"] = momentum_generated
+                        result["message"] += f" (+{momentum_generated} Threat)"
+                else:
+                    result["message"] = f"{npc_ship.name}: Sensor Sweep failed."
+                    result["player_detected"] = False
 
         # Save updated effects
         encounter_record.active_effects_json = json.dumps([e.to_dict() for e in active_effects])
@@ -3750,13 +3969,20 @@ def update_map_terrain(encounter_id: str):
 
 @api_bp.route("/encounter/<encounter_id>/map/ship-position", methods=["POST"])
 def update_ship_position(encounter_id: str):
-    """Update a ship's position on the tactical map."""
+    """Update a ship's position on the tactical map.
+
+    Optional parameters:
+        log_action: bool - If true, log this as an Impulse action to combat log
+        action_name: str - Name of the action (default "Impulse")
+    """
     session = get_session()
     try:
         data = request.json
         ship_id = data.get("ship_id")  # "player" or "enemy_0", "enemy_1", etc.
         q = data.get("q")
         r = data.get("r")
+        log_action = data.get("log_action", False)
+        action_name = data.get("action_name", "Impulse")
 
         if not ship_id or q is None or r is None:
             return jsonify({"error": "Missing ship_id, q, or r"}), 400
@@ -3776,7 +4002,6 @@ def update_ship_position(encounter_id: str):
 
         # Save back to database
         encounter_record.ship_positions_json = json.dumps(ship_positions_data)
-        session.commit()
 
         # Build ship positions list with names for response
         ship_positions = []
@@ -3784,6 +4009,7 @@ def update_ship_position(encounter_id: str):
 
         # Player ship
         player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
+        player_ship = None
         if encounter_record.player_ship_id:
             player_ship = session.query(StarshipRecord).get(encounter_record.player_ship_id)
             ship_positions.append({
@@ -3795,8 +4021,10 @@ def update_ship_position(encounter_id: str):
 
         # Enemy ships
         enemy_ids = json.loads(encounter_record.enemy_ship_ids_json or "[]")
+        enemy_ships = {}
         for i, enemy_id in enumerate(enemy_ids):
             enemy_ship = session.query(StarshipRecord).get(enemy_id)
+            enemy_ships[f"enemy_{i}"] = enemy_ship
             enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
             ship_positions.append({
                 "id": f"enemy_{i}",
@@ -3804,6 +4032,32 @@ def update_ship_position(encounter_id: str):
                 "faction": "enemy",
                 "position": enemy_pos
             })
+
+        # Log the action if requested
+        if log_action:
+            # Determine ship name and actor type
+            if ship_id == "player":
+                ship_name = player_ship.name if player_ship else "Player Ship"
+                actor_type = "player"
+                actor_name = "Helm"
+            else:
+                ship_record = enemy_ships.get(ship_id)
+                ship_name = ship_record.name if ship_record else ship_id
+                actor_type = "enemy"
+                actor_name = f"{ship_name} Helm"
+
+            log_combat_action(
+                session=session,
+                encounter_record=encounter_record,
+                actor_name=actor_name,
+                actor_type=actor_type,
+                ship_name=ship_name,
+                action_name=action_name,
+                action_type="minor",
+                description=f"{ship_name} moved to sector ({q}, {r})",
+            )
+
+        session.commit()
 
         return jsonify({
             "success": True,

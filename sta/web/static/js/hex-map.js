@@ -152,6 +152,8 @@ const HexMap = {
         const onShipClick = options.onShipClick || null;
         const selectedShipId = options.selectedShipId || null;
         const validMoves = options.validMoves || [];
+        const shipLabelFontSize = options.shipLabelFontSize || 10;
+        const coordFontSize = options.coordFontSize || 9;
 
         // Create tile lookup for terrain
         const tileLookup = {};
@@ -437,12 +439,12 @@ const HexMap = {
                 // Ship name label
                 const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 label.setAttribute('x', px);
-                label.setAttribute('y', py + size + 14);
+                label.setAttribute('y', py + size + 14 + (shipLabelFontSize > 10 ? (shipLabelFontSize - 10) : 0));
                 label.setAttribute('text-anchor', 'middle');
                 label.setAttribute('fill', isPlayer ? 'var(--lcars-green, #99cc99)' : 'var(--lcars-red, #cc6666)');
-                label.setAttribute('font-size', '10');
+                label.setAttribute('font-size', shipLabelFontSize);
                 label.setAttribute('font-weight', 'bold');
-                label.textContent = ship.name?.substring(0, 12) || (isPlayer ? 'Player' : `Enemy ${index + 1}`);
+                label.textContent = ship.name?.substring(0, 16) || (isPlayer ? 'Player' : `Enemy ${index + 1}`);
                 shipGroup.appendChild(label);
             });
         }
