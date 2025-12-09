@@ -319,6 +319,47 @@ def combat(encounter_id: str):
         # Select template based on role
         template = "combat_gm.html" if role == "gm" else "combat_player.html"
 
+        # Multi-player info for player view
+        my_player_id = None
+        my_player_name = None
+        campaign_players = []
+        is_multiplayer = False
+
+        if encounter.campaign_id:
+            from sta.database import CampaignPlayerRecord
+            campaign_players_query = session.query(CampaignPlayerRecord).filter_by(
+                campaign_id=encounter.campaign_id,
+                is_active=True,
+                is_gm=False
+            ).all()
+
+            is_multiplayer = len(campaign_players_query) > 1
+
+            # Build player list for template
+            players_turns_used = json.loads(encounter.players_turns_used_json or "{}")
+            for cp in campaign_players_query:
+                player_data = players_turns_used.get(str(cp.id), {})
+                campaign_players.append({
+                    "id": cp.id,
+                    "name": cp.player_name,
+                    "position": cp.position,
+                    "has_acted": player_data.get("acted", False),
+                    "is_current": encounter.current_player_id == cp.id,
+                })
+
+            # Get current player's info
+            if current_campaign_player:
+                my_player_id = current_campaign_player.id
+                my_player_name = current_campaign_player.player_name
+
+        # Get current claiming player's name
+        current_player_name = None
+        if encounter.current_player_id:
+            for cp in campaign_players:
+                if cp["id"] == encounter.current_player_id:
+                    current_player_name = cp["name"]
+                    break
+
         return render_template(
             template,
             encounter=encounter,
@@ -336,6 +377,12 @@ def combat(encounter_id: str):
             role=role,
             tactical_map=tactical_map_data,
             ship_positions=ship_positions,
+            # Multi-player info
+            is_multiplayer=is_multiplayer,
+            my_player_id=my_player_id,
+            my_player_name=my_player_name,
+            campaign_players=campaign_players,
+            current_player_name=current_player_name,
         )
     finally:
         session.close()

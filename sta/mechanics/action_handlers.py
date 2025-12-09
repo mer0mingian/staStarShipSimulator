@@ -684,6 +684,7 @@ class ActionCompletionManager:
         damage_dealt: int = 0,
         momentum_spent: int = 0,
         threat_spent: int = 0,
+        player_id: int = None,
     ) -> dict:
         """
         Complete a player major action: log and end turn.
@@ -697,6 +698,7 @@ class ActionCompletionManager:
             damage_dealt: Amount of damage dealt (if any)
             momentum_spent: Momentum spent on this action
             threat_spent: Threat spent on this action
+            player_id: ID of the player who acted (for multi-player tracking)
 
         Returns:
             Dict with turn state to merge into response
@@ -717,11 +719,11 @@ class ActionCompletionManager:
             threat_spent=threat_spent,
         )
 
-        # Track turn usage
+        # Track turn usage (legacy single-player mode)
         self.encounter.player_turns_used += 1
 
-        # Alternate turn
-        turn_result = self.alternate_turn(self.session, self.encounter)
+        # Alternate turn (passing player_id for multi-player tracking)
+        turn_result = self.alternate_turn(self.session, self.encounter, player_id=player_id)
 
         return {
             "current_turn": turn_result["current_turn"],
@@ -733,6 +735,10 @@ class ActionCompletionManager:
             "enemy_turns_total": turn_result["enemy_turns_total"],
             "ships_info": turn_result["ships_info"],
             "turn_ended": turn_result["current_turn"] == "enemy",
+            # Multi-player info
+            "is_multiplayer": turn_result.get("is_multiplayer", False),
+            "current_player_id": turn_result.get("current_player_id"),
+            "players_info": turn_result.get("players_info", []),
         }
 
     def complete_player_minor(
