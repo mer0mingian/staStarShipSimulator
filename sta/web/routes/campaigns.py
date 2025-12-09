@@ -725,6 +725,15 @@ def api_update_player_position(campaign_id: str, player_id: int):
         if not current_user.is_gm and current_user.id != player_id:
             return jsonify({"error": "Can only update your own position"}), 403
 
+        # Check if there's an active encounter - if so, position is locked
+        active_encounter = session.query(EncounterRecord).filter_by(
+            campaign_id=campaign.id,
+            status="active"
+        ).first()
+
+        if active_encounter and not current_user.is_gm:
+            return jsonify({"error": "Position locked during combat. Use Change Position action in combat."}), 403
+
         # Update player position
         player = session.query(CampaignPlayerRecord).filter_by(
             id=player_id,

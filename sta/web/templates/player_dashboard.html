@@ -131,13 +131,18 @@
                     <label for="position-select" style="display: block; margin-bottom: 5px; color: var(--lcars-tan);">
                         Your Bridge Position:
                     </label>
-                    <select id="position-select" style="width: 100%;" onchange="updateMyPosition(this.value)">
+                    <select id="position-select" style="width: 100%;" onchange="updateMyPosition(this.value)" {% if active_encounter %}disabled{% endif %}>
                         {% for pos in positions %}
                             <option value="{{ pos }}" {% if player.position == pos %}selected{% endif %}>
                                 {{ pos.title() }}
                             </option>
                         {% endfor %}
                     </select>
+                    {% if active_encounter %}
+                    <p style="color: var(--lcars-orange); font-size: 0.8em; margin-top: 5px;">
+                        Position locked during combat. Use "Change Position" action on bridge.
+                    </p>
+                    {% endif %}
                 </div>
 
                 <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='player') }}"

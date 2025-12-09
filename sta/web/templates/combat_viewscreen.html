@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ encounter.name }} - Viewscreen</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/lcars.css') }}">
+    <style>
+        /* Viewscreen fills entire viewport - no scrolling */
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Main viewscreen container - fills viewport */
+        .viewscreen-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            padding: 10px;
+            box-sizing: border-box;
+            background: var(--lcars-bg);
+        }
+
+        /* LCARS top bar */
+        .viewscreen-top-bar {
+            display: flex;
+            height: 75px;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+
+        .viewscreen-top-left {
+            width: 200px;
+            background: var(--lcars-african-violet);
+            border-radius: 30px 0 0 0;
+            display: flex;
+            align-items: center;
+            padding-left: 20px;
+        }
+
+        .viewscreen-top-left .lcars-label {
+            color: var(--lcars-text-dark);
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .viewscreen-top-main {
+            flex: 1;
+            background: var(--lcars-african-violet);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+        }
+
+        .viewscreen-top-right {
+            width: 150px;
+            background: var(--lcars-african-violet);
+            border-radius: 0 30px 0 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .viewscreen-title {
+            color: var(--lcars-text-dark);
+            font-size: 2.2rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .round-indicator {
+            color: var(--lcars-text-dark);
+            font-size: 1.6rem;
+            font-weight: 700;
+        }
+
+        .turn-indicator {
+            font-size: 1.8rem;
+            font-weight: bold;
+            padding: 10px 30px;
+            border-radius: 25px;
+            text-transform: uppercase;
+            animation: pulse 2s infinite;
+        }
+
+        .turn-player {
+            background: var(--lcars-success);
+            color: var(--lcars-text-dark);
+        }
+
+        .turn-enemy {
+            background: var(--lcars-tomato);
+            color: var(--lcars-text-dark);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Main content area - 3 column layout */
+        .viewscreen-content {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 280px 1fr 380px;
+            gap: 15px;
+            padding-top: 10px;
+            min-height: 0; /* Important for flex child to shrink */
+        }
+
+        /* Left column - resources and turn status */
+        .left-panels {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-height: 0;
+        }
+
+        /* Map Panel - takes most of the space */
+        .map-panel {
+            background: #0a0a0a;
+            border: 3px solid var(--lcars-bluey);
+            border-radius: 15px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0; /* Important for flex child to shrink */
+        }
+
+        .map-panel h2 {
+            color: var(--lcars-bluey);
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        #viewscreen-map-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        #viewscreen-map-container svg {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        .range-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Right side panels */
+        .status-panels {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-height: 0;
+            overflow-y: auto;
+        }
+
+        .status-panel {
+            background: var(--lcars-panel-bg);
+            border: 3px solid var(--lcars-butterscotch);
+            border-radius: 10px;
+            padding: 15px;
+            flex-shrink: 0;
+        }
+
+        .status-panel h3 {
+            color: var(--lcars-butterscotch);
+            font-size: 1.4rem;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            border-bottom: 2px solid var(--lcars-gray);
+            padding-bottom: 6px;
+        }
+
+        /* Ship status styles */
+        .ship-name {
+            font-size: 1.5rem;
+            color: var(--lcars-almond);
+            margin-bottom: 6px;
+            font-weight: 700;
+        }
+
+        .ship-class {
+            font-size: 1.1rem;
+            color: var(--lcars-gray);
+        }
+
+        .shields-display {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .shields-label {
+            color: var(--lcars-almond);
+            min-width: 80px;
+            font-size: 1.1rem;
+        }
+
+        .shields-bar-large {
+            flex: 1;
+            height: 28px;
+            background: var(--lcars-gray);
+            border-radius: 14px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .shields-bar-large .fill {
+            height: 100%;
+            transition: width 0.5s ease;
+            border-radius: 14px;
+        }
+
+        .shields-value {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            font-size: 1.1rem;
+        }
+
+        .shields-status-badge {
+            padding: 4px 12px;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: bold;
+        }
+
+        .shields-online {
+            background: var(--lcars-success);
+            color: var(--lcars-text-dark);
+        }
+
+        .shields-offline {
+            background: var(--lcars-tomato);
+            color: var(--lcars-text-dark);
+        }
+
+        /* Weapons status */
+        .weapons-status {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 10px 0;
+        }
+
+        .weapon-badge {
+            padding: 5px 14px;
+            border-radius: 15px;
+            font-size: 1rem;
+            font-weight: bold;
+        }
+
+        .weapon-armed {
+            background: var(--lcars-tomato);
+            color: var(--lcars-text-dark);
+        }
+
+        /* Systems display */
+        .systems-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+        }
+
+        .system-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 10px;
+            background: #1a1a1a;
+            border-radius: 5px;
+            font-size: 1.05rem;
+        }
+
+        .system-item.breached {
+            background: #3a1a1a;
+            border-left: 3px solid var(--lcars-tomato);
+        }
+
+        .system-name {
+            color: var(--lcars-almond);
+        }
+
+        .system-value {
+            color: var(--lcars-ice);
+            font-weight: bold;
+        }
+
+        .breach-indicator {
+            color: var(--lcars-tomato);
+            margin-left: 4px;
+        }
+
+        /* Resource pools */
+        .resource-display {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: #1a1a1a;
+            border-radius: 10px;
+            margin: 6px 0;
+        }
+
+        .resource-label {
+            font-size: 1.2rem;
+            color: var(--lcars-almond);
+            min-width: 100px;
+        }
+
+        .resource-pips {
+            display: flex;
+            gap: 6px;
+        }
+
+        .resource-pip {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 3px solid;
+        }
+
+        .momentum-pip {
+            border-color: var(--lcars-ice);
+        }
+
+        .momentum-pip.filled {
+            background: var(--lcars-ice);
+        }
+
+        .resource-value-large {
+            font-size: 2.2rem;
+            font-weight: bold;
+            min-width: 55px;
+            text-align: center;
+        }
+
+        .momentum-value {
+            color: var(--lcars-ice);
+        }
+
+        .threat-value {
+            color: var(--lcars-tomato);
+        }
+
+        /* Turn counter */
+        .turn-counter {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 8px;
+        }
+
+        .turn-count-box {
+            text-align: center;
+            padding: 12px 20px;
+            border-radius: 10px;
+            background: #1a1a1a;
+        }
+
+        .turn-count-label {
+            font-size: 1.1rem;
+            color: var(--lcars-almond);
+            margin-bottom: 5px;
+        }
+
+        .turn-count-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .player-turns .turn-count-value {
+            color: var(--lcars-success);
+        }
+
+        .enemy-turns .turn-count-value {
+            color: var(--lcars-tomato);
+        }
+
+        /* Reserve power */
+        .reserve-power-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 1.1rem;
+        }
+
+        .reserve-available {
+            background: rgba(153, 204, 153, 0.15);
+            border: 2px solid var(--lcars-success);
+        }
+
+        .reserve-depleted {
+            background: rgba(255, 102, 102, 0.15);
+            border: 2px solid var(--lcars-tomato);
+        }
+
+        /* Enemy ships */
+        .enemy-ship-card {
+            background: #1a1a1a;
+            border: 2px solid var(--lcars-gray);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .enemy-ship-card .ship-name {
+            font-size: 1.3rem;
+            color: var(--lcars-tomato);
+        }
+
+        /* Bottom bar */
+        .viewscreen-bottom-bar {
+            display: flex;
+            height: 35px;
+            gap: 3px;
+            margin-top: 10px;
+            flex-shrink: 0;
+        }
+
+        .viewscreen-bottom-left {
+            width: 200px;
+            background: var(--lcars-bluey);
+            border-radius: 0 0 0 20px;
+        }
+
+        .viewscreen-bottom-main {
+            flex: 1;
+            background: linear-gradient(to right, var(--lcars-tomato), var(--lcars-bluey));
+        }
+
+        .viewscreen-bottom-right {
+            width: 150px;
+            background: var(--lcars-bluey);
+            border-radius: 0 0 20px 0;
+        }
+
+        /* LCARS data cascade styling */
+        .lcars-data-fill {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding: 10px;
+            background: #0a0a0a;
+            border: 2px solid var(--lcars-gray);
+            border-radius: 8px;
+            overflow: hidden;
+            min-height: 60px;
+        }
+
+        .lcars-data-row {
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Antonio', monospace;
+            font-size: 0.85rem;
+            opacity: 0.6;
+        }
+
+        .lcars-data-row span {
+            min-width: 35px;
+            text-align: right;
+        }
+
+        .lcars-data-row.highlight {
+            opacity: 1;
+        }
+
+        @keyframes dataPulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 0.8; }
+        }
+
+        .lcars-data-fill.animated .lcars-data-row {
+            animation: dataPulse 3s ease-in-out infinite;
+        }
+
+        .lcars-data-fill.animated .lcars-data-row:nth-child(odd) {
+            animation-delay: 0.5s;
+        }
+
+        .lcars-data-fill.animated .lcars-data-row:nth-child(3n) {
+            animation-delay: 1s;
+        }
+    </style>
+</head>
+<body>
+    <div class="viewscreen-wrapper">
+        <!-- Top Bar -->
+        <div class="viewscreen-top-bar">
+            <div class="viewscreen-top-left">
+                <span class="lcars-label">LCARS 47988</span>
+            </div>
+            <div class="viewscreen-top-main">
+                <span class="viewscreen-title">{{ encounter.name }}</span>
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <span class="round-indicator">ROUND <span id="round-number">{{ encounter.round }}</span></span>
+                    <div class="turn-indicator {% if encounter.current_turn == 'player' %}turn-player{% else %}turn-enemy{% endif %}" id="turn-indicator">
+                        {% if encounter.current_turn == 'player' %}CREW TURN{% else %}ENEMY TURN{% endif %}
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 25px;">
+                    <div class="top-bar-turns" style="text-align: center;">
+                        <div style="font-size: 0.9rem; color: var(--lcars-text-dark);">CREW</div>
+                        <div style="font-size: 1.4rem; font-weight: bold; color: var(--lcars-text-dark);">
+                            <span id="player-turns-used">0</span>/<span id="player-turns-total">1</span>
+                        </div>
+                    </div>
+                    <div class="top-bar-turns" style="text-align: center;">
+                        <div style="font-size: 0.9rem; color: var(--lcars-text-dark);">ENEMY</div>
+                        <div style="font-size: 1.4rem; font-weight: bold; color: var(--lcars-text-dark);">
+                            <span id="enemy-turns-used">0</span>/<span id="enemy-turns-total">{{ enemy_ships | length }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="viewscreen-top-right">
+                <div class="data-cascade">
+                    <span>47</span>
+                    <span>21</span>
+                    <span>88</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="viewscreen-content">
+            <!-- Left: Resources and Turn Status -->
+            <div class="left-panels">
+                <!-- Resource Pools -->
+                <div class="status-panel">
+                    <h3>RESOURCES</h3>
+                    <!-- Momentum -->
+                    <div class="resource-display" style="flex-direction: column; align-items: flex-start;">
+                        <span class="resource-label">Momentum</span>
+                        <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                            <div class="resource-pips" id="momentum-pips">
+                                {% for i in range(6) %}
+                                <div class="resource-pip momentum-pip {% if i < encounter.momentum %}filled{% endif %}"></div>
+                                {% endfor %}
+                            </div>
+                            <span class="resource-value-large momentum-value" id="momentum-value">{{ encounter.momentum }}</span>
+                        </div>
+                    </div>
+                    <!-- Threat -->
+                    <div class="resource-display" style="flex-direction: column; align-items: flex-start;">
+                        <span class="resource-label">Threat</span>
+                        <span class="resource-value-large threat-value" id="threat-value" style="font-size: 2.8rem;">{{ encounter.threat }}</span>
+                    </div>
+                </div>
+
+                <!-- Systems Status -->
+                {% if player_ship %}
+                <div class="status-panel">
+                    <h3>SYSTEMS</h3>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        {% set systems_list = [
+                            ('COMMS', 'comms', player_ship.systems.comms),
+                            ('COMPUTERS', 'computers', player_ship.systems.computers),
+                            ('ENGINES', 'engines', player_ship.systems.engines),
+                            ('SENSORS', 'sensors', player_ship.systems.sensors),
+                            ('STRUCTURE', 'structure', player_ship.systems.structure),
+                            ('WEAPONS', 'weapons', player_ship.systems.weapons)
+                        ] %}
+                        {% for name, key, value in systems_list %}
+                        {% set breach_potency = player_ship.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
+                        <div class="system-status-row" data-system="{{ key }}" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: {% if breach_potency > 0 %}rgba(255, 102, 102, 0.2){% else %}#1a1a1a{% endif %}; border-radius: 5px; {% if breach_potency > 0 %}border-left: 3px solid var(--lcars-tomato);{% endif %}">
+                            <span style="color: var(--lcars-almond); font-size: 1rem;">{{ name }}</span>
+                            <span style="font-weight: bold; font-size: 1.1rem; color: {% if breach_potency > 0 %}var(--lcars-tomato){% else %}var(--lcars-success){% endif %};">
+                                {% if breach_potency > 0 %}
+                                {{ value }} <span style="color: var(--lcars-tomato);">(-{{ breach_potency }})</span>
+                                {% else %}
+                                {{ value }} ✓
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- LCARS Data Fill - Left Column -->
+                <div class="lcars-data-fill animated" id="left-data-cascade">
+                    <!-- Data rows will be generated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Center: Tactical Map -->
+            <div class="map-panel">
+                <h2>TACTICAL DISPLAY</h2>
+                <div id="viewscreen-map-container">
+                    <p style="color: var(--lcars-gray);">Loading tactical map...</p>
+                </div>
+            </div>
+
+            <!-- Right: Ship Status Panels -->
+            <div class="status-panels">
+                <!-- Player Ship Status -->
+                {% if player_ship %}
+                <div class="status-panel" style="border-color: var(--lcars-success);">
+                    <h3 style="color: var(--lcars-success);">{{ player_ship.name }}</h3>
+                    <div class="ship-class">{{ player_ship.ship_class }}-class (Scale {{ player_ship.scale }})</div>
+
+                    <!-- Shields -->
+                    <div class="shields-display">
+                        <span class="shields-label">Shields</span>
+                        <div class="shields-bar-large">
+                            <div class="fill" id="player-shields-fill" style="width: {{ (player_ship.shields / player_ship.shields_max * 100) | int }}%; background: {% if player_ship.shields_raised %}var(--lcars-success){% else %}var(--lcars-tomato){% endif %};"></div>
+                            <span class="shields-value" id="player-shields-value">{{ player_ship.shields }}/{{ player_ship.shields_max }}</span>
+                        </div>
+                        <span class="shields-status-badge {% if player_ship.shields_raised %}shields-online{% else %}shields-offline{% endif %}" id="shields-status-badge">
+                            {{ 'ONLINE' if player_ship.shields_raised else 'OFFLINE' }}
+                        </span>
+                    </div>
+
+                    <!-- Weapons -->
+                    <div class="weapons-status">
+                        {% for weapon in player_ship.weapons %}
+                        <span class="weapon-badge weapon-armed">{{ weapon.name }}</span>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Systems -->
+                    <div class="systems-grid">
+                        {% set systems = [('COM', player_ship.systems.comms, 'comms'), ('CPU', player_ship.systems.computers, 'computers'), ('ENG', player_ship.systems.engines, 'engines'), ('SEN', player_ship.systems.sensors, 'sensors'), ('STR', player_ship.systems.structure, 'structure'), ('WPN', player_ship.systems.weapons, 'weapons')] %}
+                        {% for name, value, key in systems %}
+                        {% set breach_potency = player_ship.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
+                        <div class="system-item {% if breach_potency > 0 %}breached{% endif %}" data-system="{{ key }}">
+                            <span class="system-name">{{ name }}</span>
+                            <span class="system-value">
+                                {{ value }}
+                                {% if breach_potency > 0 %}
+                                <span class="breach-indicator">-{{ breach_potency }}</span>
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Reserve Power -->
+                    <div class="reserve-power-indicator {% if player_ship.has_reserve_power %}reserve-available{% else %}reserve-depleted{% endif %}" id="reserve-power-display">
+                        <span>Reserve Power:</span>
+                        <strong id="reserve-power-status" style="color: {% if player_ship.has_reserve_power %}var(--lcars-success){% else %}var(--lcars-tomato){% endif %};">
+                            {{ 'READY' if player_ship.has_reserve_power else 'DEPLETED' }}
+                        </strong>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Enemy Ships -->
+                <div class="status-panel" style="border-color: var(--lcars-tomato);">
+                    <h3 style="color: var(--lcars-tomato);">HOSTILE VESSELS</h3>
+                    {% if enemy_ships %}
+                        {% for enemy in enemy_ships %}
+                        <div class="enemy-ship-card" data-enemy-index="{{ loop.index0 }}">
+                            <div class="ship-name">{{ enemy.name }}</div>
+                            <div class="ship-class">{{ enemy.ship_class }}-class</div>
+                            <div class="shields-display">
+                                <span class="shields-label">Shields</span>
+                                <div class="shields-bar-large">
+                                    <div class="fill enemy-shields-fill" style="width: {{ (enemy.shields / enemy.shields_max * 100) | int }}%; background: var(--lcars-tomato);"></div>
+                                    <span class="shields-value enemy-shields-value">{{ enemy.shields }}/{{ enemy.shields_max }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p style="color: var(--lcars-gray);">No hostile vessels detected</p>
+                    {% endif %}
+                </div>
+
+                <!-- LCARS Data Fill - Right Column -->
+                <div class="lcars-data-fill animated" id="right-data-cascade">
+                    <!-- Data rows will be generated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Bar -->
+        <div class="viewscreen-bottom-bar">
+            <div class="viewscreen-bottom-left"></div>
+            <div class="viewscreen-bottom-main"></div>
+            <div class="viewscreen-bottom-right"></div>
+        </div>
+    </div>
+
+    <!-- Hex Map Visualization -->
+    <script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+
+    <script>
+        const encounterId = '{{ encounter.encounter_id }}';
+        let tacticalMapData = {{ tactical_map | tojson if tactical_map else '{"radius": 3, "tiles": []}' | safe }};
+        let shipPositions = {{ ship_positions | tojson if ship_positions else '[]' | safe }};
+
+        // LCARS color palette for data cascade
+        const lcarsColors = [
+            'var(--lcars-ice)',
+            'var(--lcars-african-violet)',
+            'var(--lcars-butterscotch)',
+            'var(--lcars-almond)',
+            'var(--lcars-orange)',
+            'var(--lcars-bluey)',
+            'var(--lcars-tan)',
+        ];
+
+        // Generate random LCARS-style data
+        function generateLcarsData() {
+            const types = ['numeric', 'hex', 'code', 'coord'];
+            const type = types[Math.floor(Math.random() * types.length)];
+
+            switch(type) {
+                case 'numeric':
+                    return Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+                case 'hex':
+                    return Math.floor(Math.random() * 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+                case 'code':
+                    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                    return letters[Math.floor(Math.random() * 26)] +
+                           letters[Math.floor(Math.random() * 26)] + '-' +
+                           Math.floor(Math.random() * 999).toString().padStart(3, '0');
+                case 'coord':
+                    return Math.floor(Math.random() * 360) + '.' +
+                           Math.floor(Math.random() * 99).toString().padStart(2, '0');
+            }
+        }
+
+        // Fill a data cascade container
+        function fillDataCascade(containerId, rowCount) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            container.innerHTML = '';
+
+            for (let i = 0; i < rowCount; i++) {
+                const row = document.createElement('div');
+                row.className = 'lcars-data-row';
+                if (Math.random() > 0.7) row.classList.add('highlight');
+
+                const color1 = lcarsColors[Math.floor(Math.random() * lcarsColors.length)];
+                const color2 = lcarsColors[Math.floor(Math.random() * lcarsColors.length)];
+                const color3 = lcarsColors[Math.floor(Math.random() * lcarsColors.length)];
+
+                row.innerHTML = `
+                    <span style="color: ${color1};">${generateLcarsData()}</span>
+                    <span style="color: ${color2};">${generateLcarsData()}</span>
+                    <span style="color: ${color3};">${generateLcarsData()}</span>
+                `;
+                container.appendChild(row);
+            }
+        }
+
+        // Periodically update some data values
+        function updateDataCascades() {
+            ['left-data-cascade', 'right-data-cascade'].forEach(id => {
+                const container = document.getElementById(id);
+                if (!container) return;
+
+                const rows = container.querySelectorAll('.lcars-data-row');
+                // Update 1-2 random rows
+                const updateCount = Math.floor(Math.random() * 2) + 1;
+                for (let i = 0; i < updateCount; i++) {
+                    const randomRow = rows[Math.floor(Math.random() * rows.length)];
+                    if (randomRow) {
+                        const spans = randomRow.querySelectorAll('span');
+                        const randomSpan = spans[Math.floor(Math.random() * spans.length)];
+                        if (randomSpan) {
+                            randomSpan.textContent = generateLcarsData();
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize the viewscreen
+        function initViewscreen() {
+            renderTacticalMap();
+            startPolling();
+
+            // Initialize LCARS data cascades
+            fillDataCascade('left-data-cascade', 12);
+            fillDataCascade('right-data-cascade', 15);
+
+            // Update data cascades periodically
+            setInterval(updateDataCascades, 2000);
+        }
+
+        // Render the tactical map - sized to fit container
+        function renderTacticalMap() {
+            if (typeof HexMap === 'undefined') {
+                console.error('HexMap not loaded');
+                document.getElementById('viewscreen-map-container').innerHTML =
+                    '<p style="color: var(--lcars-tomato);">Error: Map visualization not loaded</p>';
+                return;
+            }
+
+            // Calculate appropriate hex size based on container
+            const container = document.getElementById('viewscreen-map-container');
+            const containerHeight = container.clientHeight;
+            const containerWidth = container.clientWidth;
+
+            // Estimate map dimensions (roughly 2*radius+1 hexes wide/tall)
+            const mapRadius = tacticalMapData.radius || 3;
+            const hexCount = mapRadius * 2 + 1;
+
+            // Calculate hex size to fit (with padding)
+            const maxHexWidth = (containerWidth - 40) / (hexCount * 1.75);
+            const maxHexHeight = (containerHeight - 40) / (hexCount * 1.5);
+            const hexSize = Math.min(maxHexWidth, maxHexHeight, 60);
+
+            // Save original and set new size
+            const originalHexSize = HexMap.hexSize;
+            HexMap.hexSize = Math.max(40, hexSize);
+
+            HexMap.render('viewscreen-map-container', tacticalMapData, shipPositions, {
+                editable: false,
+                showCoords: false,
+                shipLabelFontSize: 18,  // Large font for TV viewing
+                coordFontSize: 14
+            });
+
+            // Restore original
+            HexMap.hexSize = originalHexSize;
+        }
+
+        // Fetch and update status
+        async function fetchStatus() {
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/status`);
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error('Status error:', data.error);
+                    return;
+                }
+
+                // Update turn indicator
+                const turnIndicator = document.getElementById('turn-indicator');
+                if (data.current_turn === 'player') {
+                    turnIndicator.textContent = 'CREW TURN';
+                    turnIndicator.className = 'turn-indicator turn-player';
+                } else {
+                    turnIndicator.textContent = 'ENEMY TURN';
+                    turnIndicator.className = 'turn-indicator turn-enemy';
+                }
+
+                // Update round
+                document.getElementById('round-number').textContent = data.round;
+
+                // Update momentum
+                document.getElementById('momentum-value').textContent = data.momentum;
+                const momentumPips = document.querySelectorAll('.momentum-pip');
+                momentumPips.forEach((pip, index) => {
+                    pip.classList.toggle('filled', index < data.momentum);
+                });
+
+                // Update threat
+                document.getElementById('threat-value').textContent = data.threat;
+
+                // Update turn counters
+                if (data.player_turns_used !== undefined) {
+                    document.getElementById('player-turns-used').textContent = data.player_turns_used;
+                }
+                if (data.player_turns_total !== undefined) {
+                    document.getElementById('player-turns-total').textContent = data.player_turns_total;
+                }
+
+                // Calculate enemy turns from ships_info
+                if (data.ships_info) {
+                    let enemyTurnsUsed = 0;
+                    let enemyTurnsTotal = 0;
+                    data.ships_info.forEach(ship => {
+                        enemyTurnsUsed += ship.turns_used || 0;
+                        enemyTurnsTotal += ship.scale || 1;
+                    });
+                    document.getElementById('enemy-turns-used').textContent = enemyTurnsUsed;
+                    document.getElementById('enemy-turns-total').textContent = enemyTurnsTotal;
+                }
+
+            } catch (error) {
+                console.error('Failed to fetch status:', error);
+            }
+        }
+
+        // Fetch and update map data
+        async function fetchMapData() {
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/map`);
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error('Map error:', data.error);
+                    return;
+                }
+
+                // Check if map data changed
+                const newMapJson = JSON.stringify(data.tactical_map);
+                const newPosJson = JSON.stringify(data.ship_positions);
+                const oldMapJson = JSON.stringify(tacticalMapData);
+                const oldPosJson = JSON.stringify(shipPositions);
+
+                if (newMapJson !== oldMapJson || newPosJson !== oldPosJson) {
+                    tacticalMapData = data.tactical_map || tacticalMapData;
+                    shipPositions = data.ship_positions || shipPositions;
+                    renderTacticalMap();
+                }
+            } catch (error) {
+                console.error('Failed to fetch map data:', error);
+            }
+        }
+
+        // Fetch ship status
+        async function fetchShipStatus() {
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/status?role=viewscreen`);
+                const data = await response.json();
+
+                // Update player ship shields
+                if (data.player_ship) {
+                    const shieldsPercent = (data.player_ship.shields / data.player_ship.shields_max * 100).toFixed(0);
+                    const shieldsFill = document.getElementById('player-shields-fill');
+                    const shieldsValue = document.getElementById('player-shields-value');
+                    const shieldsBadge = document.getElementById('shields-status-badge');
+
+                    if (shieldsFill) {
+                        shieldsFill.style.width = shieldsPercent + '%';
+                        shieldsFill.style.background = data.player_ship.shields_raised ? 'var(--lcars-success)' : 'var(--lcars-tomato)';
+                    }
+                    if (shieldsValue) {
+                        shieldsValue.textContent = `${data.player_ship.shields}/${data.player_ship.shields_max}`;
+                    }
+                    if (shieldsBadge) {
+                        shieldsBadge.textContent = data.player_ship.shields_raised ? 'ONLINE' : 'OFFLINE';
+                        shieldsBadge.className = 'shields-status-badge ' + (data.player_ship.shields_raised ? 'shields-online' : 'shields-offline');
+                    }
+
+                    // Update reserve power
+                    const reserveDisplay = document.getElementById('reserve-power-display');
+                    const reserveStatus = document.getElementById('reserve-power-status');
+                    if (reserveDisplay && reserveStatus) {
+                        if (data.player_ship.has_reserve_power) {
+                            reserveDisplay.className = 'reserve-power-indicator reserve-available';
+                            reserveStatus.textContent = 'READY';
+                            reserveStatus.style.color = 'var(--lcars-success)';
+                        } else {
+                            reserveDisplay.className = 'reserve-power-indicator reserve-depleted';
+                            reserveStatus.textContent = 'DEPLETED';
+                            reserveStatus.style.color = 'var(--lcars-tomato)';
+                        }
+                    }
+                }
+
+                // Update enemy ships
+                if (data.enemy_ships) {
+                    data.enemy_ships.forEach((enemy, index) => {
+                        const card = document.querySelector(`.enemy-ship-card[data-enemy-index="${index}"]`);
+                        if (card) {
+                            const shieldsFill = card.querySelector('.enemy-shields-fill');
+                            const shieldsValue = card.querySelector('.enemy-shields-value');
+                            if (shieldsFill && enemy.shields_max > 0) {
+                                const percent = (enemy.shields / enemy.shields_max * 100).toFixed(0);
+                                shieldsFill.style.width = percent + '%';
+                            }
+                            if (shieldsValue) {
+                                shieldsValue.textContent = `${enemy.shields}/${enemy.shields_max}`;
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                // Silently ignore
+            }
+        }
+
+        // Start polling
+        function startPolling() {
+            setInterval(fetchStatus, 2000);
+            setInterval(fetchMapData, 5000);
+            setInterval(fetchShipStatus, 3000);
+
+            fetchStatus();
+            fetchShipStatus();
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            renderTacticalMap();
+        });
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initViewscreen);
+    </script>
+</body>
+</html>

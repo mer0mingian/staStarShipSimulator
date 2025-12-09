@@ -128,7 +128,7 @@ def combat(encounter_id: str):
     """Main combat view."""
     # Get role from query parameter (default to player)
     role = request.args.get("role", "player")
-    if role not in ("player", "gm"):
+    if role not in ("player", "gm", "viewscreen"):
         role = "player"
 
     session = get_session()
@@ -149,6 +149,7 @@ def combat(encounter_id: str):
         current_campaign_player = None  # Track this for position lookup later
 
         # Check if this is a campaign encounter and player has a campaign membership
+        # Viewscreen doesn't require campaign membership - skip this check
         if encounter.campaign_id and role == "player":
             session_token = request.cookies.get("sta_session_token")
             if session_token:
@@ -205,6 +206,17 @@ def combat(encounter_id: str):
 
         # Get player's position - from campaign membership if available, otherwise from encounter
         from sta.mechanics.actions import get_actions_for_position
+
+        # Check for pending position change - apply it if it's the player's turn
+        pending_position = None
+        if current_campaign_player and current_campaign_player.pending_position:
+            pending_position = current_campaign_player.pending_position
+            # Apply the pending position if it's the player's turn
+            if encounter.current_turn == "player":
+                current_campaign_player.position = current_campaign_player.pending_position
+                current_campaign_player.pending_position = None
+                session.commit()
+                pending_position = None  # Clear since we applied it
 
         # Use campaign position if available (from earlier lookup), otherwise fall back to encounter's position
         player_campaign_position = None
@@ -298,7 +310,8 @@ def combat(encounter_id: str):
                 "position": player_pos
             })
 
-        # Get detected positions for visibility filtering
+        # Get detected positions for visibility filtering (only applies to player role)
+        # GM and viewscreen see all ships
         detected_positions = get_detected_positions(active_effects) if role == "player" else []
 
         # Enemy ship positions (filter by visibility for player role)
@@ -316,8 +329,53 @@ def combat(encounter_id: str):
                 "position": enemy_pos
             })
 
+        # Calculate GM visibility variables (for fog-of-war on GM side)
+        player_in_fog = False
+        player_detected_by_enemy = False
+
+        # Helper to calculate hex distance
+        def hex_distance(q1, r1, q2, r2):
+            return (abs(q1 - q2) + abs(q1 + r1 - q2 - r2) + abs(r1 - r2)) // 2
+
+        if player_ship:
+            # Check if player ship is in visibility-blocking terrain
+            player_terrain = get_terrain_at_position(tactical_map_data, player_pos.get("q", 0), player_pos.get("r", 0))
+            player_in_fog = player_terrain in VISIBILITY_BLOCKING_TERRAIN
+
+            player_q = player_pos.get("q", 0)
+            player_r = player_pos.get("r", 0)
+
+            # Check if any enemy ship is in the same hex as player (always visible)
+            for i, enemy in enumerate(enemy_ships):
+                enemy_pos_data = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
+                enemy_q = enemy_pos_data.get("q", 0)
+                enemy_r = enemy_pos_data.get("r", 0)
+                if hex_distance(player_q, player_r, enemy_q, enemy_r) == 0:
+                    player_detected_by_enemy = True
+                    break
+
+            # Check if enemy has detected the player via Sensor Sweep effects
+            if not player_detected_by_enemy:
+                for effect in active_effects:
+                    # Check for sensor sweep detection zones from enemy sources
+                    if effect.detected_position and effect.source_ship and effect.source_ship.startswith("enemy_"):
+                        # detected_position is the SCANNER's position
+                        # Player is visible if within 1 hex of the scanner's position
+                        scanner_pos = effect.detected_position
+                        scanner_q = scanner_pos.get("q", 0)
+                        scanner_r = scanner_pos.get("r", 0)
+                        distance = hex_distance(player_q, player_r, scanner_q, scanner_r)
+                        if distance <= 1:  # Same hex or adjacent
+                            player_detected_by_enemy = True
+                            break
+
         # Select template based on role
-        template = "combat_gm.html" if role == "gm" else "combat_player.html"
+        if role == "viewscreen":
+            template = "combat_viewscreen.html"
+        elif role == "gm":
+            template = "combat_gm.html"
+        else:
+            template = "combat_player_new.html"
 
         # Multi-player info for player view
         my_player_id = None
@@ -383,6 +441,11 @@ def combat(encounter_id: str):
             my_player_name=my_player_name,
             campaign_players=campaign_players,
             current_player_name=current_player_name,
+            # GM visibility (fog-of-war)
+            player_in_fog=player_in_fog,
+            player_detected_by_enemy=player_detected_by_enemy,
+            # Pending position change
+            pending_position=pending_position,
         )
     finally:
         session.close()
