@@ -297,6 +297,22 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         # Next action using that system gets -1 Difficulty
     },
 
+    # ===== STANDARD ACTIONS =====
+
+    "Change Position": {
+        "type": "special",  # Special because it sets pending_position on player record
+        # No roll required - this is a minor action
+        # Player selects new position from dropdown
+        # Position change takes effect at start of player's next turn
+    },
+
+    "Override": {
+        "type": "special",  # Special because it executes another action with +1 difficulty
+        # Player selects: target_station and target_action
+        # The underlying action is then executed with +1 to its base difficulty
+        # Not available to Captain (filtered in actions.py)
+    },
+
     # ===== COMMAND ACTIONS (Beta) =====
 
     "Rally": {
