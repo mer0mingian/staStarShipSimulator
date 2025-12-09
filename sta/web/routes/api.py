@@ -452,7 +452,7 @@ def get_enemy_turn_info(session, encounter):
 
 
 def get_player_turn_info(session, encounter):
-    """Calculate player turn economy info.
+    """Calculate player turn economy info (legacy single-player mode).
 
     Player turns = player ship's Scale.
     """
@@ -472,7 +472,85 @@ def get_player_turn_info(session, encounter):
     }
 
 
-def alternate_turn_after_action(session, encounter):
+def get_multiplayer_turn_info(session, encounter):
+    """Calculate player turn economy info for multi-player mode.
+
+    Each player character gets ONE turn per round.
+    Returns info about all players and who has/hasn't acted.
+    """
+    from sta.database import CampaignPlayerRecord
+
+    # Get all active players in this campaign (not GMs)
+    if encounter.campaign_id:
+        campaign_players = session.query(CampaignPlayerRecord).filter_by(
+            campaign_id=encounter.campaign_id,
+            is_active=True,
+            is_gm=False
+        ).all()
+    else:
+        campaign_players = []
+
+    # Load turn usage data
+    players_turns_used = json.loads(encounter.players_turns_used_json or "{}")
+
+    players_info = []
+    total_turns = len(campaign_players) if campaign_players else 1
+    total_used = 0
+
+    for player in campaign_players:
+        player_data = players_turns_used.get(str(player.id), {})
+        has_acted = player_data.get("acted", False)
+        is_current = encounter.current_player_id == player.id
+
+        players_info.append({
+            "player_id": player.id,
+            "name": player.player_name,
+            "position": player.position,
+            "character_id": player.character_id,
+            "has_acted": has_acted,
+            "acted_at": player_data.get("acted_at"),
+            "is_current": is_current,
+            "can_claim": not has_acted and encounter.current_player_id is None,
+        })
+
+        if has_acted:
+            total_used += 1
+
+    # If no campaign players, fall back to legacy single-player info
+    if not campaign_players:
+        return {
+            "total_turns": 1,
+            "turns_used": encounter.player_turns_used,
+            "turns_remaining": 1 - min(encounter.player_turns_used, 1),
+            "players_info": [],
+            "current_player_id": encounter.current_player_id,
+            "current_player_name": None,
+            "is_multiplayer": False,
+        }
+
+    # Get current claiming player's name
+    current_player_name = None
+    if encounter.current_player_id:
+        current_player = next(
+            (p for p in players_info if p["player_id"] == encounter.current_player_id),
+            None
+        )
+        if current_player:
+            current_player_name = current_player["name"]
+
+    return {
+        "total_turns": total_turns,
+        "turns_used": total_used,
+        "turns_remaining": total_turns - total_used,
+        "players_info": players_info,
+        "current_player_id": encounter.current_player_id,
+        "current_player_name": current_player_name,
+        "turn_claimed_at": encounter.turn_claimed_at.isoformat() if encounter.turn_claimed_at else None,
+        "is_multiplayer": True,
+    }
+
+
+def alternate_turn_after_action(session, encounter, player_id: int = None):
     """Handle turn alternation after a major action.
 
     STA 2e initiative alternates between sides after each turn.
@@ -481,13 +559,37 @@ def alternate_turn_after_action(session, encounter):
     2. If other side has no turns, stay on current side
     3. If BOTH sides exhausted, advance round and reset
 
+    Args:
+        session: Database session
+        encounter: EncounterRecord
+        player_id: If provided, marks this player as having acted (multi-player mode)
+
     Returns dict with turn state info.
     """
+    # If a player_id was provided, mark them as acted in multi-player mode
+    if player_id is not None:
+        players_turns_used = json.loads(encounter.players_turns_used_json or "{}")
+        players_turns_used[str(player_id)] = {
+            "acted": True,
+            "acted_at": datetime.now().isoformat(),
+        }
+        encounter.players_turns_used_json = json.dumps(players_turns_used)
+
+    # Clear any turn claim (player finished their action)
+    encounter.current_player_id = None
+    encounter.turn_claimed_at = None
+
     enemy_info = get_enemy_turn_info(session, encounter)
     player_info = get_player_turn_info(session, encounter)
+    multiplayer_info = get_multiplayer_turn_info(session, encounter)
 
     enemy_has_turns = enemy_info["turns_remaining"] > 0
-    player_has_turns = player_info["turns_remaining"] > 0
+
+    # For multi-player, check if any player hasn't acted yet
+    if multiplayer_info["is_multiplayer"]:
+        player_has_turns = multiplayer_info["turns_remaining"] > 0
+    else:
+        player_has_turns = player_info["turns_remaining"] > 0
 
     round_advanced = False
 
@@ -496,12 +598,14 @@ def alternate_turn_after_action(session, encounter):
         encounter.round += 1
         encounter.player_turns_used = 0
         encounter.ships_turns_used_json = "{}"
+        encounter.players_turns_used_json = "{}"  # Reset multi-player tracking too
         # New round starts with player (or could alternate who starts)
         encounter.current_turn = "player"
         round_advanced = True
         # Recalculate after reset
         enemy_info = get_enemy_turn_info(session, encounter)
         player_info = get_player_turn_info(session, encounter)
+        multiplayer_info = get_multiplayer_turn_info(session, encounter)
     elif encounter.current_turn == "enemy":
         # Enemy just acted - switch to player if they have turns
         if player_has_turns:
@@ -524,6 +628,10 @@ def alternate_turn_after_action(session, encounter):
         "player_turns_total": player_info["total_turns"],
         "player_turns_remaining": player_info["turns_remaining"],
         "ships_info": enemy_info["ships_info"],
+        # Multi-player info
+        "is_multiplayer": multiplayer_info["is_multiplayer"],
+        "current_player_id": multiplayer_info["current_player_id"],
+        "players_info": multiplayer_info["players_info"],
     }
 
 
@@ -640,6 +748,7 @@ def get_encounter_status(encounter_id: str):
         # Get turn info for both sides
         enemy_turn_info = get_enemy_turn_info(session, encounter)
         player_turn_info = get_player_turn_info(session, encounter)
+        multiplayer_info = get_multiplayer_turn_info(session, encounter)
 
         # Check for pending attack that needs player defensive roll
         pending_attack = None
@@ -687,7 +796,142 @@ def get_encounter_status(encounter_id: str):
             "ships_info": ships_info,
             "pending_attack": pending_attack,
             "has_reserve_power": has_reserve_power,
+            # Multi-player turn info
+            "is_multiplayer": multiplayer_info["is_multiplayer"],
+            "current_player_id": multiplayer_info["current_player_id"],
+            "current_player_name": multiplayer_info["current_player_name"],
+            "players_info": multiplayer_info["players_info"],
         })
+    finally:
+        session.close()
+
+
+# ========== MULTI-PLAYER TURN CLAIMING ENDPOINTS ==========
+
+@api_bp.route("/encounter/<encounter_id>/claim-turn", methods=["POST"])
+def claim_turn(encounter_id: str):
+    """Claim the turn for a player in multi-player mode.
+
+    Request body:
+    - player_id: ID of the player claiming the turn
+
+    Returns success/failure and who has the turn claimed.
+    Uses timestamp-based conflict resolution for race conditions.
+    """
+    from sta.database import CampaignPlayerRecord
+
+    session = get_session()
+    try:
+        data = request.json or {}
+        player_id = data.get("player_id")
+
+        if not player_id:
+            return jsonify({"error": "player_id is required"}), 400
+
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Check it's the player side's turn
+        if encounter.current_turn != "player":
+            return jsonify({
+                "success": False,
+                "error": "It's not the player side's turn",
+                "current_turn": encounter.current_turn,
+            }), 400
+
+        # Check player hasn't already acted this round
+        players_turns_used = json.loads(encounter.players_turns_used_json or "{}")
+        player_data = players_turns_used.get(str(player_id), {})
+        if player_data.get("acted", False):
+            return jsonify({
+                "success": False,
+                "error": "You have already acted this round",
+            }), 400
+
+        # Check if turn is already claimed by someone else
+        if encounter.current_player_id is not None and encounter.current_player_id != player_id:
+            # Get the claiming player's name
+            claiming_player = session.query(CampaignPlayerRecord).filter_by(
+                id=encounter.current_player_id
+            ).first()
+            claiming_name = claiming_player.player_name if claiming_player else "Another player"
+
+            return jsonify({
+                "success": False,
+                "confirmed": False,
+                "claimed_by": claiming_name,
+                "claimed_by_id": encounter.current_player_id,
+            })
+
+        # Claim the turn
+        encounter.current_player_id = player_id
+        encounter.turn_claimed_at = datetime.now()
+        session.commit()
+
+        # Get player info for confirmation
+        player = session.query(CampaignPlayerRecord).filter_by(id=player_id).first()
+        player_name = player.player_name if player else "Unknown"
+
+        return jsonify({
+            "success": True,
+            "confirmed": True,
+            "player_id": player_id,
+            "player_name": player_name,
+            "message": f"{player_name} has claimed the turn",
+        })
+
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/release-turn", methods=["POST"])
+def release_turn(encounter_id: str):
+    """Release a claimed turn without acting.
+
+    Can be called by:
+    - The player who claimed the turn (to change their mind)
+    - The GM (with force=true) to release an AFK player's turn
+
+    Request body (optional):
+    - player_id: ID of the player (for GM force release)
+    - force: true to force release (GM only)
+    """
+    session = get_session()
+    try:
+        data = request.json or {}
+        force = data.get("force", False)
+
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        if encounter.current_player_id is None:
+            return jsonify({
+                "success": True,
+                "message": "No turn was claimed",
+            })
+
+        # Store who had the turn for the response
+        released_player_id = encounter.current_player_id
+
+        # Clear the turn claim
+        encounter.current_player_id = None
+        encounter.turn_claimed_at = None
+        session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Turn released",
+            "released_player_id": released_player_id,
+        })
+
     finally:
         session.close()
 
@@ -3565,6 +3809,170 @@ def update_ship_position(encounter_id: str):
             "success": True,
             "ship_positions": ship_positions,
             "message": f"Ship {ship_id} moved to ({q}, {r})"
+        })
+
+    finally:
+        session.close()
+
+
+# ========== ENEMY SHIP MANAGEMENT ENDPOINTS ==========
+
+@api_bp.route("/encounter/<encounter_id>/enemy-ships", methods=["POST"])
+def add_enemy_ship(encounter_id: str):
+    """Add a new enemy ship to an existing encounter.
+
+    Request body:
+    - crew_quality: "basic", "proficient", "talented", or "exceptional" (default: "talented")
+    - faction: "klingon" or "romulan" (optional, random if not specified)
+    - difficulty: "easy", "standard", or "hard" (default: "standard")
+
+    Returns the new enemy ship data and updated ship lists.
+    """
+    from sta.generators.starship import generate_enemy_ship
+    from sta.models.enums import CrewQuality
+
+    session = get_session()
+    try:
+        data = request.json or {}
+        crew_quality_str = data.get("crew_quality", "talented")
+        faction = data.get("faction")  # None = random
+        difficulty = data.get("difficulty", "standard")
+
+        # Parse crew quality
+        try:
+            crew_quality = CrewQuality(crew_quality_str)
+        except ValueError:
+            crew_quality = CrewQuality.TALENTED
+
+        encounter_record = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter_record:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Generate new enemy ship
+        enemy = generate_enemy_ship(
+            difficulty=difficulty,
+            faction=faction,
+            crew_quality=crew_quality
+        )
+        enemy_record = StarshipRecord.from_model(enemy)
+        session.add(enemy_record)
+        session.flush()
+
+        # Add to encounter's enemy ship list
+        enemy_ids = json.loads(encounter_record.enemy_ship_ids_json or "[]")
+        enemy_ids.append(enemy_record.id)
+        encounter_record.enemy_ship_ids_json = json.dumps(enemy_ids)
+
+        # Set initial position for new enemy ship (offset from existing enemies)
+        ship_positions_data = json.loads(encounter_record.ship_positions_json or "{}")
+        enemy_index = len(enemy_ids) - 1
+        # Place new enemy ship at offset position
+        ship_positions_data[f"enemy_{enemy_index}"] = {"q": 2, "r": -1 + enemy_index}
+        encounter_record.ship_positions_json = json.dumps(ship_positions_data)
+
+        session.commit()
+
+        # Build response with all enemy ship data
+        all_enemies = []
+        for i, eid in enumerate(enemy_ids):
+            enemy_ship = session.query(StarshipRecord).get(eid)
+            if enemy_ship:
+                enemy_model = enemy_ship.to_model()
+                all_enemies.append({
+                    "id": eid,
+                    "index": i,
+                    "name": enemy_model.name,
+                    "ship_class": enemy_model.ship_class,
+                    "scale": enemy_model.scale,
+                    "shields": enemy_model.shields,
+                    "shields_max": enemy_model.shields_max,
+                    "crew_quality": enemy_model.crew_quality.value if enemy_model.crew_quality else "talented",
+                })
+
+        return jsonify({
+            "success": True,
+            "message": f"Added {enemy.name} to encounter",
+            "new_enemy": {
+                "id": enemy_record.id,
+                "index": enemy_index,
+                "name": enemy.name,
+                "ship_class": enemy.ship_class,
+                "scale": enemy.scale,
+                "shields": enemy.shields,
+                "shields_max": enemy.shields_max,
+                "crew_quality": crew_quality.value,
+            },
+            "all_enemies": all_enemies,
+            "enemy_count": len(enemy_ids),
+        })
+
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/enemy-ships/<int:enemy_index>", methods=["DELETE"])
+def remove_enemy_ship(encounter_id: str, enemy_index: int):
+    """Remove an enemy ship from an encounter.
+
+    Note: This removes the ship from the encounter but doesn't delete the ship record.
+    """
+    session = get_session()
+    try:
+        encounter_record = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter_record:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        enemy_ids = json.loads(encounter_record.enemy_ship_ids_json or "[]")
+
+        if enemy_index < 0 or enemy_index >= len(enemy_ids):
+            return jsonify({"error": "Invalid enemy index"}), 400
+
+        # Get ship name before removing
+        removed_id = enemy_ids[enemy_index]
+        removed_ship = session.query(StarshipRecord).get(removed_id)
+        removed_name = removed_ship.name if removed_ship else f"Enemy {enemy_index + 1}"
+
+        # Remove from list
+        enemy_ids.pop(enemy_index)
+        encounter_record.enemy_ship_ids_json = json.dumps(enemy_ids)
+
+        # Update ship positions (reindex remaining enemies)
+        ship_positions_data = json.loads(encounter_record.ship_positions_json or "{}")
+        new_positions = {}
+        for key, value in ship_positions_data.items():
+            if key == "player":
+                new_positions[key] = value
+            elif key.startswith("enemy_"):
+                old_idx = int(key.split("_")[1])
+                if old_idx < enemy_index:
+                    new_positions[key] = value
+                elif old_idx > enemy_index:
+                    # Reindex to fill the gap
+                    new_positions[f"enemy_{old_idx - 1}"] = value
+                # Skip the removed enemy's position
+        encounter_record.ship_positions_json = json.dumps(new_positions)
+
+        # Update ships_turns_used_json (reindex remaining enemies)
+        ships_turns_used = json.loads(encounter_record.ships_turns_used_json or "{}")
+        new_turns_used = {}
+        for ship_id_str, turns in ships_turns_used.items():
+            ship_id = int(ship_id_str)
+            if ship_id != removed_id:
+                new_turns_used[ship_id_str] = turns
+        encounter_record.ships_turns_used_json = json.dumps(new_turns_used)
+
+        session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": f"Removed {removed_name} from encounter",
+            "enemy_count": len(enemy_ids),
         })
 
     finally:

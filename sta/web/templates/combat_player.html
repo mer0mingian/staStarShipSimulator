@@ -20,21 +20,69 @@
 
 <!-- Turn Indicator Banner -->
 <div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'player' %}your-turn{% else %}enemy-turn{% endif %}">
-    <div class="turn-text">
-        {% if encounter.current_turn == 'player' %}
-        YOUR TURN - Take one action
-        {% else %}
+    <div id="turn-text" class="turn-text">
+        {% if encounter.current_turn != 'player' %}
         ENEMY TURN - Waiting for Game Master...
+        {% elif is_multiplayer %}
+            {% if encounter.current_player_id == my_player_id %}
+            YOUR TURN - Take one action
+            {% elif encounter.current_player_id %}
+            {{ current_player_name }} is acting...
+            {% else %}
+            PLAYER TURN - Claim your turn to act
+            {% endif %}
+        {% else %}
+        YOUR TURN - Take one action
         {% endif %}
     </div>
+
+    {% if is_multiplayer %}
+    <!-- Multi-player turn claiming UI -->
+    <div id="claim-turn-section" style="margin-top: 10px; {% if encounter.current_turn != 'player' or encounter.current_player_id %}display: none;{% endif %}">
+        <button id="claim-turn-btn" class="btn" onclick="claimTurn()" style="background: var(--lcars-green); font-size: 1.1em; padding: 10px 30px;">
+            CLAIM TURN
+        </button>
+    </div>
+
+    <!-- Release turn button (only shown when this player has claimed) -->
+    <div id="release-turn-section" style="margin-top: 10px; {% if encounter.current_player_id != my_player_id %}display: none;{% endif %}">
+        <button class="btn btn-small" onclick="releaseTurn()" style="background: #555;">
+            Release Turn
+        </button>
+    </div>
+
+    <!-- "Already acted" indicator -->
+    <div id="already-acted-section" style="margin-top: 10px; display: none;">
+        <span style="color: var(--lcars-tan);">You've acted this round. Waiting for others...</span>
+    </div>
+    {% endif %}
+
     <div id="turn-counter" style="margin-top: 5px; font-size: 0.9em; display: flex; justify-content: center; gap: 30px;">
         <span style="color: var(--lcars-green);">
+            {% if is_multiplayer %}
+            Players: <span id="player-turns-used">0</span> / <span id="player-turns-total">{{ campaign_players | length }}</span>
+            {% else %}
             Your Turns: <span id="player-turns-used">0</span> / <span id="player-turns-total">0</span>
+            {% endif %}
         </span>
         <span style="color: var(--lcars-red);">
             Enemy: <span id="enemy-turns-used">0</span> / <span id="enemy-turns-total">0</span>
         </span>
     </div>
+
+    {% if is_multiplayer %}
+    <!-- Player list showing who has acted -->
+    <div id="players-status" style="margin-top: 10px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+        {% for player in campaign_players %}
+        <span class="player-status-badge" data-player-id="{{ player.id }}"
+              style="padding: 3px 8px; border-radius: 3px; font-size: 0.85em;
+                     background: {% if player.has_acted %}var(--lcars-green){% elif player.is_current %}var(--lcars-purple){% else %}#444{% endif %};
+                     color: {% if player.has_acted or player.is_current %}#000{% else %}#ccc{% endif %};">
+            {{ player.name }}{% if player.is_current %} (acting){% elif player.has_acted %} ✓{% endif %}
+        </span>
+        {% endfor %}
+    </div>
+    {% endif %}
 </div>
 
 <div class="grid">
@@ -912,6 +960,13 @@
     const role = 'player';
     let currentTurn = '{{ encounter.current_turn }}';
 
+    // Multi-player support
+    const isMultiplayer = {{ 'true' if is_multiplayer else 'false' }};
+    const myPlayerId = {{ my_player_id if my_player_id else 'null' }};
+    const myPlayerName = '{{ my_player_name | default("Player", true) }}';
+    let currentPlayerId = {{ encounter.current_player_id if encounter.current_player_id else 'null' }};
+    let myHasActed = false;
+
     // Tactical Map Data
     let tacticalMapData = {{ tactical_map | tojson if tactical_map else '{"radius": 3, "tiles": []}' | safe }};
     let shipPositions = {{ ship_positions | tojson if ship_positions else '[]' | safe }};
@@ -1226,10 +1281,171 @@
                     data.player_turns_used, data.player_turns_total,
                     data.enemy_turns_used, data.enemy_turns_total
                 );
+
+                // Update multi-player state if applicable
+                if (isMultiplayer) {
+                    updateMultiplayerState(data);
+                }
             }
         } catch (e) {
             console.error('Failed to fetch turn status:', e);
         }
+    }
+
+    // ========== MULTI-PLAYER FUNCTIONS ==========
+
+    // Update multi-player UI state
+    function updateMultiplayerState(data) {
+        currentPlayerId = data.current_player_id;
+        currentTurn = data.current_turn;
+
+        // Check if this player has acted this round
+        if (data.players_info) {
+            const myInfo = data.players_info.find(p => p.player_id === myPlayerId);
+            myHasActed = myInfo ? myInfo.has_acted : false;
+        }
+
+        // Update UI elements
+        updateMultiplayerUI();
+        updatePlayerStatusBadges(data.players_info || []);
+    }
+
+    // Update multi-player UI elements
+    function updateMultiplayerUI() {
+        if (!isMultiplayer) return;
+
+        const turnText = document.getElementById('turn-text');
+        const claimSection = document.getElementById('claim-turn-section');
+        const releaseSection = document.getElementById('release-turn-section');
+        const actedSection = document.getElementById('already-acted-section');
+        const actionsContainer = document.getElementById('actions-container');
+        const endTurnSection = document.getElementById('end-turn-section');
+
+        if (currentTurn !== 'player') {
+            // Enemy's turn
+            turnText.textContent = 'ENEMY TURN - Waiting for Game Master...';
+            if (claimSection) claimSection.style.display = 'none';
+            if (releaseSection) releaseSection.style.display = 'none';
+            if (actedSection) actedSection.style.display = 'none';
+            if (actionsContainer) actionsContainer.style.display = 'none';
+            if (endTurnSection) endTurnSection.style.display = 'none';
+        } else if (myHasActed) {
+            // Player already acted this round
+            turnText.textContent = "You've acted this round. Waiting for others...";
+            if (claimSection) claimSection.style.display = 'none';
+            if (releaseSection) releaseSection.style.display = 'none';
+            if (actedSection) actedSection.style.display = 'block';
+            if (actionsContainer) actionsContainer.style.display = 'none';
+            if (endTurnSection) endTurnSection.style.display = 'none';
+        } else if (currentPlayerId === myPlayerId) {
+            // This player has claimed the turn
+            turnText.textContent = 'YOUR TURN - Take one action';
+            if (claimSection) claimSection.style.display = 'none';
+            if (releaseSection) releaseSection.style.display = 'block';
+            if (actedSection) actedSection.style.display = 'none';
+            if (actionsContainer) actionsContainer.style.display = 'block';
+            if (endTurnSection) endTurnSection.style.display = 'block';
+        } else if (currentPlayerId) {
+            // Another player has claimed the turn
+            const currentName = data?.current_player_name || 'Another player';
+            turnText.textContent = `${currentName} is acting...`;
+            if (claimSection) claimSection.style.display = 'none';
+            if (releaseSection) releaseSection.style.display = 'none';
+            if (actedSection) actedSection.style.display = 'none';
+            if (actionsContainer) actionsContainer.style.display = 'none';
+            if (endTurnSection) endTurnSection.style.display = 'none';
+        } else {
+            // No one has claimed - show claim button
+            turnText.textContent = 'PLAYER TURN - Claim your turn to act';
+            if (claimSection) claimSection.style.display = 'block';
+            if (releaseSection) releaseSection.style.display = 'none';
+            if (actedSection) actedSection.style.display = 'none';
+            if (actionsContainer) actionsContainer.style.display = 'none';
+            if (endTurnSection) endTurnSection.style.display = 'none';
+        }
+    }
+
+    // Update player status badges
+    function updatePlayerStatusBadges(playersInfo) {
+        playersInfo.forEach(player => {
+            const badge = document.querySelector(`.player-status-badge[data-player-id="${player.player_id}"]`);
+            if (!badge) return;
+
+            // Update badge appearance
+            if (player.has_acted) {
+                badge.style.background = 'var(--lcars-green)';
+                badge.style.color = '#000';
+                badge.textContent = `${player.name} ✓`;
+            } else if (player.is_current) {
+                badge.style.background = 'var(--lcars-purple)';
+                badge.style.color = '#000';
+                badge.textContent = `${player.name} (acting)`;
+            } else {
+                badge.style.background = '#444';
+                badge.style.color = '#ccc';
+                badge.textContent = player.name;
+            }
+        });
+    }
+
+    // Claim the turn
+    async function claimTurn() {
+        if (!isMultiplayer || !myPlayerId) return;
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/claim-turn`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_id: myPlayerId })
+            });
+
+            const data = await response.json();
+
+            if (data.success && data.confirmed) {
+                currentPlayerId = myPlayerId;
+                updateMultiplayerUI();
+                showToast('Turn claimed! Take your action.', 'success');
+            } else if (data.claimed_by) {
+                showToast(`${data.claimed_by} claimed the turn first`, 'info');
+                // Refresh state
+                fetchTurnStatus();
+            } else if (data.error) {
+                showToast(data.error, 'error');
+            }
+        } catch (e) {
+            console.error('Failed to claim turn:', e);
+            showToast('Error claiming turn', 'error');
+        }
+    }
+
+    // Release the turn
+    async function releaseTurn() {
+        if (!isMultiplayer) return;
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/release-turn`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                currentPlayerId = null;
+                updateMultiplayerUI();
+                showToast('Turn released', 'info');
+            }
+        } catch (e) {
+            console.error('Failed to release turn:', e);
+        }
+    }
+
+    // Check if it's this player's turn (for action validation)
+    function canTakeAction() {
+        if (!isMultiplayer) {
+            return currentTurn === 'player';
+        }
+        return currentTurn === 'player' && currentPlayerId === myPlayerId && !myHasActed;
     }
 
     // Store action availability state
@@ -1300,6 +1516,11 @@
         fetchTurnStatus();
         fetchActionAvailability();
         updateBonusDiceFromMomentum();
+
+        // Poll for turn status updates (important for multi-player sync)
+        if (isMultiplayer) {
+            setInterval(fetchTurnStatus, 2000);  // Poll every 2 seconds
+        }
     });
 
     // Show a brief result message for minor actions that don't need dice

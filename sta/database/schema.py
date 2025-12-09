@@ -263,8 +263,15 @@ class EncounterRecord(Base):
     # Turn tracking - ships_turns_used is JSON dict: {"ship_id": turns_used}
     # Each ship gets Scale turns per round
     ships_turns_used_json: Mapped[str] = mapped_column(Text, default="{}")
-    player_turns_used: Mapped[int] = mapped_column(Integer, default=0)
-    player_turns_total: Mapped[int] = mapped_column(Integer, default=1)  # 1 turn for now, expand later
+    player_turns_used: Mapped[int] = mapped_column(Integer, default=0)  # Legacy: kept for backward compat
+    player_turns_total: Mapped[int] = mapped_column(Integer, default=1)  # Legacy: kept for backward compat
+
+    # Multi-player turn tracking - JSON dict: {"player_id": {"acted": bool, "acted_at": "timestamp"}}
+    players_turns_used_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    # Track who currently has claimed the turn (for race condition prevention)
+    current_player_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
+    turn_claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
 
     # Active effects stored as JSON
     active_effects_json: Mapped[str] = mapped_column(Text, default="[]")

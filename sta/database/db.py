@@ -49,6 +49,22 @@ def run_migrations():
             conn.commit()
             print("Migration: Added status column to encounters table")
 
+        # Multi-player support migrations
+        if 'players_turns_used_json' not in encounter_columns:
+            conn.execute(text("ALTER TABLE encounters ADD COLUMN players_turns_used_json TEXT DEFAULT '{}'"))
+            conn.commit()
+            print("Migration: Added players_turns_used_json column to encounters table")
+
+        if 'current_player_id' not in encounter_columns:
+            conn.execute(text("ALTER TABLE encounters ADD COLUMN current_player_id INTEGER"))
+            conn.commit()
+            print("Migration: Added current_player_id column to encounters table")
+
+        if 'turn_claimed_at' not in encounter_columns:
+            conn.execute(text("ALTER TABLE encounters ADD COLUMN turn_claimed_at DATETIME"))
+            conn.commit()
+            print("Migration: Added turn_claimed_at column to encounters table")
+
 
 def init_db():
     """Initialize the database, creating all tables."""

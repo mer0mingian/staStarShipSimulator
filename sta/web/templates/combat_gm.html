@@ -71,6 +71,42 @@
         </div>
     </div>
 
+    <!-- Multi-Player Status Panel -->
+    {% if campaign_players and campaign_players | length > 1 %}
+    <div class="panel" style="border-color: var(--lcars-purple);">
+        <h2 style="color: var(--lcars-purple);">PLAYER STATUS</h2>
+        <p style="color: var(--lcars-tan); font-size: 0.85em; margin-bottom: 10px;">
+            {{ campaign_players | selectattr('has_acted') | list | length }} / {{ campaign_players | length }} players have acted this round
+        </p>
+        <div id="player-status-list">
+            {% for player in campaign_players %}
+            <div class="player-status-row" data-player-id="{{ player.id }}"
+                 style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #1a1a1a; border-radius: 5px; margin-bottom: 5px;
+                        border-left: 3px solid {% if player.has_acted %}var(--lcars-green){% elif player.is_current %}var(--lcars-purple){% else %}#444{% endif %};">
+                <div>
+                    <strong style="color: {% if player.is_current %}var(--lcars-purple){% else %}var(--lcars-tan){% endif %};">
+                        {{ player.name }}
+                    </strong>
+                    <span style="color: #888; font-size: 0.85em;">[{{ player.position | title }}]</span>
+                    {% if player.has_acted %}
+                    <span style="color: var(--lcars-green); font-size: 0.85em; margin-left: 5px;">✓ Acted</span>
+                    {% elif player.is_current %}
+                    <span style="color: var(--lcars-purple); font-size: 0.85em; margin-left: 5px;">ACTING</span>
+                    {% else %}
+                    <span style="color: #666; font-size: 0.85em; margin-left: 5px;">Waiting</span>
+                    {% endif %}
+                </div>
+                {% if player.is_current %}
+                <button class="btn btn-small" onclick="gmReleaseTurn({{ player.id }})" style="background: #555; font-size: 0.8em;">
+                    Release Turn
+                </button>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Player Character (visible to GM) -->
     {% if player_char %}
     <div class="panel" style="border-color: var(--lcars-green);">
@@ -214,6 +250,16 @@
         {% endfor %}
     </div>
     {% endif %}
+
+    <!-- Enemy Ships Header with Add Button -->
+    <div class="panel" style="border-color: var(--lcars-red); padding: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="color: var(--lcars-red); margin: 0;">ENEMY SHIPS ({{ enemy_ships | length }})</h2>
+            <button class="btn btn-small" onclick="showAddEnemyModal()" style="background: var(--lcars-red);">
+                + Add Enemy Ship
+            </button>
+        </div>
+    </div>
 
     <!-- Enemy Ships (full details for GM) -->
     {% for enemy in enemy_ships %}
@@ -661,7 +707,96 @@
     .status-done { background: var(--lcars-green); color: #000; }
     .status-rft { background: var(--lcars-blue); color: #000; }
     .status-not-impl { background: #555; color: #fff; }
+
+    /* Modal Styles */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+    .modal-overlay.active {
+        display: flex;
+    }
+    .modal-content {
+        background: #1a1a1a;
+        border: 3px solid var(--lcars-red);
+        border-radius: 10px;
+        padding: 25px;
+        max-width: 450px;
+        width: 90%;
+        animation: fadeIn 0.2s ease-out;
+    }
+    .modal-content h3 {
+        color: var(--lcars-red);
+        margin-bottom: 20px;
+        font-size: 1.3em;
+    }
+    .modal-content label {
+        display: block;
+        color: var(--lcars-tan);
+        margin-bottom: 5px;
+        margin-top: 15px;
+    }
+    .modal-content select,
+    .modal-content input {
+        width: 100%;
+        padding: 10px;
+        background: #333;
+        border: 1px solid #555;
+        border-radius: 5px;
+        color: #fff;
+        font-size: 1em;
+    }
+    .modal-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 25px;
+        justify-content: flex-end;
+    }
 </style>
+
+<!-- Add Enemy Ship Modal -->
+<div id="add-enemy-modal" class="modal-overlay">
+    <div class="modal-content">
+        <h3>ADD ENEMY SHIP</h3>
+        <p style="color: var(--lcars-tan); font-size: 0.9em;">Generate a new enemy ship to add to this encounter.</p>
+
+        <label for="enemy-faction">Faction</label>
+        <select id="enemy-faction">
+            <option value="">Random</option>
+            <option value="klingon">Klingon</option>
+            <option value="romulan">Romulan</option>
+        </select>
+
+        <label for="enemy-difficulty">Ship Class</label>
+        <select id="enemy-difficulty">
+            <option value="easy">Light (Bird-of-Prey / Scout)</option>
+            <option value="standard" selected>Standard (Cruiser / Warbird)</option>
+            <option value="hard">Heavy (Battlecruiser / D'deridex)</option>
+        </select>
+
+        <label for="enemy-crew-quality">Crew Quality</label>
+        <select id="enemy-crew-quality">
+            <option value="basic">Basic (Attr 8, Dept 1, TN 9)</option>
+            <option value="proficient">Proficient (Attr 9, Dept 2, TN 11)</option>
+            <option value="talented" selected>Talented (Attr 10, Dept 3, TN 13)</option>
+            <option value="exceptional">Exceptional (Attr 11, Dept 4, TN 15)</option>
+        </select>
+
+        <div class="modal-buttons">
+            <button class="btn" onclick="hideAddEnemyModal()" style="background: #555;">Cancel</button>
+            <button class="btn" onclick="addEnemyShip()" style="background: var(--lcars-red);">Add Ship</button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -674,6 +809,36 @@
     const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
     const role = 'gm';
     let currentTurn = '{{ encounter.current_turn }}';
+
+    // ========== GM MULTI-PLAYER FUNCTIONS ==========
+
+    // Release a player's turn (GM override for AFK players)
+    async function gmReleaseTurn(playerId) {
+        if (!confirm("Release this player's turn? Use if the player is AFK or disconnected.")) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/release-turn`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_id: playerId, force: true })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showToast('Turn released', 'success');
+                // Refresh page to update player status
+                location.reload();
+            } else {
+                showToast(data.error || 'Failed to release turn', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to release turn:', e);
+            showToast('Error releasing turn', 'error');
+        }
+    }
 
     // Tactical Map Data
     let tacticalMapData = {{ tactical_map | tojson if tactical_map else '{"radius": 3, "tiles": []}' | safe }};
@@ -1994,5 +2159,53 @@
 
     // Periodically refresh map (every 5 seconds) to sync with other clients
     setInterval(refreshMapData, 5000);
+
+    // ========== ADD ENEMY SHIP MODAL ==========
+
+    function showAddEnemyModal() {
+        document.getElementById('add-enemy-modal').classList.add('active');
+    }
+
+    function hideAddEnemyModal() {
+        document.getElementById('add-enemy-modal').classList.remove('active');
+    }
+
+    async function addEnemyShip() {
+        const faction = document.getElementById('enemy-faction').value || null;
+        const difficulty = document.getElementById('enemy-difficulty').value;
+        const crewQuality = document.getElementById('enemy-crew-quality').value;
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/enemy-ships`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    faction: faction,
+                    difficulty: difficulty,
+                    crew_quality: crewQuality
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showToast(`Added ${data.new_enemy.name} to encounter`, 'success');
+                hideAddEnemyModal();
+                // Reload the page to show the new ship
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.error || 'Failed to add enemy ship', 'error');
+            }
+        } catch (error) {
+            showToast('Error adding enemy ship: ' + error.message, 'error');
+        }
+    }
+
+    // Close modal on click outside
+    document.getElementById('add-enemy-modal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            hideAddEnemyModal();
+        }
+    });
 </script>
 {% endblock %}
