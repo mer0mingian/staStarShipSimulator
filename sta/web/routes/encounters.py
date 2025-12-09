@@ -207,6 +207,17 @@ def combat(encounter_id: str):
         # Get player's position - from campaign membership if available, otherwise from encounter
         from sta.mechanics.actions import get_actions_for_position
 
+        # Check for pending position change - apply it if it's the player's turn
+        pending_position = None
+        if current_campaign_player and current_campaign_player.pending_position:
+            pending_position = current_campaign_player.pending_position
+            # Apply the pending position if it's the player's turn
+            if encounter.current_turn == "player":
+                current_campaign_player.position = current_campaign_player.pending_position
+                current_campaign_player.pending_position = None
+                session.commit()
+                pending_position = None  # Clear since we applied it
+
         # Use campaign position if available (from earlier lookup), otherwise fall back to encounter's position
         player_campaign_position = None
         if current_campaign_player and current_campaign_player.position and current_campaign_player.position != "unassigned":
@@ -364,7 +375,7 @@ def combat(encounter_id: str):
         elif role == "gm":
             template = "combat_gm.html"
         else:
-            template = "combat_player.html"
+            template = "combat_player_new.html"
 
         # Multi-player info for player view
         my_player_id = None
@@ -433,6 +444,8 @@ def combat(encounter_id: str):
             # GM visibility (fog-of-war)
             player_in_fog=player_in_fog,
             player_detected_by_enemy=player_detected_by_enemy,
+            # Pending position change
+            pending_position=pending_position,
         )
     finally:
         session.close()

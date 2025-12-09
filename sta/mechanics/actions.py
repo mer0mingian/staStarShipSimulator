@@ -49,6 +49,7 @@ STANDARD_MINOR_ACTIONS = [
         action_type=ActionType.MINOR,
         positions=list(Position),
         description="Move to any bridge station or ship location. Arrive at start of next turn.",
+        status="RFT",
     ),
     Action(
         name="Interact",
@@ -88,9 +89,10 @@ STANDARD_MAJOR_ACTIONS = [
     Action(
         name="Override",
         action_type=ActionType.MAJOR,
-        positions=list(Position),
+        positions=[p for p in Position if p != Position.CAPTAIN],  # Not available to Captain
         description="Attempt action from another position. Difficulty +1.",
         effect_notes="Add +1 to base difficulty of the action being attempted.",
+        status="RFT",
     ),
     Action(
         name="Pass",

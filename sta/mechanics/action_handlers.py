@@ -615,6 +615,86 @@ def apply_effects_to_defense(
 
 
 # =============================================================================
+# CHANGE POSITION HANDLER
+# =============================================================================
+
+
+def execute_change_position(
+    player_name: str,
+    current_position: str,
+    new_position: str,
+) -> ActionExecutionResult:
+    """
+    Execute the Change Position action.
+
+    Sets a pending position that takes effect at the start of the player's next turn.
+    The actual database update of pending_position happens in the API route.
+
+    Args:
+        player_name: Name of the player changing position
+        current_position: Current bridge position
+        new_position: Target bridge position
+
+    Returns:
+        ActionExecutionResult with pending position info
+    """
+    from sta.models.enums import Position
+
+    # Validate new position
+    valid_positions = [p.value for p in Position]
+    if new_position.lower() not in valid_positions:
+        return ActionExecutionResult(False, f"Invalid position: {new_position}")
+
+    if current_position.lower() == new_position.lower():
+        return ActionExecutionResult(False, "You are already at that position!")
+
+    result = ActionExecutionResult(
+        True,
+        f"{player_name} will move to {new_position.title()} at the start of their next turn."
+    )
+    result.data["new_position"] = new_position.lower()
+    result.data["current_position"] = current_position.lower()
+
+    return result
+
+
+# =============================================================================
+# OVERRIDE HANDLER
+# =============================================================================
+
+
+def get_override_difficulty_modifier() -> int:
+    """Return the difficulty modifier for Override action."""
+    return 1
+
+
+def get_overrideable_actions() -> dict[str, list[str]]:
+    """
+    Get the list of actions that can be overridden, organized by station.
+
+    Returns dict mapping station name to list of action names.
+    """
+    from sta.mechanics.actions import (
+        HELM_MAJOR_ACTIONS,
+        TACTICAL_MAJOR_ACTIONS,
+        OPERATIONS_MAJOR_ACTIONS,
+        SCIENCE_MAJOR_ACTIONS,
+        MEDICAL_MAJOR_ACTIONS,
+        COMMAND_ACTIONS,
+    )
+
+    return {
+        "helm": [a.name for a in HELM_MAJOR_ACTIONS],
+        "tactical": [a.name for a in TACTICAL_MAJOR_ACTIONS],
+        "operations": [a.name for a in OPERATIONS_MAJOR_ACTIONS],
+        "engineering": [a.name for a in OPERATIONS_MAJOR_ACTIONS],  # Same as operations
+        "science": [a.name for a in SCIENCE_MAJOR_ACTIONS],
+        "medical": [a.name for a in MEDICAL_MAJOR_ACTIONS],
+        "captain": [a.name for a in COMMAND_ACTIONS],
+    }
+
+
+# =============================================================================
 # ACTION COMPLETION MANAGER
 # =============================================================================
 # Centralized handler for action completion - ensures consistent logging and

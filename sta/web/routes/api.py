@@ -700,11 +700,24 @@ def next_turn(encounter_id: str):
 
         enemy_info = get_enemy_turn_info(session, encounter)
         player_info = get_player_turn_info(session, encounter)
+        multiplayer_info = get_multiplayer_turn_info(session, encounter)
 
         # Mark current side as having used all their turns
         if encounter.current_turn == "player":
             # Player passes - mark all their turns as used
-            encounter.player_turns_used = player_info["total_turns"]
+            if multiplayer_info["is_multiplayer"]:
+                # In multiplayer mode, mark all players as having acted
+                players_turns_used = json.loads(encounter.players_turns_used_json or "{}")
+                for player_data in multiplayer_info["players_info"]:
+                    if not player_data.get("has_acted", False):
+                        players_turns_used[str(player_data["player_id"])] = {
+                            "acted": True,
+                            "acted_at": datetime.now().isoformat(),
+                        }
+                encounter.players_turns_used_json = json.dumps(players_turns_used)
+            else:
+                # Legacy single-player mode
+                encounter.player_turns_used = player_info["total_turns"]
         else:
             # Enemy passes - mark all enemy turns as used
             ships_turns_used = json.loads(encounter.ships_turns_used_json)
@@ -991,6 +1004,7 @@ def fire_weapon():
     previous_rolls = data.get("previous_rolls")  # Previous roll results (for re-roll)
     role = data.get("role", "player")  # Default to player
     character_id = data.get("character_id")  # Optional: override acting character for logging
+    player_id = data.get("player_id")  # Campaign player ID for multiplayer turn tracking
 
     # Check turn ownership for player fire actions
     if role == "player":
@@ -1366,6 +1380,7 @@ def fire_weapon():
                 "succeeded": result.succeeded,
             },
             damage_dealt=response.get("total_damage", 0),
+            player_id=player_id,
         )
         response.update(turn_state)
 
@@ -2077,6 +2092,123 @@ def execute_action(encounter_id: str):
                 if result.success:
                     player_ship_record.has_reserve_power = player_ship.has_reserve_power
 
+            elif action_name == "Change Position":
+                # Change Position - set pending_position on the player's campaign record
+                new_position = data.get("new_position")
+                if new_position is None:
+                    return jsonify({"error": "new_position required for Change Position"}), 400
+
+                # Get the current player from their session token
+                session_token = request.cookies.get("sta_session_token")
+                if not session_token:
+                    return jsonify({"error": "Not authenticated"}), 401
+
+                # Find the player's campaign record
+                if encounter_record.campaign_id:
+                    from sta.database.schema import CampaignPlayerRecord
+                    campaign_player = session.query(CampaignPlayerRecord).filter_by(
+                        campaign_id=encounter_record.campaign_id,
+                        session_token=session_token
+                    ).first()
+
+                    if not campaign_player:
+                        return jsonify({"error": "Player not found in campaign"}), 404
+
+                    current_position = campaign_player.position
+                    player_name = campaign_player.player_name
+
+                    # Use the handler to validate
+                    from sta.mechanics.action_handlers import execute_change_position
+                    result = execute_change_position(player_name, current_position, new_position)
+
+                    if result.success:
+                        # Set the pending position
+                        campaign_player.pending_position = new_position.lower()
+                        result.data["pending_position"] = new_position.lower()
+                else:
+                    return jsonify({"error": "Change Position requires a campaign context"}), 400
+
+            elif action_name == "Override":
+                # Override - execute an action from another station with +1 difficulty
+                target_station = data.get("target_station")
+                target_action = data.get("target_action")
+
+                if not target_station:
+                    return jsonify({"error": "target_station required for Override"}), 400
+                if not target_action:
+                    return jsonify({"error": "target_action required for Override"}), 400
+
+                # Check that player is not Captain
+                session_token = request.cookies.get("sta_session_token")
+                if session_token and encounter_record.campaign_id:
+                    from sta.database.schema import CampaignPlayerRecord
+                    campaign_player = session.query(CampaignPlayerRecord).filter_by(
+                        campaign_id=encounter_record.campaign_id,
+                        session_token=session_token
+                    ).first()
+
+                    if campaign_player and campaign_player.position == "captain":
+                        return jsonify({"error": "Captain cannot use Override"}), 400
+
+                # Get the target action config
+                from sta.mechanics.action_config import get_action_config as get_target_config
+                target_config = get_target_config(target_action)
+                if not target_config:
+                    return jsonify({"error": f"Unknown action: {target_action}"}), 400
+
+                # Get Override difficulty modifier
+                from sta.mechanics.action_handlers import get_override_difficulty_modifier
+                override_modifier = get_override_difficulty_modifier()
+
+                # For task roll actions, add +1 to difficulty
+                if target_config.get("type") == "task_roll":
+                    # Modify the difficulty in the roll config
+                    roll_config = target_config.get("roll", {})
+                    base_difficulty = roll_config.get("difficulty", 1)
+                    modified_difficulty = base_difficulty + override_modifier
+
+                    # Create override result
+                    from sta.mechanics.action_handlers import ActionExecutionResult
+
+                    # Check if roll was already done by frontend
+                    if "roll_succeeded" in data:
+                        if data.get("roll_succeeded"):
+                            momentum_generated = data.get("roll_momentum", 0)
+                            result = apply_task_roll_success(
+                                target_action,
+                                encounter,
+                                player_ship,
+                                momentum_generated,
+                                target_config
+                            )
+                            result.message = f"Override: {result.message} (+1 Difficulty)"
+                        else:
+                            roll_successes = data.get("roll_successes", 0)
+                            roll_complications = data.get("roll_complications", 0)
+                            result = ActionExecutionResult(
+                                False,
+                                f"Override: {target_action} failed! ({roll_successes} successes, needed {modified_difficulty})"
+                            )
+                            if roll_complications > 0:
+                                result.message += f" {roll_complications} complication(s)!"
+                    else:
+                        # Backend rolls not fully supported for Override yet
+                        return jsonify({"error": "Override requires frontend roll"}), 400
+
+                    result.data["override_target"] = target_action
+                    result.data["override_station"] = target_station
+                    result.data["difficulty_modifier"] = override_modifier
+
+                elif target_config.get("type") == "buff":
+                    # Buff actions don't have difficulty - just execute them
+                    result = execute_buff_action(target_action, encounter, player_ship, target_config)
+                    result.message = f"Override: {result.message}"
+                    result.data["override_target"] = target_action
+                    result.data["override_station"] = target_station
+
+                else:
+                    return jsonify({"error": f"Cannot override action type: {target_config.get('type')}"}), 400
+
             else:
                 return jsonify({"error": f"Special action not implemented: {action_name}"}), 400
 
@@ -2092,9 +2224,10 @@ def execute_action(encounter_id: str):
             player_ship_record.has_reserve_power = player_ship.has_reserve_power
 
         # Determine if this is a major action (uses a turn)
-        # buff and toggle actions are minor; task_roll and special are major
+        # buff and toggle actions are minor; task_roll and most special actions are major
+        # Exception: Change Position is a special action but is minor
         action_type = config.get("type")
-        is_major_action = action_type in ("task_roll", "special")
+        is_major_action = action_type in ("task_roll", "special") and action_name != "Change Position"
 
         response = result.to_dict()
 
