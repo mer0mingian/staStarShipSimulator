@@ -4,70 +4,96 @@
 
 {% block header %}Game Master Station{% endblock %}
 
+{% block sidebar_nav %}
+<a href="{{ url_for('main.index') }}" class="lcars-sidebar-btn color-6">Back</a>
+{% endblock %}
+
 {% block content %}
-{% if my_campaigns %}
-<div class="panel" style="border-color: var(--lcars-purple);">
-    <h2 style="color: var(--lcars-purple);">My Campaigns</h2>
-    <p style="color: var(--lcars-tan); margin-bottom: 15px;">Campaigns you are running</p>
-    <ul class="action-list">
-        {% for campaign in my_campaigns %}
-            <li>
+<div style="max-width: 800px; margin: 0 auto;">
+    {% if my_campaigns %}
+    <!-- My Campaigns Panel -->
+    <div class="lcars-bar" style="background: var(--lcars-african-violet);">My Campaigns</div>
+    <div class="lcars-panel panel-violet">
+        <p class="text-muted mb-2">Campaigns you are running</p>
+        <ul class="lcars-action-list">
+            {% for campaign in my_campaigns %}
+            <li class="lcars-action-item">
                 <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id, role='gm') }}"
                    style="color: inherit; text-decoration: none; display: block;">
-                    <strong>{{ campaign.name }}</strong>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="action-name">{{ campaign.name }}</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
                         {% if campaign.description %}
-                            <span class="action-type">{{ campaign.description[:40] }}{% if campaign.description|length > 40 %}...{% endif %}</span>
+                        <span class="action-desc">{{ campaign.description[:40] }}{% if campaign.description|length > 40 %}...{% endif %}</span>
                         {% else %}
-                            <span class="action-type">&nbsp;</span>
+                        <span class="action-desc">&nbsp;</span>
                         {% endif %}
-                        <span style="color: var(--lcars-tan); font-size: 0.85em;">Code: {{ campaign.campaign_id }}</span>
+                        <span class="lcars-pill" style="font-size: 0.65rem;">{{ campaign.campaign_id }}</span>
                     </div>
                 </a>
             </li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
 
-<div class="panel">
-    <h2>Create New Campaign</h2>
-    <p style="color: var(--lcars-tan); margin-bottom: 20px;">Start a new adventure for your crew</p>
+    <!-- Create Campaign Panel -->
+    <div class="lcars-bar-capped">
+        <div class="bar-cap" style="background: var(--lcars-gold);"></div>
+        <div class="bar-content">Create New Campaign</div>
+        <div class="bar-cap" style="background: var(--lcars-orange);"></div>
+    </div>
+    <div class="lcars-panel panel-orange">
+        <p class="text-muted mb-3">Start a new adventure for your crew</p>
 
-    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-        <a href="{{ url_for('campaigns.new_campaign') }}" class="btn" style="flex: 1; min-width: 150px; text-align: center;">
-            Custom Campaign
-        </a>
-        <button onclick="generateRandomCampaign()" class="btn" style="flex: 1; min-width: 150px; background: var(--lcars-blue);">
-            Quick Start (Random)
-        </button>
+        <div class="lcars-grid-2" style="gap: 15px;">
+            <a href="{{ url_for('campaigns.new_campaign') }}" class="lcars-btn" style="width: 100%; text-align: center;">
+                Custom Campaign
+            </a>
+            <button onclick="generateRandomCampaign()" class="lcars-btn btn-blue" style="width: 100%;">
+                Quick Start
+            </button>
+        </div>
+
+        <div class="mt-3" style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <div class="lcars-stat-row">
+                    <span class="lcars-stat-label">Custom</span>
+                    <span class="lcars-stat-value text-orange">Set your own details</span>
+                </div>
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+                <div class="lcars-stat-row">
+                    <span class="lcars-stat-label">Quick Start</span>
+                    <span class="lcars-stat-value text-blue">Random ship & encounter</span>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <p style="color: var(--lcars-tan); font-size: 0.85em; margin-top: 15px;">
-        <strong>Custom:</strong> Set your own campaign name and details<br>
-        <strong>Quick Start:</strong> Generate a random campaign with a ship and encounter ready to go
-    </p>
-</div>
-
-{% if other_campaigns %}
-<div class="panel" style="border-color: var(--lcars-tan);">
-    <h2>Other Active Campaigns</h2>
-    <p style="color: var(--lcars-tan); margin-bottom: 15px;">Campaigns run by other GMs</p>
-    <ul class="action-list">
-        {% for campaign in other_campaigns %}
-            <li style="opacity: 0.7;">
-                <strong>{{ campaign.name }}</strong>
-                <span class="action-type">Code: {{ campaign.campaign_id }}</span>
+    {% if other_campaigns %}
+    <!-- Other Campaigns Panel -->
+    <div class="lcars-bar" style="background: var(--lcars-almond);">Other Active Campaigns</div>
+    <div class="lcars-panel" style="opacity: 0.8;">
+        <p class="text-muted mb-2">Campaigns run by other GMs</p>
+        <ul class="lcars-action-list">
+            {% for campaign in other_campaigns %}
+            <li class="lcars-action-item" style="cursor: default; opacity: 0.7;">
+                <div class="action-name">{{ campaign.name }}</div>
+                <div class="action-desc">
+                    <span class="lcars-pill" style="font-size: 0.65rem; background: var(--lcars-gray);">{{ campaign.campaign_id }}</span>
+                </div>
             </li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
 
-<div style="margin-top: 20px;">
-    <a href="{{ url_for('main.index') }}" class="btn btn-small" style="background: #666;">
-        Back to Role Selection
-    </a>
+    <!-- Navigation -->
+    <div class="mt-3">
+        <a href="{{ url_for('main.index') }}" class="lcars-btn btn-sm" style="background: var(--lcars-gray);">
+            Back to Role Selection
+        </a>
+    </div>
 </div>
 
 <script>
