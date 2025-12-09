@@ -2498,6 +2498,92 @@ def npc_action(encounter_id: str):
             else:
                 result["message"] = f"{npc_ship.name}: {action_name} - special action (not implemented)"
 
+        elif action_type == "sensor_sweep":
+            # NPC Sensor Sweep - reveals the scanning ship's position and adjacent hexes
+            # This allows the GM to see player ships in those zones (if in fog)
+            ship_positions_data = json.loads(encounter_record.ship_positions_json or "{}")
+            enemy_key = f"enemy_{ship_index}"
+            enemy_pos = ship_positions_data.get(enemy_key, {"q": 0, "r": 0})
+            player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
+
+            # Calculate hex distance between enemy and player
+            def hex_distance(q1, r1, q2, r2):
+                return (abs(q1 - q2) + abs(q1 + r1 - q2 - r2) + abs(r1 - r2)) // 2
+
+            distance = hex_distance(
+                enemy_pos.get("q", 0), enemy_pos.get("r", 0),
+                player_pos.get("q", 0), player_pos.get("r", 0)
+            )
+
+            # Ships in same hex always see each other - no roll needed
+            if distance == 0:
+                result["message"] = f"{npc_ship.name}: Player ship detected in same sector!"
+                result["player_detected"] = True
+                result["detected_position"] = player_pos
+            else:
+                # Perform the roll using NPC crew quality
+                target_number = attribute + department
+                num_dice = 2 + bonus_dice
+
+                rolls = [random.randint(1, 20) for _ in range(num_dice)]
+                successes = 0
+                complications = 0
+
+                for roll in rolls:
+                    if roll == 1:
+                        successes += 2  # Critical success
+                    elif roll <= 2 and focus:
+                        successes += 2  # Focus makes 2 also a crit
+                    elif roll <= target_number:
+                        successes += 1
+                    if roll == 20:
+                        complications += 1
+
+                succeeded = successes >= difficulty
+                momentum_generated = max(0, successes - difficulty) if succeeded else 0
+
+                result["roll_results"] = {
+                    "rolls": rolls,
+                    "target": target_number,
+                    "successes": successes,
+                    "complications": complications,
+                    "difficulty": difficulty,
+                    "succeeded": succeeded,
+                    "momentum_generated": momentum_generated,
+                    "has_focus": focus,
+                }
+
+                if succeeded:
+                    # Create detection effect - stores the SCANNER's position
+                    # This reveals the scanner's hex and all adjacent hexes for visibility checks
+                    new_effect = ActiveEffect(
+                        source_action="Sensor Sweep",
+                        source_ship=f"enemy_{ship_index}",  # Mark as enemy source
+                        applies_to="sensor",
+                        duration="end_of_round",  # Detection lasts until end of current round
+                        detected_position={"q": enemy_pos.get("q", 0), "r": enemy_pos.get("r", 0)},
+                    )
+                    active_effects.append(new_effect)
+
+                    # Check if player is within detection range (adjacent = distance 1)
+                    player_in_range = distance <= 1
+                    if player_in_range:
+                        result["message"] = f"{npc_ship.name}: Sensor Sweep detected player ship in adjacent sector!"
+                        result["player_detected"] = True
+                        result["detected_position"] = player_pos
+                    else:
+                        result["message"] = f"{npc_ship.name}: Sensor Sweep complete - no contacts in adjacent sectors."
+                        result["player_detected"] = False
+
+                    # Generate threat from momentum
+                    if momentum_generated > 0:
+                        encounter_record.threat += momentum_generated
+                        result["threat_generated"] = momentum_generated
+                        result["message"] += f" (+{momentum_generated} Threat)"
+                else:
+                    result["message"] = f"{npc_ship.name}: Sensor Sweep failed."
+                    result["player_detected"] = False
+
         # Save updated effects
         encounter_record.active_effects_json = json.dumps([e.to_dict() for e in active_effects])
 
@@ -3750,13 +3836,20 @@ def update_map_terrain(encounter_id: str):
 
 @api_bp.route("/encounter/<encounter_id>/map/ship-position", methods=["POST"])
 def update_ship_position(encounter_id: str):
-    """Update a ship's position on the tactical map."""
+    """Update a ship's position on the tactical map.
+
+    Optional parameters:
+        log_action: bool - If true, log this as an Impulse action to combat log
+        action_name: str - Name of the action (default "Impulse")
+    """
     session = get_session()
     try:
         data = request.json
         ship_id = data.get("ship_id")  # "player" or "enemy_0", "enemy_1", etc.
         q = data.get("q")
         r = data.get("r")
+        log_action = data.get("log_action", False)
+        action_name = data.get("action_name", "Impulse")
 
         if not ship_id or q is None or r is None:
             return jsonify({"error": "Missing ship_id, q, or r"}), 400
@@ -3776,7 +3869,6 @@ def update_ship_position(encounter_id: str):
 
         # Save back to database
         encounter_record.ship_positions_json = json.dumps(ship_positions_data)
-        session.commit()
 
         # Build ship positions list with names for response
         ship_positions = []
@@ -3784,6 +3876,7 @@ def update_ship_position(encounter_id: str):
 
         # Player ship
         player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
+        player_ship = None
         if encounter_record.player_ship_id:
             player_ship = session.query(StarshipRecord).get(encounter_record.player_ship_id)
             ship_positions.append({
@@ -3795,8 +3888,10 @@ def update_ship_position(encounter_id: str):
 
         # Enemy ships
         enemy_ids = json.loads(encounter_record.enemy_ship_ids_json or "[]")
+        enemy_ships = {}
         for i, enemy_id in enumerate(enemy_ids):
             enemy_ship = session.query(StarshipRecord).get(enemy_id)
+            enemy_ships[f"enemy_{i}"] = enemy_ship
             enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
             ship_positions.append({
                 "id": f"enemy_{i}",
@@ -3804,6 +3899,32 @@ def update_ship_position(encounter_id: str):
                 "faction": "enemy",
                 "position": enemy_pos
             })
+
+        # Log the action if requested
+        if log_action:
+            # Determine ship name and actor type
+            if ship_id == "player":
+                ship_name = player_ship.name if player_ship else "Player Ship"
+                actor_type = "player"
+                actor_name = "Helm"
+            else:
+                ship_record = enemy_ships.get(ship_id)
+                ship_name = ship_record.name if ship_record else ship_id
+                actor_type = "enemy"
+                actor_name = f"{ship_name} Helm"
+
+            log_combat_action(
+                session=session,
+                encounter_record=encounter_record,
+                actor_name=actor_name,
+                actor_type=actor_type,
+                ship_name=ship_name,
+                action_name=action_name,
+                action_type="minor",
+                description=f"{ship_name} moved to sector ({q}, {r})",
+            )
+
+        session.commit()
 
         return jsonify({
             "success": True,

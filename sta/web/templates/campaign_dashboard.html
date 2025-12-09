@@ -13,13 +13,13 @@
         <button class="btn btn-small" onclick="copyJoinLink()" style="margin-left: 10px;">Copy Join Link</button>
     </div>
     <div>
-        {% if current_player %}
-            <span style="color: {% if is_gm %}var(--lcars-purple){% else %}var(--lcars-green){% endif %};">
-                {% if is_gm %}
-                    Q (Game Master)
-                {% else %}
-                    {{ current_player.player_name }}
-                {% endif %}
+        {% if is_gm %}
+            <span style="color: var(--lcars-purple);">
+                Q (Game Master)
+            </span>
+        {% elif current_player %}
+            <span style="color: var(--lcars-green);">
+                {{ current_player.player_name }}
             </span>
         {% else %}
             <a href="{{ url_for('campaigns.join_campaign', campaign_id=campaign.campaign_id) }}" class="btn btn-small">
@@ -46,14 +46,22 @@
                 </div>
             </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='player') }}"
-                   class="btn btn-small">
-                    Join as Player
-                </a>
                 {% if is_gm %}
                 <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='gm') }}"
                    class="btn btn-small" style="background: var(--lcars-purple);">
                     Open GM View
+                </a>
+                <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='viewscreen') }}"
+                   class="btn btn-small" style="background: var(--lcars-blue);">
+                    Open Viewscreen
+                </a>
+                <button class="btn btn-small" onclick="editEncounter('{{ active_encounter.encounter_id }}')" style="background: var(--lcars-tan);">
+                    Edit
+                </button>
+                {% else %}
+                <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='player') }}"
+                   class="btn btn-small">
+                    Join as Player
                 </a>
                 {% endif %}
             </div>
