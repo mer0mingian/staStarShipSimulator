@@ -1,0 +1,2529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ encounter.name }} - Player View</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/lcars.css') }}">
+    <style>
+        /* Player View - Full viewport with custom left nav */
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .player-wrapper {
+            display: flex;
+            height: 100vh;
+            background: var(--lcars-bg);
+        }
+
+        /* Left Navigation Panel */
+        .player-left-nav {
+            width: 180px;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+
+        .player-nav-top {
+            background: var(--lcars-bluey);
+            height: 60px;
+            border-radius: 30px 0 0 0;
+            display: flex;
+            align-items: flex-end;
+            padding: 10px 15px;
+        }
+
+        .player-nav-top span {
+            color: var(--lcars-text-dark);
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .player-nav-tabs {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            flex: 1;
+        }
+
+        .player-nav-tab {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding: 12px 15px;
+            background: var(--lcars-butterscotch);
+            color: var(--lcars-text-dark);
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            border: none;
+            cursor: pointer;
+            transition: filter 0.1s;
+        }
+
+        .player-nav-tab:hover {
+            filter: brightness(115%);
+        }
+
+        .player-nav-tab.active {
+            background: var(--lcars-text);
+            color: var(--lcars-bg);
+        }
+
+        /* Tab-specific colors */
+        .player-nav-tab.tab-main { background: var(--lcars-butterscotch); }
+        .player-nav-tab.tab-actions { background: var(--lcars-tomato); }
+        .player-nav-tab.tab-character { background: var(--lcars-bluey); }
+        .player-nav-tab.tab-ship { background: var(--lcars-african-violet); }
+
+        .player-nav-spacer {
+            flex: 1;
+            background: var(--lcars-ice);
+            min-height: 20px;
+        }
+
+        .player-nav-bottom {
+            background: var(--lcars-success);
+            height: 50px;
+            border-radius: 0 0 0 30px;
+        }
+
+        /* Main Content Area */
+        .player-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 10px 10px 10px 0;
+            min-width: 0;
+        }
+
+        /* Header Bar */
+        .player-header {
+            display: flex;
+            height: 60px;
+            gap: 3px;
+            margin-bottom: 10px;
+        }
+
+        .player-header-bar {
+            flex: 1;
+            background: var(--lcars-bluey);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            border-radius: 0 0 0 20px;
+        }
+
+        .player-header-title {
+            color: var(--lcars-text-dark);
+            font-size: 1.4rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .player-header-round {
+            color: var(--lcars-text-dark);
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .player-header-cap {
+            width: 80px;
+            background: var(--lcars-bluey);
+            border-radius: 0 30px 0 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Tab Content Panels */
+        .player-content {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        /* Turn Banner */
+        .turn-banner {
+            padding: 15px 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .turn-banner.your-turn {
+            background: linear-gradient(135deg, #1a3a1a, #2a5a2a);
+            border: 3px solid var(--lcars-success);
+            color: var(--lcars-success);
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+
+        .turn-banner.enemy-turn {
+            background: linear-gradient(135deg, #3a1a1a, #5a2a2a);
+            border: 3px solid var(--lcars-tomato);
+            color: var(--lcars-tomato);
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 10px var(--lcars-success); }
+            50% { box-shadow: 0 0 25px var(--lcars-success); }
+        }
+
+        /* Resource Panel */
+        .resources-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .resource-box {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 15px;
+            background: var(--lcars-panel-bg);
+            border-radius: 10px;
+            border: 2px solid var(--lcars-gray);
+        }
+
+        .resource-box.momentum {
+            border-color: var(--lcars-ice);
+        }
+
+        .resource-box.threat {
+            border-color: var(--lcars-tomato);
+        }
+
+        .resource-box.reserve-power {
+            border-color: var(--lcars-success);
+        }
+
+        .resource-box.reserve-power.depleted {
+            border-color: var(--lcars-tomato);
+        }
+
+        .resource-label {
+            font-size: 0.9rem;
+            color: var(--lcars-almond);
+            text-transform: uppercase;
+        }
+
+        .resource-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            min-width: 40px;
+            text-align: center;
+        }
+
+        .momentum .resource-value { color: var(--lcars-ice); }
+        .threat .resource-value { color: var(--lcars-tomato); }
+        .reserve-power .resource-value { color: var(--lcars-success); }
+        .reserve-power.depleted .resource-value { color: var(--lcars-tomato); }
+
+        /* Turn Counter */
+        .turn-counter {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 10px 0;
+            font-size: 0.9rem;
+        }
+
+        .turn-count {
+            padding: 5px 15px;
+            border-radius: 15px;
+            background: #1a1a1a;
+        }
+
+        .turn-count.player { color: var(--lcars-success); }
+        .turn-count.enemy { color: var(--lcars-tomato); }
+
+        /* Map and Log Layout */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .map-panel {
+            background: #0a0a0a;
+            border: 2px solid var(--lcars-bluey);
+            border-radius: 10px;
+            padding: 15px;
+            min-height: 400px;
+        }
+
+        .map-panel h3 {
+            color: var(--lcars-bluey);
+            margin-bottom: 10px;
+        }
+
+        #tactical-map-container {
+            min-height: 350px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Ship Panel */
+        .ship-panel {
+            background: var(--lcars-panel-bg);
+            border: 2px solid var(--lcars-butterscotch);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .ship-panel.player-ship {
+            border-color: var(--lcars-success);
+        }
+
+        .ship-panel.player-ship h3 {
+            color: var(--lcars-success);
+        }
+
+        .ship-panel.enemy-ship {
+            border-color: var(--lcars-tomato);
+        }
+
+        .ship-panel.enemy-ship h3 {
+            color: var(--lcars-tomato);
+        }
+
+        .ship-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .ship-header h3 {
+            margin: 0;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 5px 15px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: var(--lcars-almond);
+        }
+
+        .stat-value {
+            color: var(--lcars-ice);
+            font-weight: 700;
+        }
+
+        .stat-row.breached .stat-label,
+        .stat-row.breached .stat-value {
+            color: var(--lcars-tomato);
+        }
+
+        /* Shields Bar */
+        .shields-bar {
+            height: 20px;
+            background: var(--lcars-gray);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .shields-bar .fill {
+            height: 100%;
+            background: var(--lcars-ice);
+            border-radius: 10px;
+            transition: width 0.3s;
+        }
+
+        /* Character Panel */
+        .character-panel {
+            background: var(--lcars-panel-bg);
+            border: 2px solid var(--lcars-bluey);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .character-panel h3 {
+            color: var(--lcars-bluey);
+            margin-bottom: 10px;
+        }
+
+        .section-header {
+            color: var(--lcars-almond);
+            font-size: 0.9em;
+            margin: 15px 0 8px 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Action Lists */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        @media (max-width: 900px) {
+            .actions-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .action-panel {
+            background: var(--lcars-panel-bg);
+            border: 2px solid var(--lcars-butterscotch);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .action-panel.minor {
+            border-color: var(--lcars-ice);
+        }
+
+        .action-panel.minor h3 {
+            color: var(--lcars-ice);
+        }
+
+        .action-panel.major {
+            border-color: var(--lcars-tomato);
+        }
+
+        .action-panel.major h3 {
+            color: var(--lcars-tomato);
+        }
+
+        .action-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .action-list li {
+            padding: 10px;
+            margin: 5px 0;
+            background: #1a1a1a;
+            border-radius: 5px;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .action-list li:hover {
+            background: #222;
+            border-left-color: var(--lcars-butterscotch);
+        }
+
+        .action-list li.action-selected {
+            background: rgba(153, 204, 255, 0.2);
+            border-left-color: var(--lcars-ice);
+            box-shadow: 0 0 10px rgba(153, 204, 255, 0.3);
+        }
+
+        .action-list li.action-disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .action-list li.action-not-impl {
+            opacity: 0.5;
+        }
+
+        .action-type {
+            font-size: 0.85em;
+            color: #888;
+            margin-top: 3px;
+        }
+
+        /* Action status badges */
+        .status-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.7em;
+            font-weight: bold;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        .status-done {
+            background: var(--lcars-success);
+            color: #000;
+        }
+
+        .status-rft {
+            background: var(--lcars-orange);
+            color: #000;
+        }
+
+        .status-not-impl {
+            background: #666;
+            color: #ccc;
+        }
+
+        /* Action Detail Panels */
+        .action-detail-panel {
+            background: var(--lcars-panel-bg);
+            border: 2px solid var(--lcars-butterscotch);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .action-detail-panel h3 {
+            color: var(--lcars-butterscotch);
+            margin-bottom: 15px;
+        }
+
+        /* Fire panel specific */
+        #fire-panel { border-color: var(--lcars-tomato); }
+        #fire-panel h3 { color: var(--lcars-tomato); }
+
+        /* Defensive Fire panel */
+        #defensive-fire-panel { border-color: var(--lcars-african-violet); }
+        #defensive-fire-panel h3 { color: var(--lcars-african-violet); }
+
+        /* Damage Control panel */
+        #damage-control-panel { border-color: var(--lcars-success); }
+        #damage-control-panel h3 { color: var(--lcars-success); }
+
+        /* Ram panel */
+        #ram-panel { border-color: var(--lcars-orange); }
+        #ram-panel h3 { color: var(--lcars-orange); }
+
+        /* Reroute Power panel */
+        #reroute-power-panel { border-color: var(--lcars-orange); }
+        #reroute-power-panel h3 { color: var(--lcars-orange); }
+
+        /* Thrusters panel */
+        #thrusters-panel { border-color: var(--lcars-bluey); }
+        #thrusters-panel h3 { color: var(--lcars-bluey); }
+
+        /* Dice panel */
+        #dice-panel { border-color: var(--lcars-ice); }
+        #dice-panel h3 { color: var(--lcars-ice); }
+
+        /* Selection summary */
+        #selection-summary { border-color: var(--lcars-bluey); }
+
+        /* Incoming attack panel */
+        #incoming-attack-panel {
+            border-color: var(--lcars-tomato);
+            background: #2a1a1a;
+        }
+
+        /* Button styles */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-family: var(--font-primary);
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: filter 0.1s;
+        }
+
+        .btn:hover {
+            filter: brightness(115%);
+        }
+
+        .btn-primary {
+            background: var(--lcars-butterscotch);
+            color: var(--lcars-text-dark);
+        }
+
+        .btn-danger {
+            background: var(--lcars-tomato);
+            color: var(--lcars-text-dark);
+        }
+
+        .btn-success {
+            background: var(--lcars-success);
+            color: var(--lcars-text-dark);
+        }
+
+        .btn-secondary {
+            background: var(--lcars-gray);
+            color: var(--lcars-text);
+        }
+
+        /* Forms */
+        select, input[type="number"] {
+            padding: 8px 12px;
+            border: 2px solid var(--lcars-gray);
+            border-radius: 5px;
+            background: #1a1a1a;
+            color: var(--lcars-text);
+            font-family: var(--font-primary);
+            font-size: 1rem;
+        }
+
+        select:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: var(--lcars-ice);
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--lcars-almond);
+            font-size: 0.9rem;
+        }
+
+        /* Weapons list */
+        .weapons-list {
+            margin-top: 10px;
+        }
+
+        .weapon-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            background: #1a1a1a;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+
+        .weapon-name {
+            color: var(--lcars-text);
+        }
+
+        .weapon-stats {
+            color: var(--lcars-almond);
+            font-size: 0.9em;
+        }
+
+        /* Breach indicator */
+        .breach-indicator {
+            color: var(--lcars-tomato);
+            font-size: 0.8em;
+            margin-left: 5px;
+        }
+
+        .breach-warning {
+            color: var(--lcars-tomato);
+            font-weight: bold;
+        }
+
+        /* Enemy ships list (read-only) */
+        .enemy-ship-item {
+            padding: 10px;
+            background: #1a1a1a;
+            border-radius: 5px;
+            margin: 8px 0;
+            border-left: 3px solid var(--lcars-tomato);
+        }
+
+        .enemy-ship-item strong {
+            color: var(--lcars-tomato);
+        }
+
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: var(--lcars-text-dark);
+            font-weight: 700;
+            animation: slideIn 0.3s ease;
+            max-width: 400px;
+        }
+
+        .toast.success { background: var(--lcars-success); }
+        .toast.error { background: var(--lcars-tomato); }
+        .toast.info { background: var(--lcars-ice); }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(100px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Multiplayer status badges */
+        .player-status-badge {
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.85em;
+        }
+
+        .players-status {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        /* Fire results styling */
+        .fire-action {
+            border-left: 3px solid var(--lcars-tomato) !important;
+        }
+
+        .fire-action-highlighted {
+            background: rgba(255, 100, 100, 0.2) !important;
+            border: 2px solid var(--lcars-tomato) !important;
+            animation: pulse-fire 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse-fire {
+            0%, 100% { box-shadow: 0 0 5px var(--lcars-tomato); }
+            50% { box-shadow: 0 0 15px var(--lcars-tomato); }
+        }
+
+        /* Damage report */
+        .damage-report {
+            padding: 15px;
+            background: #222;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        .damage-report h4 {
+            color: var(--lcars-tomato);
+            margin-bottom: 10px;
+        }
+
+        /* Info boxes */
+        .info-box {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .info-box.warning {
+            background: rgba(255, 153, 0, 0.15);
+            border: 1px solid var(--lcars-orange);
+            color: var(--lcars-orange);
+        }
+
+        .info-box.danger {
+            background: rgba(255, 102, 102, 0.15);
+            border: 1px solid var(--lcars-tomato);
+            color: var(--lcars-tomato);
+        }
+
+        .info-box.success {
+            background: rgba(153, 204, 153, 0.15);
+            border: 1px solid var(--lcars-success);
+            color: var(--lcars-success);
+        }
+
+        .info-box.info {
+            background: rgba(153, 204, 255, 0.15);
+            border: 1px solid var(--lcars-ice);
+            color: var(--lcars-ice);
+        }
+
+        /* Legend styles */
+        .legend {
+            padding: 10px;
+            background: #111;
+            border-radius: 5px;
+            font-size: 0.85em;
+            margin-top: 10px;
+        }
+
+        .legend span {
+            margin-right: 15px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <div class="player-wrapper">
+        <!-- Left Navigation -->
+        <nav class="player-left-nav">
+            <div class="player-nav-top">
+                <span>PLAYER</span>
+            </div>
+
+            <div class="player-nav-tabs">
+                <button class="player-nav-tab tab-main active" onclick="showTab('main')">MAIN</button>
+                <button class="player-nav-tab tab-actions" onclick="showTab('actions')">ACTIONS</button>
+                <button class="player-nav-tab tab-character" onclick="showTab('character')">CHARACTER</button>
+                <button class="player-nav-tab tab-ship" onclick="showTab('ship')">SHIP</button>
+            </div>
+
+            <div class="player-nav-spacer"></div>
+
+            <div class="player-nav-bottom"></div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="player-main">
+            <!-- Header -->
+            <header class="player-header">
+                <div class="player-header-bar">
+                    <span class="player-header-title">{{ encounter.name }}</span>
+                    <span class="player-header-round" id="round-display">Round {{ encounter.round }}</span>
+                </div>
+                <div class="player-header-cap">
+                    {% if campaign %}
+                    <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+                       style="color: var(--lcars-text-dark); text-decoration: none; font-size: 0.8rem;">
+                        BACK
+                    </a>
+                    {% endif %}
+                </div>
+            </header>
+
+            <!-- Tab Content -->
+            <div class="player-content">
+                <!-- ============================================
+                     MAIN TAB
+                     ============================================ -->
+                <div id="tab-main" class="tab-panel active">
+                    <!-- Turn Banner -->
+                    <div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'player' %}your-turn{% else %}enemy-turn{% endif %}">
+                        <div id="turn-text">
+                            {% if encounter.current_turn != 'player' %}
+                            ENEMY TURN - Waiting for Game Master...
+                            {% elif is_multiplayer %}
+                                {% if encounter.current_player_id == my_player_id %}
+                                YOUR TURN - Take one action
+                                {% elif encounter.current_player_id %}
+                                {{ current_player_name }} is acting...
+                                {% else %}
+                                PLAYER TURN - Claim your turn to act
+                                {% endif %}
+                            {% else %}
+                            YOUR TURN - Take one action
+                            {% endif %}
+                        </div>
+
+                        {% if is_multiplayer %}
+                        <!-- Multi-player turn claiming UI -->
+                        <div id="claim-turn-section" style="margin-top: 10px; {% if encounter.current_turn != 'player' or encounter.current_player_id %}display: none;{% endif %}">
+                            <button class="btn btn-success" onclick="claimTurn()">CLAIM TURN</button>
+                        </div>
+
+                        <!-- Release turn button -->
+                        <div id="release-turn-section" style="margin-top: 10px; {% if encounter.current_player_id != my_player_id %}display: none;{% endif %}">
+                            <button class="btn btn-secondary" onclick="releaseTurn()">Release Turn</button>
+                        </div>
+
+                        <!-- "Already acted" indicator -->
+                        <div id="already-acted-section" style="margin-top: 10px; display: none;">
+                            <span style="color: var(--lcars-almond);">You've acted this round. Waiting for others...</span>
+                        </div>
+                        {% endif %}
+
+                        <!-- Turn Counter -->
+                        <div class="turn-counter">
+                            <span class="turn-count player">
+                                {% if is_multiplayer %}
+                                Players: <span id="player-turns-used">0</span> / <span id="player-turns-total">{{ campaign_players | length }}</span>
+                                {% else %}
+                                Your Turns: <span id="player-turns-used">0</span> / <span id="player-turns-total">0</span>
+                                {% endif %}
+                            </span>
+                            <span class="turn-count enemy">
+                                Enemy: <span id="enemy-turns-used">0</span> / <span id="enemy-turns-total">0</span>
+                            </span>
+                        </div>
+
+                        {% if is_multiplayer %}
+                        <!-- Player list showing who has acted -->
+                        <div class="players-status" id="players-status">
+                            {% for player in campaign_players %}
+                            <span class="player-status-badge" data-player-id="{{ player.id }}"
+                                  style="background: {% if player.has_acted %}var(--lcars-success){% elif player.is_current %}var(--lcars-african-violet){% else %}#444{% endif %};
+                                         color: {% if player.has_acted or player.is_current %}#000{% else %}#ccc{% endif %};">
+                                {{ player.name }}{% if player.is_current %} (acting){% elif player.has_acted %} ✓{% endif %}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Resources Row -->
+                    <div class="resources-row">
+                        <div class="resource-box momentum">
+                            <span class="resource-label">Momentum</span>
+                            <span class="resource-value" id="momentum">{{ encounter.momentum }}</span>
+                            <span style="color: #666;">/ 6</span>
+                        </div>
+                        <div class="resource-box threat">
+                            <span class="resource-label">Threat</span>
+                            <span class="resource-value" id="threat">{{ encounter.threat }}</span>
+                        </div>
+                    </div>
+
+                    <!-- End Turn Button -->
+                    <div id="end-turn-section" style="margin-bottom: 15px; {% if encounter.current_turn != 'player' %}display: none;{% endif %}">
+                        <button class="btn btn-primary" onclick="nextTurn()">END TURN</button>
+                    </div>
+
+                    <!-- Tactical Map -->
+                    <div class="map-panel">
+                        <h3>TACTICAL MAP</h3>
+                        <div id="tactical-map-container">
+                            <p style="color: #666;">Loading tactical map...</p>
+                        </div>
+                        <div class="legend">
+                            <strong style="color: var(--lcars-almond);">Range:</strong>
+                            <span style="color: var(--lcars-success);">Close (same hex)</span>
+                            <span style="color: var(--lcars-bluey);">Medium (1 hex)</span>
+                            <span style="color: var(--lcars-orange);">Long (2 hex)</span>
+                            <span style="color: var(--lcars-tomato);">Extreme (3+ hex)</span>
+                        </div>
+                        <div id="terrain-legend-container"></div>
+                    </div>
+
+                    <!-- Enemy Ships (simplified view) -->
+                    <div class="ship-panel enemy-ship" style="margin-top: 15px;">
+                        <h3>ENEMY VESSELS</h3>
+                        <p style="color: var(--lcars-almond); font-size: 0.9em; margin-bottom: 10px;">Detected hostiles in sector:</p>
+                        {% for enemy in enemy_ships %}
+                        <div class="enemy-ship-item" data-ship-id="{{ loop.index0 }}">
+                            <strong>{{ enemy.name }}</strong>
+                            <div style="font-size: 0.85em; color: var(--lcars-almond);">{{ enemy.ship_class }}-class</div>
+                            <div class="stat-row" style="margin-top: 5px;">
+                                <span>Shields</span>
+                                <span class="stat-value enemy-shields">{{ enemy.shields }} / {{ enemy.shields_max }}</span>
+                            </div>
+                            <div class="shields-bar" style="height: 10px;">
+                                <div class="fill enemy-shields-bar" style="width: {{ (enemy.shields / enemy.shields_max * 100) | int }}%; background: var(--lcars-tomato);"></div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- ============================================
+                     ACTIONS TAB
+                     ============================================ -->
+                <div id="tab-actions" class="tab-panel">
+                    <!-- Actions Container (only visible on player turn) -->
+                    <div id="actions-container" style="{% if encounter.current_turn != 'player' %}display: none;{% endif %}">
+                        <!-- Status Legend -->
+                        <div style="margin-bottom: 15px; padding: 10px; background: #1a1a1a; border-radius: 5px; font-size: 0.85em;">
+                            <strong>Status:</strong>
+                            <span class="status-badge status-done">DONE</span> Implemented
+                            <span class="status-badge status-rft">RFT</span> Ready For Testing
+                            <span class="status-badge status-not-impl">TODO</span> Not Yet Implemented
+                        </div>
+
+                        <!-- Actions Grid -->
+                        <div class="actions-grid">
+                            <!-- Minor Actions -->
+                            <div class="action-panel minor">
+                                <h3>Minor Actions</h3>
+
+                                {% if actions.position_minor %}
+                                <h4 class="section-header" style="color: var(--lcars-orange);">{{ actions.position_name }} Specific</h4>
+                                <ul class="action-list">
+                                    {% for action in actions.position_minor %}
+                                    {% if action.name == 'Raise/Lower Shields' %}
+                                    <li id="shields-action-btn" onclick="toggleShields()" data-action-name="Raise Shields">
+                                        <strong>{{ 'Lower Shields' if player_ship.shields_raised else 'Raise Shields' }}</strong>
+                                        <span class="status-badge status-done">DONE</span>
+                                        <span class="breach-warning" style="display: none;"></span>
+                                        <div class="action-type">{{ action.description[:80] }}...</div>
+                                    </li>
+                                    {% elif action.name == 'Arm/Disarm Weapons' %}
+                                    <li id="weapons-action-btn" onclick="toggleWeapons()" data-action-name="Arm Weapons">
+                                        <strong>{{ 'Disarm Weapons' if player_ship.weapons_armed else 'Arm Weapons' }}</strong>
+                                        <span class="status-badge status-done">DONE</span>
+                                        <span class="breach-warning" style="display: none;"></span>
+                                        <div class="action-type">{{ action.description[:80] }}...</div>
+                                    </li>
+                                    {% else %}
+                                    <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})"
+                                        data-action-name="{{ action.name }}"
+                                        class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
+                                        <strong>{{ action.name }}</strong>
+                                        {% if action.status == 'DONE' %}
+                                        <span class="status-badge status-done">DONE</span>
+                                        {% elif action.status == 'RFT' %}
+                                        <span class="status-badge status-rft">RFT</span>
+                                        {% else %}
+                                        <span class="status-badge status-not-impl">TODO</span>
+                                        {% endif %}
+                                        <span class="breach-warning" style="display: none;"></span>
+                                        <div class="action-type">{{ action.description[:80] }}...</div>
+                                    </li>
+                                    {% endif %}
+                                    {% endfor %}
+                                </ul>
+                                {% endif %}
+
+                                <h4 class="section-header">Standard</h4>
+                                <ul class="action-list">
+                                    {% for action in actions.standard_minor %}
+                                    <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})"
+                                        data-action-name="{{ action.name }}"
+                                        class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
+                                        <strong>{{ action.name }}</strong>
+                                        {% if action.status == 'DONE' %}
+                                        <span class="status-badge status-done">DONE</span>
+                                        {% elif action.status == 'RFT' %}
+                                        <span class="status-badge status-rft">RFT</span>
+                                        {% else %}
+                                        <span class="status-badge status-not-impl">TODO</span>
+                                        {% endif %}
+                                        <span class="breach-warning" style="display: none;"></span>
+                                        <div class="action-type">{{ action.description[:80] }}...</div>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+
+                            <!-- Major Actions -->
+                            <div class="action-panel major">
+                                <h3>Major Actions</h3>
+
+                                {% if actions.position_major %}
+                                <h4 class="section-header" style="color: var(--lcars-orange);">{{ actions.position_name }} Specific</h4>
+                                <ul class="action-list">
+                                    {% for action in actions.position_major %}
+                                    <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})"
+                                        data-action-name="{{ action.name }}"
+                                        data-base-difficulty="{{ action.difficulty }}"
+                                        class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
+                                        <strong>{{ action.name }}</strong>
+                                        {% if action.status == 'DONE' %}
+                                        <span class="status-badge status-done">DONE</span>
+                                        {% elif action.status == 'RFT' %}
+                                        <span class="status-badge status-rft">RFT</span>
+                                        {% else %}
+                                        <span class="status-badge status-not-impl">TODO</span>
+                                        {% endif %}
+                                        {% if action.difficulty > 0 %}
+                                        <span class="difficulty-display" style="color: var(--lcars-almond);">(Diff {{ action.difficulty }})</span>
+                                        {% endif %}
+                                        <span class="breach-warning" style="display: none;"></span>
+                                        <div class="action-type">{{ action.description[:80] }}...</div>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                {% endif %}
+
+                                <h4 class="section-header">Standard</h4>
+                                <ul class="action-list">
+                                    {% for action in actions.standard_major %}
+                                    <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})"
+                                        data-action-name="{{ action.name }}"
+                                        data-base-difficulty="{{ action.difficulty }}"
+                                        class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
+                                        <strong>{{ action.name }}</strong>
+                                        {% if action.status == 'DONE' %}
+                                        <span class="status-badge status-done">DONE</span>
+                                        {% elif action.status == 'RFT' %}
+                                        <span class="status-badge status-rft">RFT</span>
+                                        {% else %}
+                                        <span class="status-badge status-not-impl">TODO</span>
+                                        {% endif %}
+                                        {% if action.difficulty > 0 %}
+                                        <span class="difficulty-display" style="color: var(--lcars-almond);">(Diff {{ action.difficulty }})</span>
+                                        {% endif %}
+                                        <span class="breach-warning" style="display: none;"></span>
+                                        <div class="action-type">{{ action.description[:80] }}...</div>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Enemy Turn Message -->
+                    <div id="actions-enemy-turn-msg" style="{% if encounter.current_turn == 'player' %}display: none;{% endif %} padding: 30px; text-align: center;">
+                        <h3 style="color: var(--lcars-tomato);">ENEMY TURN</h3>
+                        <p style="color: var(--lcars-almond);">Actions are not available during the enemy turn. Switch to the Main tab to monitor the battle.</p>
+                    </div>
+
+                    <!-- Selected Actions Summary -->
+                    <div class="action-detail-panel" id="selection-summary" style="display: none;">
+                        <h3 style="color: var(--lcars-bluey);">SELECTED ACTIONS</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <strong style="color: var(--lcars-almond);">Minor Action:</strong>
+                                <div id="summary-minor" style="padding: 8px; background: #222; border-radius: 5px; margin-top: 5px;">
+                                    <span style="color: #666;">None selected</span>
+                                </div>
+                            </div>
+                            <div>
+                                <strong style="color: var(--lcars-almond);">Major Action:</strong>
+                                <div id="summary-major" style="padding: 8px; background: #222; border-radius: 5px; margin-top: 5px;">
+                                    <span style="color: #666;">None selected</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fire Action Panel -->
+                    <div class="action-detail-panel" id="fire-panel" style="display: none;">
+                        <h3 style="color: var(--lcars-tomato);">FIRE WEAPONS</h3>
+
+                        <!-- Active Minor Action Banner -->
+                        <div id="fire-minor-action-banner" class="info-box info" style="display: none;">
+                            <strong>MINOR ACTION ACTIVE:</strong>
+                            <span id="fire-minor-action-name"></span>
+                            <div id="fire-minor-action-effects" style="font-size: 0.9em; margin-top: 5px;"></div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <div>
+                                <label for="weapon-select">Select Weapon</label>
+                                <select id="weapon-select" style="width: 100%;">
+                                    {% for weapon in player_ship.weapons %}
+                                    <option value="{{ loop.index0 }}"
+                                            data-damage="{{ weapon.damage }}"
+                                            data-type="{{ weapon.weapon_type.value }}"
+                                            data-range="{{ weapon.range.value }}">
+                                        {{ weapon.name }} (Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }}, {{ weapon.range.value.title() }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="target-select">Select Target</label>
+                                <select id="target-select" style="width: 100%;"></select>
+                                <div id="target-range-info" style="font-size: 0.85em; color: var(--lcars-almond); margin-top: 5px;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Targeting Solution Info -->
+                        <div id="targeting-solution-panel" class="info-box success" style="display: none;">
+                            <strong>TARGETING SOLUTION ACTIVE</strong>
+                            <div style="margin-top: 8px; font-size: 0.9em;">
+                                After rolling, you may choose ONE benefit:
+                                <ul style="margin: 5px 0 0 20px;">
+                                    <li><strong>Re-roll 1d20</strong> - Click on any die to re-roll it</li>
+                                    <li><strong>Choose System</strong> - If you cause a breach, pick which system is hit</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div style="padding: 10px; background: #222; border-radius: 5px;">
+                            <strong>Attack Details:</strong>
+                            <div id="attack-details">
+                                <p><strong>Character Roll (2d20):</strong> Control ({{ player_char.attributes.control if player_char else 9 }}) + Security ({{ player_char.disciplines.security if player_char else 3 }}) = Target {{ (player_char.attributes.control + player_char.disciplines.security) if player_char else 12 }}</p>
+                                <p><strong>Ship Assist (1d20):</strong> Weapons ({{ player_ship.systems.weapons if player_ship else 7 }}) + Security ({{ player_ship.departments.security if player_ship else 2 }}) = Target {{ (player_ship.systems.weapons + player_ship.departments.security) if player_ship else 9 }}</p>
+                                <p>Difficulty: <span id="fire-difficulty">2</span> <span id="fire-difficulty-breakdown"></span></p>
+                                <p>Total Damage: <span id="fire-damage">{{ player_ship.weapons[0].damage + player_ship.weapons_damage_bonus() if player_ship.weapons else 0 }}</span></p>
+                            </div>
+                            <div id="fire-range-warning" class="info-box danger" style="display: none;"></div>
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <label><input type="checkbox" id="fire-focus"> Focus Applies (Targeting Systems, etc.)</label>
+                        </div>
+                        <div id="fire-bonus-section" style="display: none; margin-top: 10px;">
+                            <label for="fire-bonus">Bonus Dice (Cost: 1st=1, 2nd=2, 3rd=3 Momentum)</label>
+                            <input type="number" id="fire-bonus" value="0" min="0" max="0" style="width: 80px;">
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <button class="btn btn-danger" onclick="executeFireAction()">FIRE!</button>
+                            <button class="btn btn-secondary" onclick="cancelAction()">Cancel</button>
+                        </div>
+
+                        <div id="fire-results" style="margin-top: 15px; display: none;"></div>
+                    </div>
+
+                    <!-- Incoming Attack Panel -->
+                    <div class="action-detail-panel" id="incoming-attack-panel" style="display: none; background: #2a1a1a;">
+                        <h3 style="color: var(--lcars-tomato);">INCOMING ATTACK!</h3>
+
+                        <div class="info-box danger">
+                            <p style="margin: 0; font-size: 1.2em;">
+                                <strong id="incoming-attacker">Enemy Ship</strong> is attacking with <strong id="incoming-weapon">Phasers</strong>!
+                            </p>
+                            <p style="margin: 10px 0 0 0;">
+                                Your <strong>Defensive Fire</strong> is active. Make your opposed roll to defend!
+                            </p>
+                        </div>
+
+                        <div style="padding: 10px; background: #222; border-radius: 5px; margin: 15px 0;">
+                            <strong>Your Defensive Roll:</strong> Daring + Security (Target <span id="incoming-defender-target">12</span>)
+                            <br>
+                            <strong>Ship Assist:</strong> Weapons + Security (Target <span id="incoming-ship-target">9</span>)
+                        </div>
+
+                        <button class="btn" style="background: var(--lcars-african-violet);" onclick="rollDefensiveDice()">ROLL DEFENSIVE DICE</button>
+
+                        <div id="incoming-roll-results" class="info-box info" style="display: none;">
+                            <h4 style="color: var(--lcars-bluey); margin-top: 0;">Roll Results</h4>
+                            <div id="incoming-roll-details"></div>
+                            <button class="btn btn-success" onclick="submitDefensiveRoll()" style="margin-top: 15px;">SUBMIT ROLL</button>
+                        </div>
+
+                        <div id="incoming-attack-resolution" style="margin-top: 15px; display: none;"></div>
+                    </div>
+
+                    <!-- Defensive Fire Panel -->
+                    <div class="action-detail-panel" id="defensive-fire-panel" style="display: none;">
+                        <h3 style="color: var(--lcars-african-violet);">DEFENSIVE FIRE</h3>
+
+                        <div class="info-box info">
+                            <p style="margin: 0;">
+                                Choose an <strong>energy weapon</strong> to use defensively. Until your next turn,
+                                enemy attacks against this ship become <strong>opposed rolls</strong>.
+                            </p>
+                            <p style="margin: 10px 0 0 0; color: var(--lcars-orange);">
+                                If you win the opposed roll, you may spend <strong>2 Momentum</strong> to counterattack with this weapon.
+                            </p>
+                        </div>
+
+                        <div id="defensive-fire-momentum-warning" class="info-box warning" style="display: none;">
+                            <strong>WARNING:</strong> You currently have <span id="df-current-momentum">0</span> Momentum.
+                            If you activate Defensive Fire now, you won't have enough Momentum (2 required) to counterattack.
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <label for="defensive-fire-weapon-select">Select Energy Weapon</label>
+                            <select id="defensive-fire-weapon-select" style="width: 100%;">
+                                {% for weapon in player_ship.weapons %}
+                                {% if weapon.weapon_type.value != 'torpedo' %}
+                                <option value="{{ loop.index0 }}" data-damage="{{ weapon.damage }}">
+                                    {{ weapon.name }} (Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }}, {{ weapon.range.value.title() }})
+                                </option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+                            <strong>Opposed Roll Details:</strong>
+                            <p><strong>Your Roll:</strong> Daring ({{ player_char.attributes.daring if player_char else 9 }}) + Security ({{ player_char.disciplines.security if player_char else 3 }}) = Target {{ (player_char.attributes.daring + player_char.disciplines.security) if player_char else 12 }}</p>
+                            <p><strong>Ship Assist:</strong> Weapons ({{ player_ship.systems.weapons if player_ship else 7 }}) + Security ({{ player_ship.departments.security if player_ship else 2 }}) = Target {{ (player_ship.systems.weapons + player_ship.departments.security) if player_ship else 9 }}</p>
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <button class="btn" style="background: var(--lcars-african-violet);" onclick="executeDefensiveFire()">ACTIVATE DEFENSIVE FIRE</button>
+                            <button class="btn btn-secondary" onclick="cancelAction()">Cancel</button>
+                        </div>
+
+                        <div id="defensive-fire-results" style="margin-top: 15px; display: none;"></div>
+                    </div>
+
+                    <!-- Thrusters Panel -->
+                    <div class="action-detail-panel" id="thrusters-panel" style="display: none;">
+                        <h3 style="color: var(--lcars-bluey);">THRUSTERS</h3>
+
+                        <div class="info-box info">
+                            <p style="margin: 0;">
+                                Fine maneuvering within your current hex. Use thrusters to <strong>enter</strong> or <strong>exit Contact</strong> with other ships in the same location.
+                            </p>
+                            <p style="margin: 10px 0 0 0; font-size: 0.9em;">
+                                Contact allows boarding actions, point-blank transporter use, and towing.
+                            </p>
+                        </div>
+
+                        <div id="thrusters-actions-container">
+                            <p style="color: var(--lcars-almond);">Loading available actions...</p>
+                        </div>
+
+                        <div id="thrusters-no-actions" style="display: none; padding: 15px; background: #2a2a2a; border-radius: 5px;">
+                            <p style="margin: 0; color: var(--lcars-almond);">No ships in your current hex to dock with.</p>
+                            <p style="margin: 10px 0 0 0; color: #888; font-size: 0.9em;">Use <strong>Impulse</strong> to move to a hex with another ship first.</p>
+                        </div>
+
+                        <button class="btn btn-secondary" onclick="cancelThrustersAction()" style="margin-top: 15px;">Cancel</button>
+
+                        <div id="thrusters-results" style="margin-top: 15px; display: none;"></div>
+                    </div>
+
+                    <!-- Reroute Power Panel -->
+                    <div class="action-detail-panel" id="reroute-power-panel" style="display: none;">
+                        <h3 style="color: var(--lcars-orange);">REROUTE POWER</h3>
+
+                        <div class="info-box warning">
+                            <p style="margin: 0;">
+                                Reroute power to a specific ship system. The <strong>next action</strong> using that system gets <strong>-1 Difficulty</strong>.
+                            </p>
+                            <p style="margin: 10px 0 0 0; color: var(--lcars-tomato);"><strong>Consumes Reserve Power!</strong></p>
+                        </div>
+
+                        <div id="reroute-no-power-warning" class="info-box danger" style="display: none;">
+                            <strong>NO RESERVE POWER!</strong> You must use Regain Power first.
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <label for="reroute-system-select">Select Target System</label>
+                            <select id="reroute-system-select" style="width: 100%;">
+                                <option value="weapons">WEAPONS - Boost Fire, Defensive Fire</option>
+                                <option value="sensors">SENSORS - Boost Scan, Sensor Sweep</option>
+                                <option value="engines">ENGINES - Boost Maneuver, Impulse, Warp</option>
+                                <option value="structure">STRUCTURE - Boost Regenerate Shields, Tractor Beam</option>
+                                <option value="comms">COMMS - Boost Hail, Communications</option>
+                                <option value="computers">COMPUTERS - Boost Computer-assisted tasks</option>
+                            </select>
+                        </div>
+
+                        <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+                            <strong>Effect:</strong> Next action using <span id="reroute-target-display">WEAPONS</span> gets <span style="color: var(--lcars-success);">-1 Difficulty</span>
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <button class="btn" style="background: var(--lcars-orange);" onclick="executeReroutePower()">REROUTE POWER</button>
+                            <button class="btn btn-secondary" onclick="cancelAction()">Cancel</button>
+                        </div>
+
+                        <div id="reroute-power-results" style="margin-top: 15px; display: none;"></div>
+                    </div>
+
+                    <!-- Damage Control Panel -->
+                    <div class="action-detail-panel" id="damage-control-panel" style="display: none;">
+                        <h3 style="color: var(--lcars-success);">DAMAGE CONTROL</h3>
+
+                        <div class="info-box success">
+                            <p style="margin: 0;">
+                                Direct repair teams to patch a breach. Select which system to repair, then roll to succeed.
+                            </p>
+                            <p style="margin: 10px 0 0 0; color: var(--lcars-orange);"><strong>Difficulty:</strong> 2 + Breach Potency on target system</p>
+                        </div>
+
+                        <div id="damage-control-no-breach-warning" class="info-box danger" style="display: none;">
+                            <strong>NO BREACHES!</strong> There are no breaches to repair.
+                        </div>
+
+                        <div id="damage-control-system-section" style="margin-top: 15px;">
+                            <label for="damage-control-system-select">Select System to Repair</label>
+                            <select id="damage-control-system-select" style="width: 100%;" onchange="updateDamageControlDisplay()"></select>
+                        </div>
+
+                        <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+                            <strong>Roll Details:</strong>
+                            <p><strong>Character Roll (2d20):</strong> Presence ({{ player_char.attributes.presence if player_char else 9 }}) + Engineering ({{ player_char.disciplines.engineering if player_char else 3 }}) = Target {{ (player_char.attributes.presence + player_char.disciplines.engineering) if player_char else 12 }}</p>
+                            <p>Base Difficulty: <strong>2</strong> + <span id="damage-control-breach-potency">0</span> (breach potency) = <strong id="damage-control-total-difficulty">2</strong></p>
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <label><input type="checkbox" id="damage-control-focus"> Focus Applies (Damage Control, etc.)</label>
+                        </div>
+                        <div id="damage-control-bonus-section" style="display: none; margin-top: 10px;">
+                            <label for="damage-control-bonus">Bonus Dice (Cost: 1st=1, 2nd=2, 3rd=3 Momentum)</label>
+                            <input type="number" id="damage-control-bonus" value="0" min="0" max="0" style="width: 80px;">
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <button class="btn btn-success" onclick="executeDamageControlRoll()">ROLL DAMAGE CONTROL</button>
+                            <button class="btn btn-secondary" onclick="cancelAction()">Cancel</button>
+                        </div>
+
+                        <div id="damage-control-results" style="margin-top: 15px; display: none;"></div>
+                    </div>
+
+                    <!-- Ram Action Panel -->
+                    <div class="action-detail-panel" id="ram-panel" style="display: none;">
+                        <h3 style="color: var(--lcars-orange);">RAM TARGET</h3>
+
+                        <div class="info-box warning">
+                            <strong>WARNING:</strong> Ramming deals collision damage to BOTH ships! Your ship will also take damage.
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <label for="ram-target-select">Select Target</label>
+                            <select id="ram-target-select" style="width: 100%;">
+                                {% for enemy in enemy_ships %}
+                                <option value="{{ loop.index0 }}" data-scale="{{ enemy.scale }}">{{ enemy.name }} (Scale {{ enemy.scale }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+                            <strong>Ram Details:</strong>
+                            <div id="ram-details">
+                                <p><strong>Character Roll (2d20):</strong> Daring ({{ player_char.attributes.daring if player_char else 9 }}) + Conn ({{ player_char.disciplines.conn if player_char else 3 }}) = Target {{ (player_char.attributes.daring + player_char.disciplines.conn) if player_char else 12 }}</p>
+                                <p><strong>Ship Assist (1d20):</strong> Engines ({{ player_ship.systems.engines if player_ship else 7 }}) + Conn ({{ player_ship.departments.conn if player_ship else 2 }}) = Target {{ (player_ship.systems.engines + player_ship.departments.conn) if player_ship else 9 }}</p>
+                                <p>Difficulty: <strong>2</strong></p>
+                                <p style="margin-top: 10px; color: var(--lcars-orange);"><strong>Your Collision Damage:</strong> <span id="ram-your-damage">{{ player_ship.scale if player_ship else 4 }}</span> (Scale {{ player_ship.scale if player_ship else 4 }})</p>
+                                <p style="color: var(--lcars-tomato);"><strong>Damage You'll Take:</strong> <span id="ram-their-damage">{{ enemy_ships[0].scale if enemy_ships else 3 }}</span> (Target's Scale)</p>
+                                <p style="font-size: 0.9em; color: var(--lcars-almond); margin-top: 10px;">* Collision damage has <strong>Piercing</strong> (ignores resistance)</p>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <label><input type="checkbox" id="ram-focus"> Focus Applies (Precision Flying, etc.)</label>
+                        </div>
+                        <div id="ram-bonus-section" style="display: none; margin-top: 10px;">
+                            <label for="ram-bonus">Bonus Dice (Cost: 1st=1, 2nd=2, 3rd=3 Momentum)</label>
+                            <input type="number" id="ram-bonus" value="0" min="0" max="0" style="width: 80px;">
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <button class="btn" style="background: var(--lcars-orange);" onclick="executeRamAction()">RAM!</button>
+                            <button class="btn btn-secondary" onclick="cancelAction()">Cancel</button>
+                        </div>
+
+                        <div id="ram-results" style="margin-top: 15px; display: none;"></div>
+                    </div>
+
+                    <!-- Generic Dice Roller Panel -->
+                    <div class="action-detail-panel" id="dice-panel" style="display: none;">
+                        <h3 style="color: var(--lcars-ice);">DICE ROLLER</h3>
+
+                        <div id="current-action-display" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px; display: none;">
+                            <strong>Current Action:</strong> <span id="current-action-name"></span>
+                        </div>
+
+                        <div id="roll-details" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px;">
+                            <p><strong>Character Roll (2d20):</strong> <span id="roll-attr-name">Control</span> (<span id="roll-attr-value">9</span>) + <span id="roll-disc-name">Engineering</span> (<span id="roll-disc-value">2</span>) = Target <span id="roll-target">11</span></p>
+                            <p id="ship-assist-row" style="display: none;"><strong>Ship Assist (1d20):</strong> <span id="ship-assist-system-name">Structure</span> (<span id="ship-assist-system-value">7</span>) + <span id="ship-assist-dept-name">Engineering</span> (<span id="ship-assist-dept-value">2</span>) = Target <span id="ship-assist-target">9</span></p>
+                            <p><strong>Difficulty:</strong> <span id="roll-diff-display">1</span></p>
+                        </div>
+
+                        <input type="hidden" id="roll-attr" value="9">
+                        <input type="hidden" id="roll-disc" value="2">
+                        <input type="hidden" id="roll-diff" value="1">
+
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                            <div id="roll-bonus-section" style="display: none;">
+                                <label for="roll-bonus">Bonus Dice (Cost: 1st=1, 2nd=2, 3rd=3 Momentum)</label>
+                                <input type="number" id="roll-bonus" value="0" min="0" max="0" style="width: 100%;">
+                            </div>
+                            <div>
+                                <label><input type="checkbox" id="roll-focus"> Focus Applies</label>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 15px;">
+                            <button class="btn btn-primary" onclick="rollDice()">ROLL DICE</button>
+                            <button class="btn btn-secondary" onclick="cancelAction()">Cancel</button>
+                        </div>
+
+                        <div id="dice-results" style="margin-top: 15px; display: none;">
+                            <h4 style="color: var(--lcars-ice);">Results</h4>
+                            <div id="dice-display"></div>
+                            <div id="dice-summary" style="margin-top: 10px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================
+                     CHARACTER TAB
+                     ============================================ -->
+                <div id="tab-character" class="tab-panel">
+                    {% if player_char %}
+                    <div class="character-panel">
+                        <h3>{{ player_char.name }}</h3>
+                        <div class="stat-row">
+                            <span>Rank / Position</span>
+                            <span class="stat-value">{{ player_char.rank }} - {{ position.value.title() }}</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Stress</span>
+                            <span class="stat-value">{{ player_char.stress }} / {{ player_char.stress_max }}</span>
+                        </div>
+
+                        <h4 class="section-header">ATTRIBUTES</h4>
+                        <div class="stats-grid">
+                            <div class="stat-row">
+                                <span>Control</span>
+                                <span class="stat-value">{{ player_char.attributes.control }}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Daring</span>
+                                <span class="stat-value">{{ player_char.attributes.daring }}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Fitness</span>
+                                <span class="stat-value">{{ player_char.attributes.fitness }}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Insight</span>
+                                <span class="stat-value">{{ player_char.attributes.insight }}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Presence</span>
+                                <span class="stat-value">{{ player_char.attributes.presence }}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Reason</span>
+                                <span class="stat-value">{{ player_char.attributes.reason }}</span>
+                            </div>
+                        </div>
+
+                        <h4 class="section-header">DISCIPLINES</h4>
+                        <div class="stats-grid">
+                            <div class="stat-row">
+                                <span>Command</span>
+                                <span class="stat-value">{{ player_char.disciplines.command }}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Conn</span>
+                                <span class="stat-value">{{ player_char.disciplines.conn }}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Engineering</span>
+                                <span class="stat-value">{{ player_char.disciplines.engineering }}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Medicine</span>
+                                <span class="stat-value">{{ player_char.disciplines.medicine }}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Science</span>
+                                <span class="stat-value">{{ player_char.disciplines.science }}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>Security</span>
+                                <span class="stat-value">{{ player_char.disciplines.security }}</span>
+                            </div>
+                        </div>
+
+                        {% if player_char.focuses %}
+                        <h4 class="section-header">FOCUSES</h4>
+                        <div style="padding: 10px; background: #1a1a1a; border-radius: 5px;">
+                            {{ player_char.focuses | join(', ') }}
+                        </div>
+                        {% endif %}
+
+                        {% if player_char.talents %}
+                        <h4 class="section-header">TALENTS</h4>
+                        <div style="padding: 10px; background: #1a1a1a; border-radius: 5px;">
+                            {% for talent in player_char.talents %}
+                            <div style="margin: 5px 0;">• {{ talent }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="character-panel">
+                        <h3>NO CHARACTER ASSIGNED</h3>
+                        <p style="color: var(--lcars-almond);">You don't have a character assigned to this encounter.</p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- ============================================
+                     SHIP TAB
+                     ============================================ -->
+                <div id="tab-ship" class="tab-panel">
+                    {% if player_ship %}
+                    <div class="ship-panel player-ship">
+                        <h3>{{ player_ship.name }}</h3>
+                        <div class="stat-row">
+                            <span>Class</span>
+                            <span class="stat-value">{{ player_ship.ship_class }}-class (Scale {{ player_ship.scale }})</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Resistance</span>
+                            <span class="stat-value" id="player-resistance">
+                                {{ player_ship.resistance }}{% if resistance_bonus > 0 %} <span style="color: var(--lcars-success);">(+{{ resistance_bonus }})</span>{% endif %}
+                            </span>
+                        </div>
+
+                        <!-- Shields -->
+                        <h4 class="section-header">SHIELDS</h4>
+                        <div class="stat-row">
+                            <span>Shields</span>
+                            <span class="stat-value" id="player-shields">
+                                {{ player_ship.shields }} / {{ player_ship.shields_max }}
+                                <span id="shields-status" style="margin-left: 8px; font-size: 0.8em; color: var(--lcars-{% if player_ship.shields_raised %}success{% else %}tomato{% endif %});">
+                                    [{{ 'ONLINE' if player_ship.shields_raised else 'OFFLINE' }}]
+                                </span>
+                            </span>
+                        </div>
+                        <div class="shields-bar">
+                            <div class="fill" id="player-shields-bar" style="width: {{ (player_ship.shields / player_ship.shields_max * 100) | int }}%;{% if not player_ship.shields_raised %} background: var(--lcars-tomato);{% endif %}"></div>
+                        </div>
+
+                        <!-- Reserve Power -->
+                        <div class="resource-box reserve-power{% if not player_ship.has_reserve_power %} depleted{% endif %}" style="margin: 15px 0;">
+                            <span class="resource-label">Reserve Power</span>
+                            <span class="resource-value" id="reserve-power-status">
+                                {{ '[AVAILABLE]' if player_ship.has_reserve_power else '[DEPLETED]' }}
+                            </span>
+                        </div>
+
+                        <!-- Systems -->
+                        <h4 class="section-header">SYSTEMS</h4>
+                        <div class="stats-grid">
+                            {% set systems = [('Comms', player_ship.systems.comms, 'comms'), ('Computers', player_ship.systems.computers, 'computers'), ('Engines', player_ship.systems.engines, 'engines'), ('Sensors', player_ship.systems.sensors, 'sensors'), ('Structure', player_ship.systems.structure, 'structure'), ('Weapons', player_ship.systems.weapons, 'weapons')] %}
+                            {% for name, value, key in systems %}
+                            {% set breach_potency = player_ship.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
+                            <div class="stat-row {% if breach_potency > 0 %}breached{% endif %}" data-system="{{ key }}">
+                                <span>{{ name }}</span>
+                                <span class="stat-value">
+                                    {{ value }}
+                                    <span class="breach-indicator" style="{% if breach_potency == 0 %}display:none{% endif %}">[Breach <span class="breach-count">{{ breach_potency }}</span>]</span>
+                                </span>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Departments -->
+                        <h4 class="section-header">DEPARTMENTS</h4>
+                        <div class="stats-grid">
+                            <div class="stat-row"><span>Command</span><span class="stat-value">{{ player_ship.departments.command }}</span></div>
+                            <div class="stat-row"><span>Conn</span><span class="stat-value">{{ player_ship.departments.conn }}</span></div>
+                            <div class="stat-row"><span>Engineering</span><span class="stat-value">{{ player_ship.departments.engineering }}</span></div>
+                            <div class="stat-row"><span>Medicine</span><span class="stat-value">{{ player_ship.departments.medicine }}</span></div>
+                            <div class="stat-row"><span>Science</span><span class="stat-value">{{ player_ship.departments.science }}</span></div>
+                            <div class="stat-row"><span>Security</span><span class="stat-value">{{ player_ship.departments.security }}</span></div>
+                        </div>
+
+                        <!-- Weapons -->
+                        <h4 class="section-header">
+                            WEAPONS
+                            <span id="weapons-status" style="margin-left: 10px; color: var(--lcars-{% if player_ship.weapons_armed %}orange{% else %}tomato{% endif %});">
+                                [{{ 'ARMED' if player_ship.weapons_armed else 'STANDBY' }}]
+                            </span>
+                        </h4>
+                        <div class="weapons-list">
+                            {% for weapon in player_ship.weapons %}
+                            <div class="weapon-item">
+                                <span class="weapon-name">{{ weapon.name }}</span>
+                                <span class="weapon-stats">Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }} | {{ weapon.range.value.title() }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        {% if player_ship.talents %}
+                        <h4 class="section-header">SHIP TALENTS</h4>
+                        <div style="padding: 10px; background: #1a1a1a; border-radius: 5px;">
+                            {% for talent in player_ship.talents %}
+                            <div style="margin: 5px 0;">• {{ talent }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="ship-panel">
+                        <h3>NO SHIP ASSIGNED</h3>
+                        <p style="color: var(--lcars-almond);">You don't have a ship assigned to this encounter.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+    <script>
+        // Tab switching
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-panel').forEach(panel => {
+                panel.classList.remove('active');
+            });
+
+            // Remove active from all nav tabs
+            document.querySelectorAll('.player-nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById('tab-' + tabName).classList.add('active');
+
+            // Activate nav tab
+            document.querySelector('.tab-' + tabName).classList.add('active');
+
+            // If showing actions tab and it's player turn, refresh state
+            if (tabName === 'actions' && currentTurn === 'player') {
+                updateActionPanelVisibility();
+            }
+        }
+
+        // Global state variables
+        const encounterId = '{{ encounter.encounter_id }}';
+        const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
+        const playerCharId = {{ player_char_db_id if player_char_db_id else 'null' }};
+        const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
+        const weaponsBonus = {{ player_ship.weapons_damage_bonus() if player_ship else 0 }};
+        const role = 'player';
+        let currentTurn = '{{ encounter.current_turn }}';
+
+        // Multi-player support
+        const isMultiplayer = {{ 'true' if is_multiplayer else 'false' }};
+        const myPlayerId = {{ my_player_id if my_player_id else 'null' }};
+        const myPlayerName = '{{ my_player_name | default("Player", true) }}';
+        let currentPlayerId = {{ encounter.current_player_id if encounter.current_player_id else 'null' }};
+        let myHasActed = false;
+
+        // Tactical Map Data
+        let tacticalMapData = {{ tactical_map | tojson if tactical_map else '{"radius": 3, "tiles": []}' | safe }};
+        let shipPositions = {{ ship_positions | tojson if ship_positions else '[]' | safe }};
+
+        // Resistance tracking
+        const baseResistance = {{ player_ship.resistance if player_ship else 4 }};
+        let currentResistanceBonus = {{ resistance_bonus if resistance_bonus else 0 }};
+
+        // Shields tracking
+        let shieldsRaised = {{ 'true' if player_ship.shields_raised else 'false' }};
+        const shieldsMax = {{ player_ship.shields_max if player_ship else 9 }};
+
+        // Toast notifications
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function showSuccessToast(message) { showToast(message, 'success'); }
+        function showErrorToast(message) { showToast(message, 'error'); }
+        function showInfoToast(message) { showToast(message, 'info'); }
+
+        // Weapons tracking
+        let weaponsArmed = {{ 'true' if player_ship.weapons_armed else 'false' }};
+
+        // Reserve Power tracking
+        let hasReservePower = {{ 'true' if player_ship.has_reserve_power else 'false' }};
+
+        // Player stats for reference
+        const playerAttrs = {
+            control: {{ player_char.attributes.control if player_char else 9 }},
+            daring: {{ player_char.attributes.daring if player_char else 9 }},
+            fitness: {{ player_char.attributes.fitness if player_char else 9 }},
+            insight: {{ player_char.attributes.insight if player_char else 9 }},
+            presence: {{ player_char.attributes.presence if player_char else 9 }},
+            reason: {{ player_char.attributes.reason if player_char else 9 }}
+        };
+        const playerDiscs = {
+            command: {{ player_char.disciplines.command if player_char else 2 }},
+            conn: {{ player_char.disciplines.conn if player_char else 2 }},
+            engineering: {{ player_char.disciplines.engineering if player_char else 2 }},
+            medicine: {{ player_char.disciplines.medicine if player_char else 2 }},
+            science: {{ player_char.disciplines.science if player_char else 2 }},
+            security: {{ player_char.disciplines.security if player_char else 2 }}
+        };
+
+        // Ship stats for assist rolls
+        const shipSystems = {
+            comms: {{ player_ship.systems.comms if player_ship else 7 }},
+            computers: {{ player_ship.systems.computers if player_ship else 7 }},
+            engines: {{ player_ship.systems.engines if player_ship else 7 }},
+            sensors: {{ player_ship.systems.sensors if player_ship else 7 }},
+            structure: {{ player_ship.systems.structure if player_ship else 7 }},
+            weapons: {{ player_ship.systems.weapons if player_ship else 7 }}
+        };
+        const shipDepts = {
+            command: {{ player_ship.departments.command if player_ship else 2 }},
+            conn: {{ player_ship.departments.conn if player_ship else 2 }},
+            engineering: {{ player_ship.departments.engineering if player_ship else 2 }},
+            medicine: {{ player_ship.departments.medicine if player_ship else 2 }},
+            science: {{ player_ship.departments.science if player_ship else 2 }},
+            security: {{ player_ship.departments.security if player_ship else 2 }}
+        };
+
+        // Action state
+        let currentAction = null;
+        let currentActionConfig = null;
+        let activeMinorAction = null;
+        let selectedMajorAction = null;
+        let selectedMinorAction = null;
+        let actionAvailability = {};
+
+        // Action constants
+        const BUFF_ACTIONS = ['Calibrate Weapons', 'Calibrate Sensors', 'Targeting Solution'];
+        const MAJOR_BUFF_ACTIONS = ['Attack Pattern', 'Evasive Action'];
+        const FIRE_ONLY_MINOR_ACTIONS = ['Targeting Solution', 'Calibrate Weapons'];
+        const MINOR_ACTION_EFFECTS = {
+            'Calibrate Weapons': ['+1 damage on next attack'],
+            'Targeting Solution': ['Re-roll 1d20 OR choose system on breach (pick one!)'],
+            'Calibrate Sensors': ['Re-roll 1d20 on next sensor task'],
+        };
+
+        // Update action panel visibility
+        function updateActionPanelVisibility() {
+            const actionsContainer = document.getElementById('actions-container');
+            const enemyTurnMsg = document.getElementById('actions-enemy-turn-msg');
+
+            if (currentTurn === 'player') {
+                actionsContainer.style.display = 'block';
+                enemyTurnMsg.style.display = 'none';
+            } else {
+                actionsContainer.style.display = 'none';
+                enemyTurnMsg.style.display = 'block';
+                // Hide all action panels
+                hideAllActionPanels();
+            }
+        }
+
+        function hideAllActionPanels() {
+            document.getElementById('fire-panel').style.display = 'none';
+            document.getElementById('defensive-fire-panel').style.display = 'none';
+            document.getElementById('reroute-power-panel').style.display = 'none';
+            document.getElementById('damage-control-panel').style.display = 'none';
+            document.getElementById('ram-panel').style.display = 'none';
+            document.getElementById('thrusters-panel').style.display = 'none';
+            document.getElementById('dice-panel').style.display = 'none';
+            document.getElementById('selection-summary').style.display = 'none';
+        }
+
+        // Action selection
+        async function selectAction(name, type, difficulty) {
+            if (currentTurn !== 'player') {
+                showErrorToast("It's not your turn!");
+                return;
+            }
+
+            // Check if action is available (system not destroyed)
+            const availability = isActionAvailable(name);
+            if (!availability.available) {
+                showErrorToast(`Cannot use ${name}: ${availability.reason}`);
+                return;
+            }
+
+            // Apply breach modifier to difficulty if applicable
+            if (availability.breach_modifier > 0) {
+                difficulty = difficulty + availability.breach_modifier;
+            }
+
+            currentAction = {name, type, difficulty};
+
+            if (type === 'minor') {
+                if (BUFF_ACTIONS.includes(name)) {
+                    executeBuffAction(name);
+                    highlightAction(name, 'minor');
+                } else if (name === 'Impulse') {
+                    startImpulseMovement();
+                    highlightAction(name, 'minor');
+                } else if (name === 'Thrusters') {
+                    showThrustersPanel();
+                    highlightAction(name, 'minor');
+                }
+                return;
+            }
+
+            // Major action selected
+            selectedMajorAction = name;
+            highlightAction(name, 'major');
+            updateSelectionSummary();
+
+            if (name === 'Fire') {
+                if (!weaponsArmed) {
+                    showErrorToast("Weapons are not armed! Use Arm Weapons first.");
+                    return;
+                }
+                showPanel('fire-panel');
+                updateFireTargets();
+                updateFireDetails();
+                updateFireMinorActionBanner();
+            } else if (name === 'Defensive Fire') {
+                showPanel('defensive-fire-panel');
+                updateDefensiveFireMomentumWarning();
+            } else if (name === 'Reroute Power') {
+                if (!hasReservePower) {
+                    showErrorToast("Reroute Power requires Reserve Power!");
+                    return;
+                }
+                showPanel('reroute-power-panel');
+                updateRerouteTargetDisplay();
+            } else if (name === 'Ram') {
+                showPanel('ram-panel');
+                updateRamDamageDisplay();
+            } else if (name === 'Damage Control') {
+                showPanel('damage-control-panel');
+                populateDamageControlOptions();
+            } else if (MAJOR_BUFF_ACTIONS.includes(name)) {
+                executeMajorBuffAction(name);
+                return;
+            } else {
+                // Generic dice roll action - fetch config from server
+                try {
+                    const configResponse = await fetch(`/api/action-config/${encodeURIComponent(name)}`);
+                    const config = await configResponse.json();
+                    currentActionConfig = config;
+                    setupDicePanel(config, difficulty);
+                } catch (err) {
+                    console.error('Failed to fetch action config:', err);
+                    setupDicePanel(null, difficulty);
+                }
+                showPanel('dice-panel');
+                document.getElementById('current-action-display').style.display = 'block';
+                document.getElementById('current-action-name').textContent = name;
+            }
+        }
+
+        function showPanel(panelId) {
+            hideAllActionPanels();
+            document.getElementById(panelId).style.display = 'block';
+            document.getElementById(panelId).scrollIntoView({behavior: 'smooth'});
+        }
+
+        function setupDicePanel(config, difficulty) {
+            if (config && config.roll) {
+                const attrName = config.roll.attribute;
+                const discName = config.roll.discipline;
+                const attrValue = playerAttrs[attrName] || 9;
+                const discValue = playerDiscs[discName] || 2;
+                const targetNum = attrValue + discValue;
+
+                document.getElementById('roll-attr-name').textContent = attrName.charAt(0).toUpperCase() + attrName.slice(1);
+                document.getElementById('roll-attr-value').textContent = attrValue;
+                document.getElementById('roll-disc-name').textContent = discName.charAt(0).toUpperCase() + discName.slice(1);
+                document.getElementById('roll-disc-value').textContent = discValue;
+                document.getElementById('roll-target').textContent = targetNum;
+                document.getElementById('roll-diff-display').textContent = config.roll.difficulty;
+
+                document.getElementById('roll-attr').value = attrValue;
+                document.getElementById('roll-disc').value = discValue;
+                document.getElementById('roll-diff').value = config.roll.difficulty;
+
+                const assistRow = document.getElementById('ship-assist-row');
+                if (config.roll.ship_assist_system && config.roll.ship_assist_department) {
+                    const sysName = config.roll.ship_assist_system;
+                    const deptName = config.roll.ship_assist_department;
+                    const sysValue = shipSystems[sysName] || 7;
+                    const deptValue = shipDepts[deptName] || 2;
+
+                    document.getElementById('ship-assist-system-name').textContent = sysName.charAt(0).toUpperCase() + sysName.slice(1);
+                    document.getElementById('ship-assist-system-value').textContent = sysValue;
+                    document.getElementById('ship-assist-dept-name').textContent = deptName.charAt(0).toUpperCase() + deptName.slice(1);
+                    document.getElementById('ship-assist-dept-value').textContent = deptValue;
+                    document.getElementById('ship-assist-target').textContent = sysValue + deptValue;
+                    assistRow.style.display = 'block';
+                } else {
+                    assistRow.style.display = 'none';
+                }
+            } else {
+                document.getElementById('roll-diff').value = difficulty;
+                document.getElementById('roll-diff-display').textContent = difficulty;
+            }
+            document.getElementById('roll-details').style.display = 'block';
+            document.getElementById('dice-results').style.display = 'none';
+        }
+
+        // Action availability check
+        function isActionAvailable(actionName) {
+            const availability = actionAvailability[actionName];
+            if (!availability) return { available: true, reason: null };
+            return availability;
+        }
+
+        async function fetchActionAvailability() {
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/action-availability`);
+                if (response.ok) {
+                    actionAvailability = await response.json();
+                    updateActionAvailabilityUI();
+                }
+            } catch (e) {
+                console.error('Failed to fetch action availability:', e);
+            }
+        }
+
+        function updateActionAvailabilityUI() {
+            const actionItems = document.querySelectorAll('[data-action-name]');
+            actionItems.forEach(item => {
+                const actionName = item.getAttribute('data-action-name');
+                const availability = actionAvailability[actionName];
+                if (!availability) return;
+
+                const breachWarning = item.querySelector('.breach-warning');
+                if (!availability.available) {
+                    item.classList.add('action-disabled');
+                    if (breachWarning) {
+                        breachWarning.textContent = `[${availability.reason}]`;
+                        breachWarning.style.display = 'inline';
+                    }
+                } else {
+                    item.classList.remove('action-disabled');
+                    if (breachWarning) breachWarning.style.display = 'none';
+                }
+            });
+        }
+
+        // Highlighting
+        function clearActionSelections(type) {
+            document.querySelectorAll('.action-panel').forEach(panel => {
+                if ((type === 'minor' && panel.classList.contains('minor')) ||
+                    (type === 'major' && panel.classList.contains('major'))) {
+                    panel.querySelectorAll('.action-list li').forEach(li => {
+                        li.classList.remove('action-selected');
+                    });
+                }
+            });
+        }
+
+        function highlightAction(actionName, type) {
+            clearActionSelections(type);
+            document.querySelectorAll('.action-list li').forEach(li => {
+                const strongEl = li.querySelector('strong');
+                if (strongEl && strongEl.textContent === actionName) {
+                    li.classList.add('action-selected');
+                }
+            });
+        }
+
+        function updateSelectionSummary() {
+            const summaryPanel = document.getElementById('selection-summary');
+            const summaryMinor = document.getElementById('summary-minor');
+            const summaryMajor = document.getElementById('summary-major');
+
+            if (activeMinorAction || selectedMajorAction) {
+                summaryPanel.style.display = 'block';
+            } else {
+                summaryPanel.style.display = 'none';
+            }
+
+            if (activeMinorAction) {
+                const effects = MINOR_ACTION_EFFECTS[activeMinorAction] || [];
+                summaryMinor.innerHTML = `<strong style="color: var(--lcars-success);">OK ${activeMinorAction}</strong>
+                    <div style="font-size: 0.85em; color: var(--lcars-almond); margin-top: 4px;">
+                        ${effects.map(e => `* ${e}`).join('<br>')}
+                    </div>`;
+            } else {
+                summaryMinor.innerHTML = '<span style="color: #666;">None selected (optional)</span>';
+            }
+
+            if (selectedMajorAction) {
+                summaryMajor.innerHTML = `<strong style="color: var(--lcars-success);">OK ${selectedMajorAction}</strong>`;
+            } else {
+                summaryMajor.innerHTML = '<span style="color: #888;">Select a major action to proceed</span>';
+            }
+        }
+
+        function cancelAction() {
+            currentAction = null;
+            selectedMajorAction = null;
+            clearActionSelections('major');
+            updateSelectionSummary();
+            hideAllActionPanels();
+        }
+
+        // Shields toggle
+        async function toggleShields() {
+            if (currentTurn !== 'player') {
+                showErrorToast("It's not your turn!");
+                return;
+            }
+            const actionName = shieldsRaised ? 'Lower Shields' : 'Raise Shields';
+            const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                updateShieldsDisplay(data.shields, data.shields_raised);
+                selectedMinorAction = actionName;
+                highlightAction(actionName, 'minor');
+                updateSelectionSummary();
+                showSuccessToast(data.message);
+            }
+        }
+
+        function updateShieldsDisplay(shields, raised) {
+            shieldsRaised = raised;
+            const shieldsEl = document.getElementById('player-shields');
+            const barEl = document.getElementById('player-shields-bar');
+
+            shieldsEl.innerHTML = `${shields} / ${shieldsMax} <span id="shields-status" style="margin-left: 8px; font-size: 0.8em; color: var(--lcars-${raised ? 'success' : 'tomato'});">[${raised ? 'ONLINE' : 'OFFLINE'}]</span>`;
+            barEl.style.width = `${(shields / shieldsMax) * 100}%`;
+            barEl.style.background = raised ? '' : 'var(--lcars-tomato)';
+
+            const btn = document.getElementById('shields-action-btn');
+            if (btn) btn.querySelector('strong').textContent = raised ? 'Lower Shields' : 'Raise Shields';
+        }
+
+        // Weapons toggle
+        async function toggleWeapons() {
+            if (currentTurn !== 'player') {
+                showErrorToast("It's not your turn!");
+                return;
+            }
+            const actionName = weaponsArmed ? 'Disarm Weapons' : 'Arm Weapons';
+            const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                updateWeaponsDisplay(data.weapons_armed);
+                selectedMinorAction = actionName;
+                highlightAction(actionName, 'minor');
+                updateSelectionSummary();
+                showSuccessToast(data.message);
+            }
+        }
+
+        function updateWeaponsDisplay(armed) {
+            weaponsArmed = armed;
+            const statusEl = document.getElementById('weapons-status');
+            statusEl.textContent = `[${armed ? 'ARMED' : 'STANDBY'}]`;
+            statusEl.style.color = armed ? 'var(--lcars-orange)' : 'var(--lcars-tomato)';
+
+            const btn = document.getElementById('weapons-action-btn');
+            if (btn) btn.querySelector('strong').textContent = armed ? 'Disarm Weapons' : 'Arm Weapons';
+        }
+
+        // Buff action execution
+        async function executeBuffAction(actionName) {
+            const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                activeMinorAction = actionName;
+                updateMajorActionHighlights();
+                updateSelectionSummary();
+                showSuccessToast(`${actionName} activated!`);
+            } else {
+                showErrorToast(data.error || 'Action failed');
+            }
+        }
+
+        async function executeMajorBuffAction(actionName) {
+            const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                showSuccessToast(`${actionName} activated!`);
+                if (data.resistance_bonus) {
+                    currentResistanceBonus += data.resistance_bonus;
+                    updateResistanceDisplay();
+                }
+                if (data.current_turn) {
+                    fetchTurnStatus();
+                }
+            } else {
+                showErrorToast(data.error || 'Action failed');
+            }
+        }
+
+        function updateMajorActionHighlights() {
+            const fireAction = document.querySelector('.fire-action');
+            if (fireAction) {
+                if (activeMinorAction && FIRE_ONLY_MINOR_ACTIONS.includes(activeMinorAction)) {
+                    fireAction.classList.add('fire-action-highlighted');
+                } else {
+                    fireAction.classList.remove('fire-action-highlighted');
+                }
+            }
+        }
+
+        function updateFireMinorActionBanner() {
+            const banner = document.getElementById('fire-minor-action-banner');
+            const nameSpan = document.getElementById('fire-minor-action-name');
+            const effectsDiv = document.getElementById('fire-minor-action-effects');
+            const targetingSolutionPanel = document.getElementById('targeting-solution-panel');
+
+            if (activeMinorAction) {
+                banner.style.display = 'block';
+                nameSpan.textContent = activeMinorAction;
+                const effects = MINOR_ACTION_EFFECTS[activeMinorAction] || [];
+                effectsDiv.innerHTML = effects.map(e => `* ${e}`).join('<br>');
+                targetingSolutionPanel.style.display = activeMinorAction === 'Targeting Solution' ? 'block' : 'none';
+            } else {
+                banner.style.display = 'none';
+                targetingSolutionPanel.style.display = 'none';
+            }
+        }
+
+        // Fire functions (placeholders for now - will need full implementation)
+        function updateFireTargets() {
+            const select = document.getElementById('target-select');
+            select.innerHTML = '';
+            {% for enemy in enemy_ships %}
+            const opt{{ loop.index0 }} = document.createElement('option');
+            opt{{ loop.index0 }}.value = '{{ loop.index0 }}';
+            opt{{ loop.index0 }}.textContent = '{{ enemy.name }}';
+            select.appendChild(opt{{ loop.index0 }});
+            {% endfor %}
+        }
+
+        function updateFireDetails() {
+            // Placeholder - will calculate difficulty based on range etc.
+        }
+
+        async function executeFireAction() {
+            showInfoToast('Fire action executing...');
+            // Full implementation needed
+        }
+
+        // Defensive Fire
+        function updateDefensiveFireMomentumWarning() {
+            const currentMomentum = parseInt(document.getElementById('momentum').textContent) || 0;
+            const warningDiv = document.getElementById('defensive-fire-momentum-warning');
+            document.getElementById('df-current-momentum').textContent = currentMomentum;
+            warningDiv.style.display = currentMomentum <= 3 ? 'block' : 'none';
+        }
+
+        async function executeDefensiveFire() {
+            showInfoToast('Defensive Fire activating...');
+            // Full implementation needed
+        }
+
+        // Reroute Power
+        function updateRerouteTargetDisplay() {
+            const select = document.getElementById('reroute-system-select');
+            const display = document.getElementById('reroute-target-display');
+            display.textContent = select.value.toUpperCase();
+        }
+
+        async function executeReroutePower() {
+            const system = document.getElementById('reroute-system-select').value;
+            const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    action_name: 'Reroute Power',
+                    character_id: playerCharId,
+                    target_system: system
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                hasReservePower = false;
+                updateReservePowerDisplay();
+                showSuccessToast(`Power rerouted to ${system.toUpperCase()}`);
+                fetchTurnStatus();
+            } else {
+                showErrorToast(data.error || 'Failed to reroute power');
+            }
+        }
+
+        function updateReservePowerDisplay() {
+            const statusEl = document.getElementById('reserve-power-status');
+            const container = statusEl.closest('.resource-box');
+            if (hasReservePower) {
+                statusEl.textContent = '[AVAILABLE]';
+                container.classList.remove('depleted');
+            } else {
+                statusEl.textContent = '[DEPLETED]';
+                container.classList.add('depleted');
+            }
+        }
+
+        // Damage Control
+        let damageControlTargetSystem = null;
+
+        function populateDamageControlOptions() {
+            const select = document.getElementById('damage-control-system-select');
+            const noBreachWarning = document.getElementById('damage-control-no-breach-warning');
+            const systemSection = document.getElementById('damage-control-system-section');
+
+            const breachedSystems = [];
+            document.querySelectorAll('.stat-row.breached').forEach(row => {
+                const system = row.getAttribute('data-system');
+                const breachCount = row.querySelector('.breach-count');
+                const potency = breachCount ? parseInt(breachCount.textContent) || 1 : 1;
+                if (system) breachedSystems.push({ system, potency });
+            });
+
+            select.innerHTML = '';
+            if (breachedSystems.length === 0) {
+                noBreachWarning.style.display = 'block';
+                systemSection.style.display = 'none';
+                damageControlTargetSystem = null;
+                return;
+            }
+
+            noBreachWarning.style.display = 'none';
+            systemSection.style.display = 'block';
+
+            breachedSystems.forEach(({ system, potency }) => {
+                const option = document.createElement('option');
+                option.value = system;
+                option.textContent = `${system.toUpperCase()} - Breach Potency ${potency}`;
+                option.dataset.potency = potency;
+                select.appendChild(option);
+            });
+
+            damageControlTargetSystem = breachedSystems[0].system;
+            updateDamageControlDisplay();
+        }
+
+        function updateDamageControlDisplay() {
+            const select = document.getElementById('damage-control-system-select');
+            const selectedOption = select.options[select.selectedIndex];
+            const potency = selectedOption ? parseInt(selectedOption.dataset.potency) || 0 : 0;
+
+            document.getElementById('damage-control-breach-potency').textContent = potency;
+            document.getElementById('damage-control-total-difficulty').textContent = 2 + potency;
+            damageControlTargetSystem = select.value;
+        }
+
+        async function executeDamageControlRoll() {
+            showInfoToast('Damage Control roll executing...');
+            // Full implementation needed
+        }
+
+        // Ram
+        function updateRamDamageDisplay() {
+            const select = document.getElementById('ram-target-select');
+            const selectedOption = select.options[select.selectedIndex];
+            if (selectedOption) {
+                const targetScale = selectedOption.dataset.scale;
+                document.getElementById('ram-their-damage').textContent = targetScale;
+            }
+        }
+
+        async function executeRamAction() {
+            showInfoToast('Ram action executing...');
+            // Full implementation needed
+        }
+
+        // Thrusters (placeholder)
+        function showThrustersPanel() {
+            showPanel('thrusters-panel');
+        }
+
+        function cancelThrustersAction() {
+            cancelAction();
+        }
+
+        async function executeThrustersAction() {
+            showInfoToast('Thrusters action executing...');
+        }
+
+        // Impulse movement (placeholder)
+        function startImpulseMovement() {
+            showInfoToast('Impulse movement starting...');
+        }
+
+        // Dice rolling (placeholder)
+        async function rollDice() {
+            showInfoToast('Rolling dice...');
+            // Full implementation needed
+        }
+
+        // Defensive dice (placeholder)
+        function rollDefensiveDice() {
+            showInfoToast('Rolling defensive dice...');
+        }
+
+        function submitDefensiveRoll() {
+            showInfoToast('Submitting defensive roll...');
+        }
+
+        // Resistance display update
+        function updateResistanceDisplay() {
+            const el = document.getElementById('player-resistance');
+            if (currentResistanceBonus > 0) {
+                el.innerHTML = `${baseResistance} <span style="color: var(--lcars-success);">(+${currentResistanceBonus})</span>`;
+            } else {
+                el.innerHTML = `${baseResistance}`;
+            }
+        }
+
+        // Turn management
+        async function nextTurn() {
+            const response = await fetch(`/api/encounter/${encounterId}/next-turn`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await response.json();
+
+            if (data.current_turn) {
+                fetchTurnStatus();
+            }
+
+            // Clear action state
+            activeMinorAction = null;
+            selectedMajorAction = null;
+            updateFireMinorActionBanner();
+            updateMajorActionHighlights();
+            updateSelectionSummary();
+            clearActionSelections('minor');
+            clearActionSelections('major');
+            hideAllActionPanels();
+        }
+
+        async function claimTurn() {
+            if (!isMultiplayer || !myPlayerId) return;
+
+            const response = await fetch(`/api/encounter/${encounterId}/claim-turn`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_id: myPlayerId })
+            });
+            const data = await response.json();
+
+            if (data.success && data.confirmed) {
+                currentPlayerId = myPlayerId;
+                showSuccessToast('Turn claimed! Take your action.');
+                fetchTurnStatus();
+            } else if (data.error) {
+                showErrorToast(data.error);
+            }
+        }
+
+        async function releaseTurn() {
+            if (!isMultiplayer) return;
+
+            const response = await fetch(`/api/encounter/${encounterId}/release-turn`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                currentPlayerId = null;
+                showInfoToast('Turn released');
+                fetchTurnStatus();
+            }
+        }
+
+        // Fetch turn status (polling)
+        async function fetchTurnStatus() {
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/status?role=player`);
+                if (response.ok) {
+                    const data = await response.json();
+                    currentTurn = data.current_turn;
+                    updateTurnDisplay(data);
+                    updateActionPanelVisibility();
+
+                    // Update turn counters
+                    if (data.player_turns_used !== undefined) {
+                        document.getElementById('player-turns-used').textContent = data.player_turns_used;
+                        document.getElementById('player-turns-total').textContent = data.player_turns_total;
+                    }
+                    if (data.enemy_turns_used !== undefined) {
+                        document.getElementById('enemy-turns-used').textContent = data.enemy_turns_used;
+                        document.getElementById('enemy-turns-total').textContent = data.enemy_turns_total;
+                    }
+
+                    // Update resources
+                    if (data.momentum !== undefined) {
+                        document.getElementById('momentum').textContent = data.momentum;
+                    }
+                    if (data.threat !== undefined) {
+                        document.getElementById('threat').textContent = data.threat;
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to fetch turn status:', e);
+            }
+        }
+
+        function updateTurnDisplay(data) {
+            const banner = document.getElementById('turn-banner');
+            const turnText = document.getElementById('turn-text');
+
+            if (data.current_turn === 'player') {
+                banner.classList.remove('enemy-turn');
+                banner.classList.add('your-turn');
+
+                if (isMultiplayer) {
+                    if (data.current_player_id === myPlayerId) {
+                        turnText.textContent = 'YOUR TURN - Take one action';
+                    } else if (data.current_player_id) {
+                        turnText.textContent = `${data.current_player_name || 'Another player'} is acting...`;
+                    } else {
+                        turnText.textContent = 'PLAYER TURN - Claim your turn to act';
+                    }
+                } else {
+                    turnText.textContent = 'YOUR TURN - Take one action';
+                }
+
+                document.getElementById('end-turn-section').style.display = 'block';
+            } else {
+                banner.classList.remove('your-turn');
+                banner.classList.add('enemy-turn');
+                turnText.textContent = 'ENEMY TURN - Waiting for Game Master...';
+                document.getElementById('end-turn-section').style.display = 'none';
+            }
+
+            // Update round display
+            if (data.round) {
+                document.getElementById('round-display').textContent = `Round ${data.round}`;
+            }
+        }
+
+        // Render tactical map
+        function renderTacticalMap() {
+            if (typeof renderHexMap === 'function') {
+                renderHexMap('tactical-map-container', tacticalMapData, shipPositions, {
+                    role: role,
+                    playerShipId: playerShipId
+                });
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            renderTacticalMap();
+            fetchTurnStatus();
+            fetchActionAvailability();
+
+            // Event listeners
+            const rerouteSelect = document.getElementById('reroute-system-select');
+            if (rerouteSelect) {
+                rerouteSelect.addEventListener('change', updateRerouteTargetDisplay);
+            }
+
+            const ramSelect = document.getElementById('ram-target-select');
+            if (ramSelect) {
+                ramSelect.addEventListener('change', updateRamDamageDisplay);
+            }
+
+            // Start polling for turn status
+            setInterval(fetchTurnStatus, 3000);
+        });
+    </script>
+</body>
+</html>

@@ -705,6 +705,104 @@
                 flex-direction: column;
             }
         }
+
+        /* LCARS-styled Select Dropdowns */
+        .gm-select {
+            width: 100%;
+            padding: 12px 16px;
+            margin-top: 8px;
+            background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
+            border: 2px solid var(--lcars-butterscotch);
+            border-radius: 20px;
+            color: var(--lcars-text);
+            font-family: var(--font-primary);
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%23f90'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 24px;
+            padding-right: 44px;
+        }
+
+        .gm-select:hover {
+            border-color: var(--lcars-orange);
+            box-shadow: 0 0 8px rgba(255, 153, 0, 0.3);
+        }
+
+        .gm-select:focus {
+            outline: none;
+            border-color: var(--lcars-ice);
+            box-shadow: 0 0 12px rgba(153, 204, 255, 0.4);
+        }
+
+        .gm-select option {
+            background: #1a1a1a;
+            color: var(--lcars-text);
+            padding: 12px;
+            font-size: 1rem;
+        }
+
+        /* Larger select variant for main controls */
+        .gm-select-lg {
+            padding: 14px 20px;
+            font-size: 1.1rem;
+            border-radius: 24px;
+            padding-right: 50px;
+            background-size: 28px;
+        }
+
+        /* Select with different accent colors */
+        .gm-select.select-tomato {
+            border-color: var(--lcars-tomato);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%23f66'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+        }
+
+        .gm-select.select-tomato:hover {
+            box-shadow: 0 0 8px rgba(255, 102, 102, 0.3);
+        }
+
+        .gm-select.select-bluey {
+            border-color: var(--lcars-bluey);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%2399f'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+        }
+
+        .gm-select.select-bluey:hover {
+            box-shadow: 0 0 8px rgba(153, 153, 255, 0.3);
+        }
+
+        .gm-select.select-violet {
+            border-color: var(--lcars-african-violet);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%23c9f'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+        }
+
+        .gm-select.select-violet:hover {
+            box-shadow: 0 0 8px rgba(204, 153, 255, 0.3);
+        }
+
+        .gm-select.select-success {
+            border-color: var(--lcars-success);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%2390c956'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+        }
+
+        .gm-select.select-success:hover {
+            box-shadow: 0 0 8px rgba(144, 201, 86, 0.3);
+        }
+
+        /* Form label for selects */
+        .gm-select-label {
+            display: block;
+            color: var(--lcars-almond);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
     </style>
 </head>
 <body>
@@ -806,9 +904,9 @@
                             <details style="margin-top: 10px;">
                                 <summary style="cursor: pointer; color: var(--lcars-almond);">Map Editor</summary>
                                 <div style="margin-top: 10px; padding: 10px; background: #1a1a1a; border-radius: 5px;">
-                                    <div style="margin-bottom: 10px;">
-                                        <label style="color: var(--lcars-almond); font-size: 0.85rem;">Paint Terrain</label>
-                                        <select id="terrain-palette" style="width: 100%; margin-top: 5px; padding: 8px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;">
+                                    <div style="margin-bottom: 15px;">
+                                        <label class="gm-select-label">Paint Terrain</label>
+                                        <select id="terrain-palette" class="gm-select select-bluey">
                                             <option value="open">Open Space</option>
                                             <option value="dust_cloud">Dust Cloud</option>
                                             <option value="debris_field">Debris Field</option>
@@ -817,8 +915,8 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <label style="color: var(--lcars-almond); font-size: 0.85rem;">Move Ship</label>
-                                        <select id="ship-to-place" style="width: 100%; margin-top: 5px; padding: 8px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;">
+                                        <label class="gm-select-label">Move Ship</label>
+                                        <select id="ship-to-place" class="gm-select select-success">
                                             <option value="">-- Select --</option>
                                             <option value="player">{{ player_ship.name if player_ship else 'Player Ship' }}</option>
                                             {% for enemy in enemy_ships %}
@@ -833,7 +931,7 @@
                         <div class="combat-log-panel">
                             <h3>COMBAT LOG <span id="combat-log-count" style="font-size: 0.8em; color: var(--lcars-almond);"></span></h3>
                             <div style="margin-bottom: 10px;">
-                                <select id="combat-log-round-filter" onchange="filterCombatLog()" style="padding: 5px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;">
+                                <select id="combat-log-round-filter" onchange="filterCombatLog()" class="gm-select" style="margin-top: 0;">
                                     <option value="">All Rounds</option>
                                 </select>
                             </div>
@@ -1048,8 +1146,8 @@
                         <!-- Ship & Station Selection -->
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                             <div>
-                                <label style="color: var(--lcars-almond); font-size: 0.85rem;">Acting Ship</label>
-                                <select id="npc-action-ship" style="width: 100%; margin-top: 5px; padding: 10px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;" onchange="updateNpcActionShipInfo()">
+                                <label class="gm-select-label">Acting Ship</label>
+                                <select id="npc-action-ship" class="gm-select gm-select-lg select-tomato" onchange="updateNpcActionShipInfo()">
                                     {% for enemy in enemy_ships %}
                                     <option value="{{ loop.index0 }}"
                                             data-crew-quality="{{ enemy.crew_quality.value if enemy.crew_quality else 'talented' }}"
@@ -1061,8 +1159,8 @@
                                 </select>
                             </div>
                             <div>
-                                <label style="color: var(--lcars-almond); font-size: 0.85rem;">Station</label>
-                                <select id="npc-station" style="width: 100%; margin-top: 5px; padding: 10px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;" onchange="updateNpcActionDisplay()">
+                                <label class="gm-select-label">Station</label>
+                                <select id="npc-station" class="gm-select gm-select-lg select-violet" onchange="updateNpcActionDisplay()">
                                     <option value="tactical">Tactical</option>
                                     <option value="conn">Conn / Helm</option>
                                     <option value="engineering">Engineering</option>
@@ -1101,12 +1199,12 @@
                             <h4 style="color: var(--lcars-tomato);">FIRE WEAPON</h4>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
                                 <div>
-                                    <label style="color: var(--lcars-almond);">Weapon</label>
-                                    <select id="npc-fire-weapon" style="width: 100%; margin-top: 5px; padding: 8px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;"></select>
+                                    <label class="gm-select-label">Weapon</label>
+                                    <select id="npc-fire-weapon" class="gm-select select-tomato"></select>
                                 </div>
                                 <div>
-                                    <label style="color: var(--lcars-almond);">Bonus Dice (Threat)</label>
-                                    <input type="number" id="npc-fire-bonus" value="0" min="0" max="3" style="width: 100%; margin-top: 5px; padding: 8px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;">
+                                    <label class="gm-select-label">Bonus Dice (Threat)</label>
+                                    <input type="number" id="npc-fire-bonus" value="0" min="0" max="3" class="gm-select select-tomato" style="text-align: center;">
                                 </div>
                             </div>
                         </div>
@@ -1116,13 +1214,22 @@
                             <h4 style="color: var(--lcars-african-violet);">TASK ROLL</h4>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
                                 <div>
-                                    <label style="color: var(--lcars-almond);">Bonus Dice</label>
-                                    <input type="number" id="npc-roll-bonus" value="0" min="0" max="3" style="width: 100%; margin-top: 5px; padding: 8px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;">
+                                    <label class="gm-select-label">Bonus Dice</label>
+                                    <input type="number" id="npc-roll-bonus" value="0" min="0" max="3" class="gm-select select-violet" style="text-align: center;">
                                 </div>
                                 <div>
-                                    <label style="color: var(--lcars-almond);">Difficulty</label>
-                                    <input type="number" id="npc-roll-difficulty" value="2" min="0" max="5" style="width: 100%; margin-top: 5px; padding: 8px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;">
+                                    <label class="gm-select-label">Difficulty</label>
+                                    <input type="number" id="npc-roll-difficulty" value="2" min="0" max="5" class="gm-select select-violet" style="text-align: center;">
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Impulse/Movement Panel -->
+                        <div id="npc-impulse-panel" style="display: none; padding: 15px; background: #1a2a1a; border: 2px solid var(--lcars-success); border-radius: 5px; margin: 15px 0;">
+                            <h4 style="color: var(--lcars-success);">IMPULSE - SELECT DESTINATION</h4>
+                            <p style="color: var(--lcars-almond); font-size: 0.9em; margin-bottom: 10px;">Click an adjacent hex on the map to move the ship.</p>
+                            <div id="npc-impulse-map-container" style="min-height: 300px; background: #0a0a0a; border-radius: 5px; display: flex; align-items: center; justify-content: center;">
+                                <p style="color: #666;">Loading map...</p>
                             </div>
                         </div>
 
@@ -1140,12 +1247,27 @@
                 <div id="tab-override" class="tab-panel">
                     <h2 style="color: var(--lcars-taupe); margin-bottom: 15px;">GM OVERRIDE CONTROLS</h2>
 
+                    <!-- Visibility Override -->
+                    <div style="margin-bottom: 20px; padding: 15px; background: #1a1a2a; border: 2px solid var(--lcars-african-violet); border-radius: 10px;">
+                        <h4 style="color: var(--lcars-african-violet); margin-bottom: 10px;">Visibility Override</h4>
+                        <p style="color: var(--lcars-almond); font-size: 0.85em; margin-bottom: 10px;">
+                            By default, ships hidden in fog/nebula are not visible. Enable this to see all ships regardless of terrain.
+                        </p>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="show-all-ships-toggle" onchange="toggleShowAllShips()" style="width: 20px; height: 20px; cursor: pointer;">
+                            <span style="color: var(--lcars-text); font-size: 1rem; font-weight: 600;">REVEAL ALL SHIPS (God Mode)</span>
+                        </label>
+                        <div id="player-visibility-status" style="margin-top: 10px; padding: 8px; background: #222; border-radius: 5px; font-size: 0.9em;">
+                            <!-- Will be populated by JS -->
+                        </div>
+                    </div>
+
                     <div class="override-grid">
                         <div class="override-section">
                             <h4>Quick Damage</h4>
-                            <div style="margin-bottom: 10px;">
-                                <label style="color: var(--lcars-almond); font-size: 0.85rem;">Target</label>
-                                <select id="damage-target" style="width: 100%; margin-top: 5px; padding: 8px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;">
+                            <div style="margin-bottom: 15px;">
+                                <label class="gm-select-label">Target</label>
+                                <select id="damage-target" class="gm-select select-tomato">
                                     <option value="player">Player Ship</option>
                                     {% for enemy in enemy_ships %}
                                     <option value="enemy-{{ loop.index0 }}">{{ enemy.name }}</option>
@@ -1154,8 +1276,8 @@
                             </div>
                             <div style="display: flex; gap: 10px; align-items: end;">
                                 <div style="flex: 1;">
-                                    <label style="color: var(--lcars-almond); font-size: 0.85rem;">Amount</label>
-                                    <input type="number" id="damage-amount" value="5" min="0" style="width: 100%; margin-top: 5px; padding: 8px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;">
+                                    <label class="gm-select-label">Amount</label>
+                                    <input type="number" id="damage-amount" value="5" min="0" class="gm-select select-tomato" style="text-align: center;">
                                 </div>
                                 <button class="btn btn-small btn-danger" onclick="applyQuickDamage()">Apply</button>
                             </div>
@@ -1163,9 +1285,9 @@
 
                         <div class="override-section">
                             <h4>Quick Breach</h4>
-                            <div style="margin-bottom: 10px;">
-                                <label style="color: var(--lcars-almond); font-size: 0.85rem;">Target</label>
-                                <select id="breach-target" style="width: 100%; margin-top: 5px; padding: 8px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;">
+                            <div style="margin-bottom: 15px;">
+                                <label class="gm-select-label">Target</label>
+                                <select id="breach-target" class="gm-select">
                                     <option value="player">Player Ship</option>
                                     {% for enemy in enemy_ships %}
                                     <option value="enemy-{{ loop.index0 }}">{{ enemy.name }}</option>
@@ -1174,8 +1296,8 @@
                             </div>
                             <div style="display: flex; gap: 10px; align-items: end;">
                                 <div style="flex: 1;">
-                                    <label style="color: var(--lcars-almond); font-size: 0.85rem;">System</label>
-                                    <select id="breach-system" style="width: 100%; margin-top: 5px; padding: 8px; background: #333; border: 1px solid #555; color: #fff; border-radius: 5px;">
+                                    <label class="gm-select-label">System</label>
+                                    <select id="breach-system" class="gm-select">
                                         <option value="comms">Comms</option>
                                         <option value="computers">Computers</option>
                                         <option value="engines">Engines</option>
@@ -1218,20 +1340,20 @@
     <div id="add-enemy-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>ADD ENEMY SHIP</h3>
-            <label for="enemy-faction">Faction</label>
-            <select id="enemy-faction">
+            <label class="gm-select-label" for="enemy-faction">Faction</label>
+            <select id="enemy-faction" class="gm-select select-tomato">
                 <option value="">Random</option>
                 <option value="klingon">Klingon</option>
                 <option value="romulan">Romulan</option>
             </select>
-            <label for="enemy-difficulty">Ship Class</label>
-            <select id="enemy-difficulty">
+            <label class="gm-select-label" for="enemy-difficulty">Ship Class</label>
+            <select id="enemy-difficulty" class="gm-select select-tomato">
                 <option value="easy">Light</option>
                 <option value="standard" selected>Standard</option>
                 <option value="hard">Heavy</option>
             </select>
-            <label for="enemy-crew-quality">Crew Quality</label>
-            <select id="enemy-crew-quality">
+            <label class="gm-select-label" for="enemy-crew-quality">Crew Quality</label>
+            <select id="enemy-crew-quality" class="gm-select select-tomato">
                 <option value="basic">Basic (TN 9)</option>
                 <option value="proficient">Proficient (TN 11)</option>
                 <option value="talented" selected>Talented (TN 13)</option>
@@ -1254,6 +1376,11 @@
         let currentTurn = '{{ encounter.current_turn }}';
         let hasReservePower = {{ 'true' if player_ship.has_reserve_power else 'false' }};
 
+        // Visibility settings
+        let showAllShips = false;  // God mode - shows all ships regardless of fog
+        let playerDetectedByEnemy = {{ 'true' if player_detected_by_enemy else 'false' }};  // Has enemy scanned player position?
+        const playerInFog = {{ 'true' if player_in_fog else 'false' }};  // Is player ship in fog terrain?
+
         // Tab navigation
         function showTab(tabName) {
             // Hide all panels
@@ -1274,6 +1401,41 @@
             toast.textContent = message;
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 2500);
+        }
+
+        // Visibility Override
+        function toggleShowAllShips() {
+            showAllShips = document.getElementById('show-all-ships-toggle').checked;
+            updatePlayerVisibilityStatus();
+            renderTacticalMap();  // Re-render map with new visibility
+        }
+
+        function updatePlayerVisibilityStatus() {
+            const statusDiv = document.getElementById('player-visibility-status');
+            if (!statusDiv) return;
+
+            let statusHtml = '';
+            const playerVisible = showAllShips || !playerInFog || playerDetectedByEnemy;
+
+            if (showAllShips) {
+                statusHtml = '<span style="color: var(--lcars-african-violet);">🔮 GOD MODE ACTIVE - All ships visible</span>';
+            } else if (!playerInFog) {
+                statusHtml = '<span style="color: var(--lcars-success);">✓ Player ship in open space - visible</span>';
+            } else if (playerDetectedByEnemy) {
+                statusHtml = '<span style="color: var(--lcars-orange);">📡 Player ship detected via Sensor Sweep - visible</span>';
+            } else {
+                statusHtml = '<span style="color: var(--lcars-tomato);">❌ Player ship hidden in fog - use Sensor Sweep to detect</span>';
+            }
+
+            statusDiv.innerHTML = statusHtml;
+        }
+
+        function isPlayerVisibleToGM() {
+            // Player is visible if:
+            // 1. God mode is on
+            // 2. Player is not in fog terrain
+            // 3. Player has been detected via Sensor Sweep
+            return showAllShips || !playerInFog || playerDetectedByEnemy;
         }
 
         // Resource updates
@@ -1329,12 +1491,32 @@
 
         // Turn management
         async function nextTurn() {
-            const response = await fetch(`/api/encounter/${encounterId}/next-turn`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'}
-            });
-            const data = await response.json();
-            updateTurnDisplay(data.current_turn, data.round, data);
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/next-turn`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                const data = await response.json();
+
+                if (data.error) {
+                    showToast(data.error, 'error');
+                    return;
+                }
+
+                updateTurnDisplay(data.current_turn, data.round, data);
+
+                // Show feedback to GM
+                if (data.round_advanced) {
+                    showToast(`Round ${data.round} begins!`, 'success');
+                } else if (data.current_turn === 'enemy') {
+                    showToast("Enemy turn - select an action", 'success');
+                } else {
+                    showToast("Waiting for player actions...", 'info');
+                }
+            } catch (err) {
+                console.error('Error advancing turn:', err);
+                showToast('Error advancing turn', 'error');
+            }
         }
 
         function updateTurnDisplay(newTurn, newRound, data) {
@@ -1432,11 +1614,12 @@
                 ],
             },
             conn: {
-                minor: [],
+                minor: [
+                    { name: "Impulse", type: "impulse", desc: "Move ship to adjacent zone" },
+                ],
                 major: [
                     { name: "Attack Pattern", type: "buff", desc: "Assist attacks" },
                     { name: "Evasive Action", type: "buff", desc: "Evade attacks" },
-                    { name: "Maneuver", type: "task_roll", difficulty: 2, desc: "Generate Momentum" },
                 ],
             },
             engineering: {
@@ -1451,6 +1634,7 @@
                 ],
                 major: [
                     { name: "Scan For Weakness", type: "task_roll", difficulty: 2, desc: "+2 damage or Piercing" },
+                    { name: "Sensor Sweep", type: "sensor_sweep", difficulty: 1, desc: "Detect hidden ships in fog/nebula" },
                 ],
             },
         };
@@ -1469,6 +1653,7 @@
 
         let selectedNpcAction = null;
         let selectedActionCategory = null;
+        let selectedImpulseDestination = null;
 
         function initNpcActionPanel() {
             updateNpcActionDisplay();
@@ -1529,10 +1714,12 @@
         function clearActionSelection() {
             selectedNpcAction = null;
             selectedActionCategory = null;
+            selectedImpulseDestination = null;
             document.querySelectorAll('.action-list li').forEach(li => li.classList.remove('selected'));
             document.getElementById('npc-selected-action').style.display = 'none';
             document.getElementById('npc-fire-panel').style.display = 'none';
             document.getElementById('npc-dice-panel').style.display = 'none';
+            document.getElementById('npc-impulse-panel').style.display = 'none';
             document.getElementById('npc-action-execute-btn').style.display = 'none';
         }
 
@@ -1544,6 +1731,7 @@
 
             selectedNpcAction = action;
             selectedActionCategory = category;
+            selectedImpulseDestination = null;
 
             document.querySelectorAll('.action-list li').forEach(li => li.classList.remove('selected'));
             element.classList.add('selected');
@@ -1553,16 +1741,114 @@
             document.getElementById('npc-selected-action').style.display = 'block';
 
             document.getElementById('npc-fire-panel').style.display = action.type === 'fire' ? 'block' : 'none';
-            document.getElementById('npc-dice-panel').style.display = action.type === 'task_roll' ? 'block' : 'none';
+            document.getElementById('npc-dice-panel').style.display = (action.type === 'task_roll' || action.type === 'sensor_sweep') ? 'block' : 'none';
+            document.getElementById('npc-impulse-panel').style.display = action.type === 'impulse' ? 'block' : 'none';
 
-            if (action.type === 'task_roll') {
-                document.getElementById('npc-roll-difficulty').value = action.difficulty || 2;
+            if (action.type === 'task_roll' || action.type === 'sensor_sweep') {
+                document.getElementById('npc-roll-difficulty').value = action.difficulty || 1;
+            }
+
+            if (action.type === 'impulse') {
+                initNpcImpulseMap();
             }
 
             const btn = document.getElementById('npc-action-execute-btn');
-            btn.style.display = 'block';
-            btn.textContent = action.type === 'fire' ? 'FIRE WEAPON' : 'EXECUTE';
-            btn.style.background = action.type === 'fire' ? 'var(--lcars-tomato)' : 'var(--lcars-bluey)';
+            btn.style.display = action.type === 'impulse' ? 'none' : 'block'; // Impulse uses map click instead
+            btn.textContent = action.type === 'fire' ? 'FIRE WEAPON' : (action.type === 'sensor_sweep' ? 'SCAN' : 'EXECUTE');
+            btn.style.background = action.type === 'fire' ? 'var(--lcars-tomato)' : (action.type === 'sensor_sweep' ? 'var(--lcars-ice)' : 'var(--lcars-bluey)');
+        }
+
+        function initNpcImpulseMap() {
+            const shipIndex = parseInt(document.getElementById('npc-action-ship').value);
+            const shipData = enemyShipsData[shipIndex];
+            const enemyKey = `enemy_${shipIndex}`;
+
+            // Get current ship position from the existing map data
+            // shipPositions has format: { id: "enemy_0", name: "...", faction: "enemy", position: { q, r } }
+            let currentShipPos = null;
+            shipPositions.forEach((ship) => {
+                if (ship.id === enemyKey && ship.position) {
+                    currentShipPos = { q: ship.position.q, r: ship.position.r };
+                }
+            });
+
+            // Calculate valid moves (adjacent hexes)
+            const validMoves = {};
+            if (currentShipPos) {
+                const adjacentOffsets = [
+                    {q: 1, r: 0}, {q: 1, r: -1}, {q: 0, r: -1},
+                    {q: -1, r: 0}, {q: -1, r: 1}, {q: 0, r: 1}
+                ];
+                adjacentOffsets.forEach(offset => {
+                    const newQ = currentShipPos.q + offset.q;
+                    const newR = currentShipPos.r + offset.r;
+                    // Check if within map bounds (radius 3)
+                    if (Math.abs(newQ) <= 3 && Math.abs(newR) <= 3 && Math.abs(newQ + newR) <= 3) {
+                        validMoves[`${newQ},${newR}`] = 0; // 0 momentum cost
+                    }
+                });
+            }
+
+            // Render the map with valid moves highlighted and the selected ship
+            HexMap.render('npc-impulse-map-container', tacticalMapData, shipPositions, {
+                editable: false,
+                showCoords: true,
+                selectedShipId: enemyKey,
+                validMoves: Object.keys(validMoves).map(k => {
+                    const [q, r] = k.split(',').map(Number);
+                    return { q, r, cost: 0 };
+                }),
+                onHexClick: async (q, r, terrain, isValidMove) => {
+                    if (!currentShipPos) {
+                        showToast("Ship position not found", 'error');
+                        return;
+                    }
+
+                    // Check if clicked hex is adjacent (distance = 1)
+                    const distance = hexDistance(currentShipPos.q, currentShipPos.r, q, r);
+                    if (distance !== 1) {
+                        showToast("Select an adjacent hex to move to", 'error');
+                        return;
+                    }
+
+                    // Execute the move
+                    await executeNpcImpulse(shipIndex, shipData.shipId, q, r);
+                }
+            });
+        }
+
+        function hexDistance(q1, r1, q2, r2) {
+            return (Math.abs(q1 - q2) + Math.abs(q1 + r1 - q2 - r2) + Math.abs(r1 - r2)) / 2;
+        }
+
+        async function executeNpcImpulse(shipIndex, shipDbId, targetQ, targetR) {
+            const shipId = `enemy_${shipIndex}`;
+
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/map/ship-position`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        ship_id: shipId,
+                        q: targetQ,
+                        r: targetR,
+                        log_action: true,
+                        action_name: 'Impulse'
+                    })
+                });
+                const data = await response.json();
+
+                if (data.error) {
+                    showToast(`Error: ${data.error}`, 'error');
+                    return;
+                }
+
+                showToast(`${enemyShipsData[shipIndex].name} moved!`, 'success');
+                clearActionSelection();
+                setTimeout(() => location.reload(), 1500);
+            } catch (err) {
+                showToast(`Error: ${err.message}`, 'error');
+            }
         }
 
         async function executeSelectedNpcAction() {
@@ -1656,10 +1942,31 @@
 
                 resultsDiv.style.background = '#1a3a1a';
                 resultsDiv.style.border = '2px solid var(--lcars-success)';
-                resultsDiv.innerHTML = `<strong style="color: var(--lcars-bluey);">${selectedNpcAction.name}</strong><br><div style="color: var(--lcars-success);">${data.message}</div>`;
+
+                let resultHtml = `<strong style="color: var(--lcars-bluey);">${selectedNpcAction.name}</strong><br><div style="color: var(--lcars-success);">${data.message}</div>`;
+
+                // For sensor sweep, show detection result and update visibility state
+                if (selectedNpcAction.type === 'sensor_sweep' && data.player_detected) {
+                    playerDetectedByEnemy = true;
+                    updatePlayerVisibilityStatus();
+                    renderTacticalMap();  // Re-render to show player ship
+                    resultHtml += `<div style="color: var(--lcars-ice); margin-top: 8px;">Player ship now visible on tactical map!</div>`;
+                }
+
+                // Show roll results if present
+                if (data.roll_results) {
+                    const rr = data.roll_results;
+                    resultHtml += `<div style="margin-top: 10px; font-size: 0.9em;">
+                        <span style="color: var(--lcars-almond);">Rolls:</span> ${rr.rolls.join(', ')}
+                        <span style="color: var(--lcars-almond);">| Target:</span> ${rr.target}
+                        <span style="color: var(--lcars-almond);">| Successes:</span> ${rr.successes}/${rr.difficulty}
+                    </div>`;
+                }
+
+                resultsDiv.innerHTML = resultHtml;
 
                 clearActionSelection();
-                setTimeout(() => location.reload(), 2000);
+                setTimeout(() => location.reload(), 2500);
             } catch (err) {
                 resultsDiv.style.display = 'block';
                 resultsDiv.innerHTML = `<strong style="color: var(--lcars-tomato);">ERROR:</strong> ${err.message}`;
@@ -1740,7 +2047,14 @@
         }
 
         function renderTacticalMap() {
-            HexMap.render('tactical-map-container', tacticalMapData, shipPositions, {
+            // Filter ship positions based on visibility
+            let visibleShips = shipPositions;
+            if (!isPlayerVisibleToGM()) {
+                // Hide player ship from the map
+                visibleShips = shipPositions.filter(ship => ship.id !== 'player');
+            }
+
+            HexMap.render('tactical-map-container', tacticalMapData, visibleShips, {
                 editable: true,
                 onHexClick: handleMapHexClick,
                 showCoords: false
@@ -1883,6 +2197,7 @@
             initTacticalMap();
             refreshCombatLog();
             fetchStatus();
+            updatePlayerVisibilityStatus();  // Show initial visibility status
         });
 
         setInterval(fetchStatus, 3000);
