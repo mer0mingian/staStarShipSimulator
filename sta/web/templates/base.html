@@ -4,148 +4,97 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}STA Starship Simulator{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/lcars.css') }}">
     <style>
-        :root {
-            --lcars-orange: #ff9900;
-            --lcars-blue: #9999ff;
-            --lcars-purple: #cc99cc;
-            --lcars-tan: #cc9966;
-            --lcars-red: #cc6666;
-            --lcars-green: #99cc99;
-            --lcars-bg: #000000;
-            --lcars-text: #ff9900;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: 'Helvetica Neue', Arial, sans-serif;
-            background-color: var(--lcars-bg);
-            color: var(--lcars-text);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        header {
-            background: var(--lcars-purple);
-            color: black;
-            padding: 10px 20px;
-            border-radius: 20px 20px 0 0;
-            margin-bottom: 20px;
-        }
-
-        header h1 {
-            font-weight: 400;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
+        /* Legacy compatibility styles - will be phased out */
         .panel {
-            background: #1a1a1a;
-            border: 2px solid var(--lcars-orange);
-            border-radius: 10px;
-            padding: 15px;
+            background: var(--lcars-panel-bg);
+            border: 2px solid var(--lcars-butterscotch);
+            border-radius: var(--frame-inner-radius);
+            padding: 20px;
             margin-bottom: 15px;
         }
 
         .panel h2 {
-            color: var(--lcars-blue);
+            color: var(--lcars-butterscotch);
             font-size: 1.2em;
             margin-bottom: 10px;
             text-transform: uppercase;
         }
 
         .btn {
-            display: inline-block;
-            padding: 10px 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 24px;
             background: var(--lcars-orange);
-            color: black;
+            color: var(--lcars-text-dark);
             text-decoration: none;
-            border: none;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: bold;
+            font-family: var(--font-primary);
+            font-size: var(--font-size-base);
+            font-weight: 700;
             text-transform: uppercase;
-            margin: 5px;
+            border: none;
+            border-radius: var(--button-radius);
+            cursor: pointer;
+            min-height: var(--button-height);
         }
 
         .btn:hover {
-            background: var(--lcars-blue);
+            filter: brightness(115%);
+            text-decoration: none;
+        }
+
+        .btn:active {
+            filter: brightness(85%);
         }
 
         .btn-small {
-            padding: 5px 15px;
-            font-size: 0.9em;
+            padding: 6px 16px;
+            font-size: var(--font-size-sm);
+            min-height: 32px;
+            border-radius: 16px;
         }
 
         .btn-danger {
-            background: var(--lcars-red);
+            background: var(--lcars-tomato);
         }
 
         .btn-success {
-            background: var(--lcars-green);
-        }
-
-        input, select {
-            background: #333;
-            border: 1px solid var(--lcars-orange);
-            color: var(--lcars-text);
-            padding: 8px 12px;
-            border-radius: 5px;
-            margin: 5px 0;
-        }
-
-        input:focus, select:focus {
-            outline: none;
-            border-color: var(--lcars-blue);
-        }
-
-        label {
-            display: block;
-            margin-bottom: 5px;
-            color: var(--lcars-tan);
+            background: var(--lcars-success);
         }
 
         .stat-row {
             display: flex;
             justify-content: space-between;
-            padding: 5px 0;
-            border-bottom: 1px solid #333;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--lcars-gray);
         }
 
         .stat-value {
-            color: var(--lcars-blue);
+            color: var(--lcars-ice);
             font-weight: bold;
         }
 
         .resource-pool {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 10px;
-            background: #222;
+            gap: 15px;
+            padding: 15px;
+            background: var(--lcars-panel-bg);
             border-radius: 10px;
-            margin: 5px 0;
+            margin: 10px 0;
         }
 
         .resource-pool .value {
-            font-size: 2em;
+            font-size: 2.5em;
             font-weight: bold;
-            min-width: 50px;
+            min-width: 60px;
             text-align: center;
         }
 
-        .momentum .value { color: var(--lcars-blue); }
-        .threat .value { color: var(--lcars-red); }
+        .momentum .value { color: var(--lcars-ice); }
+        .threat .value { color: var(--lcars-tomato); }
 
         .grid {
             display: grid;
@@ -155,82 +104,157 @@
 
         .action-list {
             list-style: none;
+            padding: 0;
+            margin: 0;
         }
 
         .action-list li {
-            padding: 8px;
-            margin: 5px 0;
-            background: #222;
-            border-radius: 5px;
+            padding: 12px 15px;
+            margin: 4px 0;
+            background: #1a1a1a;
+            border-radius: 8px;
             cursor: pointer;
+            transition: all 0.15s;
+            border-left: 4px solid transparent;
         }
 
         .action-list li:hover {
-            background: #333;
-            border-left: 3px solid var(--lcars-orange);
+            background: #252525;
+            border-left-color: var(--lcars-orange);
         }
 
         .action-list .action-type {
-            font-size: 0.8em;
-            color: var(--lcars-tan);
+            font-size: 0.85em;
+            color: var(--lcars-almond);
         }
 
         .shields-bar {
             height: 20px;
-            background: #333;
+            background: var(--lcars-gray);
             border-radius: 10px;
             overflow: hidden;
-            margin: 5px 0;
+            margin: 8px 0;
         }
 
         .shields-bar .fill {
             height: 100%;
-            background: var(--lcars-blue);
+            background: var(--lcars-ice);
             transition: width 0.3s;
+            border-radius: 10px;
         }
 
         .alert {
-            padding: 10px 15px;
-            border-radius: 5px;
+            padding: 15px 20px;
+            border-radius: 10px;
             margin-bottom: 15px;
+            font-weight: 700;
+            text-transform: uppercase;
         }
 
-        .alert-success { background: var(--lcars-green); color: black; }
-        .alert-danger { background: var(--lcars-red); color: black; }
-        .alert-info { background: var(--lcars-blue); color: black; }
+        .alert-success { background: var(--lcars-success); color: var(--lcars-text-dark); }
+        .alert-danger { background: var(--lcars-tomato); color: var(--lcars-text-dark); }
+        .alert-info { background: var(--lcars-ice); color: var(--lcars-text-dark); }
 
         .dice-result {
-            display: inline-block;
-            width: 40px;
-            height: 40px;
-            line-height: 40px;
-            text-align: center;
-            border-radius: 5px;
-            margin: 2px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            margin: 3px;
             font-weight: bold;
+            font-size: 1.1em;
         }
 
-        .dice-success { background: var(--lcars-green); color: black; }
-        .dice-crit { background: var(--lcars-blue); color: black; }
-        .dice-fail { background: #333; }
-        .dice-complication { background: var(--lcars-red); color: black; }
+        .dice-success { background: var(--lcars-success); color: var(--lcars-text-dark); }
+        .dice-crit { background: var(--lcars-ice); color: var(--lcars-text-dark); }
+        .dice-fail { background: var(--lcars-gray); color: var(--lcars-text); }
+        .dice-complication { background: var(--lcars-tomato); color: var(--lcars-text-dark); }
+
+        /* Status badges */
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        .status-done { background: var(--lcars-success); color: var(--lcars-text-dark); }
+        .status-rft { background: var(--lcars-orange); color: var(--lcars-text-dark); }
+        .status-not-impl { background: var(--lcars-gray); color: var(--lcars-text); }
+
+        /* Legacy color variable mappings */
+        :root {
+            --lcars-blue: var(--lcars-bluey);
+            --lcars-purple: var(--lcars-african-violet);
+            --lcars-tan: var(--lcars-almond);
+            --lcars-red: var(--lcars-tomato);
+            --lcars-green: var(--lcars-success);
+        }
     </style>
+    {% block extra_styles %}{% endblock %}
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>{% block header %}STA Starship Simulator{% endblock %}</h1>
-        </header>
+    <div class="lcars-app">
+        <div class="lcars-frame">
+            <!-- Left Sidebar -->
+            <aside class="lcars-sidebar">
+                <div class="lcars-elbow-top">
+                    <span class="elbow-text">LCARS 47988</span>
+                </div>
+                <nav class="lcars-sidebar-nav">
+                    <a href="{{ url_for('main.index') }}" class="lcars-sidebar-btn color-1">Home</a>
+                    <a href="{{ url_for('campaigns.player_home') }}" class="lcars-sidebar-btn color-2">Player</a>
+                    <a href="{{ url_for('campaigns.gm_home') }}" class="lcars-sidebar-btn color-3">Game Master</a>
+                    {% block sidebar_nav %}{% endblock %}
+                    <div class="lcars-spacer color-2"></div>
+                </nav>
+                <div class="lcars-elbow-bottom"></div>
+            </aside>
 
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="alert alert-info">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+            <!-- Main Content -->
+            <main class="lcars-main">
+                <!-- Header Bar -->
+                <header class="lcars-header">
+                    <div class="lcars-header-cap-left"></div>
+                    <div class="lcars-header-bar">
+                        <h1 class="lcars-title">{% block header %}STA Starship Simulator{% endblock %}</h1>
+                    </div>
+                    <div class="lcars-header-cap-right">
+                        <div class="data-cascade">
+                            <span>47</span>
+                            <span>21</span>
+                            <span>88</span>
+                            <span>03</span>
+                            <span>66</span>
+                        </div>
+                    </div>
+                </header>
 
-        {% block content %}{% endblock %}
+                <!-- Content Area -->
+                <div class="lcars-content-wrapper">
+                    {% with messages = get_flashed_messages() %}
+                        {% if messages %}
+                            {% for message in messages %}
+                                <div class="lcars-alert alert-info">{{ message }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    {% block content %}{% endblock %}
+                </div>
+
+                <!-- Footer Bar -->
+                <footer class="lcars-footer">
+                    <div class="lcars-footer-bar"></div>
+                    <div class="lcars-footer-cap"></div>
+                </footer>
+            </main>
+        </div>
     </div>
 
     {% block scripts %}{% endblock %}
