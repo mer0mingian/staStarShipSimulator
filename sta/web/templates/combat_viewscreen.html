@@ -714,6 +714,262 @@
         let tacticalMapData = {{ tactical_map | tojson if tactical_map else '{"radius": 3, "tiles": []}' | safe }};
         let shipPositions = {{ ship_positions | tojson if ship_positions else '[]' | safe }};
 
+        // ========== SOUND MANAGER ==========
+        const SoundManager = {
+            // Audio element pools for concurrent playback
+            pools: {},
+            poolSize: 3,
+
+            // Ambient audio element (separate for looping)
+            ambientAudio: null,
+            ambientEnabled: true,
+            audioInitialized: false,
+
+            // Sound file mappings
+            sounds: {
+                // Ambient
+                ambient: '/static/audio/sounds/ambient/tng_hum_clean_long.mp3',
+
+                // Federation weapons
+                phaser: '/static/audio/sounds/weapons/tng_weapons_clean.mp3',
+                torpedo_federation: '/static/audio/sounds/weapons/tng_torpedo_clean.mp3',
+
+                // Klingon weapons
+                disruptor: '/static/audio/sounds/weapons/klingon_disruptor_clean.mp3',
+                torpedo_klingon: '/static/audio/sounds/weapons/klingon_torpedo_clean.mp3',
+
+                // Borg weapons
+                borg_beam: '/static/audio/sounds/weapons/borg_beam_clean.mp3',
+
+                // Shields
+                shields_up: '/static/audio/sounds/shields/forcefield_on.mp3',
+                shields_down: '/static/audio/sounds/shields/forcefield_off.mp3',
+                shield_hit: '/static/audio/sounds/shields/force_field_hit.mp3',
+                shield_sizzle: '/static/audio/sounds/shields/shield_sizzle.mp3',
+
+                // Explosions
+                explosion_small: '/static/audio/sounds/explosions/smallexplosion1.mp3',
+                explosion_console: '/static/audio/sounds/explosions/console_explo_01.mp3',
+                explosion_large: '/static/audio/sounds/explosions/largeexplosion4.mp3',
+
+                // UI/Feedback
+                chime: '/static/audio/sounds/ui/tng_chime_clean.mp3',
+                swoosh: '/static/audio/sounds/ui/tng_swoosh_clean.mp3',
+                beep: '/static/audio/sounds/ui/computerbeep_1.mp3',
+
+                // Movement
+                impulse: '/static/audio/sounds/movement/tng_engine_1.mp3',
+            },
+
+            init() {
+                if (this.audioInitialized) return;
+
+                // Create audio pools for concurrent playback
+                Object.keys(this.sounds).forEach(key => {
+                    if (key === 'ambient') return; // Ambient handled separately
+                    this.pools[key] = [];
+                    for (let i = 0; i < this.poolSize; i++) {
+                        const audio = new Audio(this.sounds[key]);
+                        audio.preload = 'auto';
+                        this.pools[key].push(audio);
+                    }
+                });
+
+                // Create ambient audio element
+                this.ambientAudio = new Audio(this.sounds.ambient);
+                this.ambientAudio.loop = true;
+                this.ambientAudio.volume = 0.3;
+
+                this.audioInitialized = true;
+                console.log('SoundManager initialized');
+            },
+
+            play(soundKey, volume = 0.5) {
+                if (!this.audioInitialized || !this.pools[soundKey]) return;
+
+                // Find an available audio element from the pool
+                const pool = this.pools[soundKey];
+                for (let audio of pool) {
+                    if (audio.paused || audio.ended) {
+                        audio.volume = volume;
+                        audio.currentTime = 0;
+                        audio.play().catch(e => console.log('Audio play failed:', e));
+                        return;
+                    }
+                }
+
+                // All pool elements busy, play on first one anyway
+                const audio = pool[0];
+                audio.volume = volume;
+                audio.currentTime = 0;
+                audio.play().catch(e => console.log('Audio play failed:', e));
+            },
+
+            startAmbient() {
+                if (!this.audioInitialized || !this.ambientAudio) return;
+                if (this.ambientEnabled) {
+                    this.ambientAudio.play().catch(e => console.log('Ambient play failed:', e));
+                }
+            },
+
+            stopAmbient() {
+                if (this.ambientAudio) {
+                    this.ambientAudio.pause();
+                    this.ambientAudio.currentTime = 0;
+                }
+            },
+
+            setAmbientEnabled(enabled) {
+                this.ambientEnabled = enabled;
+                if (enabled) {
+                    this.startAmbient();
+                } else {
+                    this.stopAmbient();
+                }
+            }
+        };
+
+        // ========== COMBAT LOG POLLING FOR SOUNDS ==========
+        let lastCombatLogId = null;
+        let previousPlayerShields = null;
+
+        // Map combat log entries to sounds
+        function mapActionToSound(entry) {
+            const { action_name, actor_type, ship_name, damage_dealt, description } = entry;
+
+            // Detect faction from ship name prefix
+            const isKlingon = ship_name?.startsWith('IKS');
+            const isRomulan = ship_name?.startsWith('IRW');
+            const isBorg = ship_name?.toLowerCase().includes('borg');
+
+            // Fire actions - weapon sounds
+            if (action_name.startsWith('Fire ')) {
+                const weaponName = action_name.replace('Fire ', '').toLowerCase();
+
+                // Check for breaches in description and queue explosion
+                if (description?.includes('breach')) {
+                    setTimeout(() => {
+                        const breachMatch = description.match(/(\d+) breach/);
+                        const breachCount = breachMatch ? parseInt(breachMatch[1]) : 1;
+                        if (breachCount >= 2) {
+                            SoundManager.play('explosion_large', 0.7);
+                        } else {
+                            SoundManager.play('explosion_small', 0.6);
+                        }
+                    }, 500);
+                }
+
+                // Determine weapon sound based on weapon type and faction
+                if (weaponName.includes('torpedo')) {
+                    if (isKlingon) return { key: 'torpedo_klingon', volume: 0.6 };
+                    return { key: 'torpedo_federation', volume: 0.6 };
+                }
+
+                if (weaponName.includes('phaser') || weaponName.includes('array')) {
+                    return { key: 'phaser', volume: 0.6 };
+                }
+
+                if (weaponName.includes('disruptor')) {
+                    return { key: 'disruptor', volume: 0.6 };
+                }
+
+                if (isBorg) {
+                    return { key: 'borg_beam', volume: 0.6 };
+                }
+
+                // Default weapon sound
+                return { key: 'phaser', volume: 0.6 };
+            }
+
+            // Ram action
+            if (action_name === 'Ram') {
+                return { key: 'explosion_large', volume: 0.8 };
+            }
+
+            // Shield actions
+            if (action_name === 'Raise Shields') {
+                return { key: 'shields_up', volume: 0.5 };
+            }
+            if (action_name === 'Lower Shields') {
+                return { key: 'shields_down', volume: 0.5 };
+            }
+            if (action_name === 'Modulate Shields' || action_name === 'Regenerate Shields') {
+                return { key: 'shield_sizzle', volume: 0.4 };
+            }
+
+            // Movement actions
+            if (action_name === 'Maneuver' || action_name === 'Impulse') {
+                return { key: 'impulse', volume: 0.4 };
+            }
+            if (action_name === 'Attack Pattern' || action_name === 'Evasive Action') {
+                return { key: 'swoosh', volume: 0.5 };
+            }
+
+            // Tactical prep actions
+            if (action_name === 'Calibrate Weapons' || action_name === 'Targeting Solution') {
+                return { key: 'beep', volume: 0.3 };
+            }
+
+            // Sensor actions
+            if (action_name.includes('Scan') || action_name.includes('Sensor') || action_name === 'Calibrate Sensors') {
+                return { key: 'swoosh', volume: 0.4 };
+            }
+
+            // Engineering actions
+            if (action_name === 'Damage Control' || action_name === 'Regain Power' || action_name === 'Reroute Power') {
+                return { key: 'chime', volume: 0.4 };
+            }
+
+            // Command actions
+            if (action_name === 'Rally') {
+                return { key: 'chime', volume: 0.5 };
+            }
+
+            // Arm/Disarm weapons
+            if (action_name === 'Arm Weapons' || action_name === 'Disarm Weapons') {
+                return { key: 'beep', volume: 0.3 };
+            }
+
+            // Default: no sound for unrecognized actions
+            return null;
+        }
+
+        // Poll combat log for new entries
+        async function pollCombatLog() {
+            if (!SoundManager.audioInitialized) return;
+
+            try {
+                const url = lastCombatLogId
+                    ? `/api/encounter/${encounterId}/combat-log?since_id=${lastCombatLogId}&limit=10`
+                    : `/api/encounter/${encounterId}/combat-log?limit=1`;
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.latest_id) {
+                    // On first poll, just record the latest ID without playing sounds
+                    if (lastCombatLogId === null) {
+                        lastCombatLogId = data.latest_id;
+                        return;
+                    }
+
+                    lastCombatLogId = data.latest_id;
+                }
+
+                // Process new entries (already in order from API)
+                if (data.log && data.log.length > 0) {
+                    for (const entry of data.log) {
+                        const sound = mapActionToSound(entry);
+                        if (sound) {
+                            SoundManager.play(sound.key, sound.volume);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to poll combat log:', error);
+            }
+        }
+
         // LCARS color palette for data cascade
         const lcarsColors = [
             'var(--lcars-ice)',
@@ -796,7 +1052,7 @@
         // Initialize the viewscreen
         function initViewscreen() {
             renderTacticalMap();
-            startPolling();
+            // Note: startPolling() is called after user clicks the audio overlay
 
             // Initialize LCARS data cascades
             fillDataCascade('left-data-cascade', 12);
@@ -898,6 +1154,11 @@
                     document.getElementById('enemy-turns-total').textContent = enemyTurnsTotal;
                 }
 
+                // Check viewscreen audio setting from GM
+                if (data.viewscreen_audio_enabled !== undefined) {
+                    SoundManager.setAmbientEnabled(data.viewscreen_audio_enabled);
+                }
+
             } catch (error) {
                 console.error('Failed to fetch status:', error);
             }
@@ -938,7 +1199,20 @@
 
                 // Update player ship shields
                 if (data.player_ship) {
-                    const shieldsPercent = (data.player_ship.shields / data.player_ship.shields_max * 100).toFixed(0);
+                    const currentShields = data.player_ship.shields;
+
+                    // Detect shield hit (shields decreased)
+                    if (previousPlayerShields !== null && currentShields < previousPlayerShields) {
+                        SoundManager.play('shield_hit', 0.5);
+
+                        // If shields dropped to 0 while raised, play extra sound
+                        if (currentShields === 0 && data.player_ship.shields_raised) {
+                            setTimeout(() => SoundManager.play('shield_sizzle', 0.6), 300);
+                        }
+                    }
+                    previousPlayerShields = currentShields;
+
+                    const shieldsPercent = (currentShields / data.player_ship.shields_max * 100).toFixed(0);
                     const shieldsFill = document.getElementById('player-shields-fill');
                     const shieldsValue = document.getElementById('player-shields-value');
                     const shieldsBadge = document.getElementById('shields-status-badge');
@@ -948,7 +1222,7 @@
                         shieldsFill.style.background = data.player_ship.shields_raised ? 'var(--lcars-success)' : 'var(--lcars-tomato)';
                     }
                     if (shieldsValue) {
-                        shieldsValue.textContent = `${data.player_ship.shields}/${data.player_ship.shields_max}`;
+                        shieldsValue.textContent = `${currentShields}/${data.player_ship.shields_max}`;
                     }
                     if (shieldsBadge) {
                         shieldsBadge.textContent = data.player_ship.shields_raised ? 'ONLINE' : 'OFFLINE';
@@ -998,9 +1272,11 @@
             setInterval(fetchStatus, 2000);
             setInterval(fetchMapData, 5000);
             setInterval(fetchShipStatus, 3000);
+            setInterval(pollCombatLog, 2000);  // Poll combat log for sound triggers
 
             fetchStatus();
             fetchShipStatus();
+            pollCombatLog();  // Initial poll to set lastCombatLogId
         }
 
         // Handle window resize
@@ -1008,8 +1284,54 @@
             renderTacticalMap();
         });
 
+        // Create audio start overlay (browser autoplay policy)
+        function createAudioOverlay() {
+            const overlay = document.createElement('div');
+            overlay.id = 'audio-start-overlay';
+            overlay.innerHTML = `
+                <div style="text-align: center;">
+                    <h2 style="color: var(--lcars-butterscotch); font-size: 2.5rem; margin-bottom: 20px;">VIEWSCREEN READY</h2>
+                    <p style="color: var(--lcars-almond); font-size: 1.2rem; margin-bottom: 30px;">Click to enable audio</p>
+                    <button style="padding: 20px 50px; font-size: 1.8rem;
+                                   background: var(--lcars-bluey); border: none;
+                                   border-radius: 25px; cursor: pointer;
+                                   color: var(--lcars-text-dark); font-weight: bold;
+                                   text-transform: uppercase; letter-spacing: 2px;
+                                   transition: background 0.2s;">
+                        ENGAGE
+                    </button>
+                </div>
+            `;
+            overlay.style.cssText = `
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0, 0, 0, 0.95); display: flex;
+                align-items: center; justify-content: center; z-index: 9999;
+            `;
+
+            // Hover effect for button
+            const button = overlay.querySelector('button');
+            button.addEventListener('mouseover', () => {
+                button.style.background = 'var(--lcars-ice)';
+            });
+            button.addEventListener('mouseout', () => {
+                button.style.background = 'var(--lcars-bluey)';
+            });
+
+            overlay.addEventListener('click', () => {
+                overlay.remove();
+                SoundManager.init();
+                SoundManager.startAmbient();
+                startPolling();
+            });
+
+            document.body.appendChild(overlay);
+        }
+
         // Initialize on page load
-        document.addEventListener('DOMContentLoaded', initViewscreen);
+        document.addEventListener('DOMContentLoaded', () => {
+            initViewscreen();
+            createAudioOverlay();
+        });
     </script>
 </body>
 </html>

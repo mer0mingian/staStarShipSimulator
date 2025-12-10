@@ -351,6 +351,107 @@ def update_threat(encounter_id: str):
         session.close()
 
 
+@api_bp.route("/encounter/<encounter_id>/viewscreen-audio", methods=["POST"])
+def toggle_viewscreen_audio(encounter_id: str):
+    """Toggle viewscreen audio on/off (GM control)."""
+    data = request.json
+    enabled = data.get("enabled", True)
+
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        encounter.viewscreen_audio_enabled = enabled
+        session.commit()
+
+        return jsonify({"viewscreen_audio_enabled": encounter.viewscreen_audio_enabled})
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/spend-momentum-shields", methods=["POST"])
+def spend_momentum_for_shields(encounter_id: str):
+    """
+    Spend momentum to restore additional shields after Regenerate Shields.
+
+    Per STA rules, after a successful Regenerate Shields action, the player can
+    spend Momentum to restore +2 shields per Momentum spent (Repeatable).
+
+    Request body:
+        {
+            "momentum_to_spend": int,  # How many momentum to spend
+            "ship_id": int             # The player ship to restore shields to
+        }
+
+    Returns:
+        {
+            "success": bool,
+            "shields_restored": int,
+            "shields_after": int,
+            "shields_max": int,
+            "momentum_after": int
+        }
+    """
+    data = request.json
+    momentum_to_spend = data.get("momentum_to_spend", 0)
+    ship_id = data.get("ship_id")
+
+    if momentum_to_spend <= 0:
+        return jsonify({"error": "Must spend at least 1 Momentum"}), 400
+
+    if not ship_id:
+        return jsonify({"error": "ship_id required"}), 400
+
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        if encounter.momentum < momentum_to_spend:
+            return jsonify({
+                "error": f"Not enough Momentum! Have {encounter.momentum}, need {momentum_to_spend}"
+            }), 400
+
+        ship_record = session.query(StarshipRecord).filter_by(id=ship_id).first()
+        if not ship_record:
+            return jsonify({"error": "Ship not found"}), 404
+
+        # Calculate shield restoration: +2 per Momentum spent
+        shields_to_restore = momentum_to_spend * 2
+        shields_before = ship_record.shields
+        shields_max = ship_record.shields_max
+
+        # Apply restoration (capped at max)
+        ship_record.shields = min(shields_before + shields_to_restore, shields_max)
+        actual_restored = ship_record.shields - shields_before
+
+        # Deduct momentum
+        encounter.momentum -= momentum_to_spend
+
+        session.commit()
+
+        return jsonify({
+            "success": True,
+            "momentum_spent": momentum_to_spend,
+            "shields_restored": actual_restored,
+            "shields_after": ship_record.shields,
+            "shields_max": shields_max,
+            "momentum_after": encounter.momentum,
+            "message": f"Spent {momentum_to_spend} Momentum to restore {actual_restored} additional shields."
+        })
+    finally:
+        session.close()
+
+
 @api_bp.route("/ship/<int:ship_id>/damage", methods=["POST"])
 def apply_damage(ship_id: int):
     """Apply damage to a ship."""
@@ -814,6 +915,8 @@ def get_encounter_status(encounter_id: str):
             "current_player_id": multiplayer_info["current_player_id"],
             "current_player_name": multiplayer_info["current_player_name"],
             "players_info": multiplayer_info["players_info"],
+            # Viewscreen audio setting
+            "viewscreen_audio_enabled": getattr(encounter, 'viewscreen_audio_enabled', True),
         })
     finally:
         session.close()
@@ -1879,12 +1982,14 @@ def execute_action(encounter_id: str):
                 if data.get("roll_succeeded"):
                     # Apply success effects without re-rolling
                     momentum_generated = data.get("roll_momentum", 0)
+                    discipline_value = data.get("discipline", 0)
                     result = apply_task_roll_success(
                         action_name,
                         encounter,
                         player_ship,
                         momentum_generated,
-                        config
+                        config,
+                        discipline_value=discipline_value
                     )
 
                     # Special handling for Damage Control - actually patch the breach
@@ -2174,12 +2279,14 @@ def execute_action(encounter_id: str):
                     if "roll_succeeded" in data:
                         if data.get("roll_succeeded"):
                             momentum_generated = data.get("roll_momentum", 0)
+                            discipline_value = data.get("discipline", 0)
                             result = apply_task_roll_success(
                                 target_action,
                                 encounter,
                                 player_ship,
                                 momentum_generated,
-                                target_config
+                                target_config,
+                                discipline_value=discipline_value
                             )
                             result.message = f"Override: {result.message} (+1 Difficulty)"
                         else:

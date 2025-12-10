@@ -16,6 +16,7 @@ from sta.mechanics.action_config import (
     EffectConfig,
     is_action_available,
     get_breach_difficulty_modifier,
+    get_shields_zero_difficulty_modifier,
 )
 
 
@@ -177,10 +178,11 @@ def execute_task_roll_action(
     if config.get("requires_reserve_power", False) and not ship.has_reserve_power:
         return ActionExecutionResult(False, f"{action_name} requires Reserve Power!")
 
-    # Calculate difficulty with breach modifier
+    # Calculate difficulty with modifiers
     base_difficulty = roll_config.get("difficulty", 1)
     breach_modifier = get_breach_difficulty_modifier(action_name, ship)
-    difficulty = base_difficulty + breach_modifier
+    shields_modifier = get_shields_zero_difficulty_modifier(action_name, ship)
+    difficulty = base_difficulty + breach_modifier + shields_modifier
     focus_eligible = roll_config.get("focus_eligible", True) and focus
 
     task_result = task_roll(
@@ -191,19 +193,22 @@ def execute_task_roll_action(
         bonus_dice=bonus_dice
     )
 
-    # Build result message with breach info if applicable
+    # Build result message with modifier info if applicable
+    modifier_parts = []
     if breach_modifier > 0:
-        breach_info = f" (Difficulty {base_difficulty}+{breach_modifier} from breaches)"
-    else:
-        breach_info = ""
+        modifier_parts.append(f"+{breach_modifier} from breaches")
+    if shields_modifier > 0:
+        modifier_parts.append(f"+{shields_modifier} shields at 0")
+    modifier_info = f" (Difficulty {base_difficulty}{'+' + '+'.join(modifier_parts) if modifier_parts else ''})" if modifier_parts else ""
 
     result = ActionExecutionResult(
         task_result.succeeded,
-        f"{action_name} {'succeeded' if task_result.succeeded else 'failed'}!{breach_info}"
+        f"{action_name} {'succeeded' if task_result.succeeded else 'failed'}!{modifier_info}"
     )
     result.task_result = task_result
     result.data["base_difficulty"] = base_difficulty
     result.data["breach_modifier"] = breach_modifier
+    result.data["shields_modifier"] = shields_modifier
     result.data["final_difficulty"] = difficulty
 
     # Process success effects
@@ -244,6 +249,21 @@ def execute_task_roll_action(
             result.message += " Reserve Power restored!"
             result.data["reserve_power_restored"] = True
 
+        # Restore shields (Regenerate Shields action)
+        if on_success.get("restore_shields", False):
+            # Base restore = character's Engineering discipline
+            base_restore = discipline_value
+            shields_before = ship.shields
+            ship.shields = min(ship.shields + base_restore, ship.shields_max)
+            shields_restored = ship.shields - shields_before
+            result.message += f" Shields restored by {shields_restored} (now {ship.shields}/{ship.shields_max})."
+            result.data["shields_restored"] = shields_restored
+            result.data["shields_after"] = ship.shields
+            result.data["shields_max"] = ship.shields_max
+            # Flag for momentum spend option (+2 per momentum, repeatable)
+            result.data["can_spend_momentum_for_shields"] = True
+            result.data["momentum_shield_bonus"] = 2
+
         # Consume Reserve Power if action required it (and didn't restore it)
         if config.get("requires_reserve_power", False) and not on_success.get("restore_power", False):
             ship.has_reserve_power = False
@@ -260,7 +280,8 @@ def apply_task_roll_success(
     encounter: Encounter,
     ship: Starship,
     momentum_generated: int = 0,
-    config: Optional[ActionConfig] = None
+    config: Optional[ActionConfig] = None,
+    discipline_value: int = 0
 ) -> ActionExecutionResult:
     """
     Apply the success effects of a task roll action (when roll was already done).
@@ -271,6 +292,7 @@ def apply_task_roll_success(
         ship: The ship
         momentum_generated: Momentum from the successful roll
         config: Action configuration (will be looked up if not provided)
+        discipline_value: The discipline value used for the roll (needed for Regenerate Shields)
 
     Returns:
         ActionExecutionResult with applied effects
@@ -325,6 +347,21 @@ def apply_task_roll_success(
         result.message += " Reserve Power restored!"
         result.data["reserve_power_restored"] = True
 
+    # Restore shields (Regenerate Shields action)
+    if on_success.get("restore_shields", False):
+        # Base restore = character's Engineering discipline
+        base_restore = discipline_value if discipline_value > 0 else 3  # Default to 3 if not provided
+        shields_before = ship.shields
+        ship.shields = min(ship.shields + base_restore, ship.shields_max)
+        shields_restored = ship.shields - shields_before
+        result.message += f" Shields restored by {shields_restored} (now {ship.shields}/{ship.shields_max})."
+        result.data["shields_restored"] = shields_restored
+        result.data["shields_after"] = ship.shields
+        result.data["shields_max"] = ship.shields_max
+        # Flag for momentum spend option (+2 per momentum, repeatable)
+        result.data["can_spend_momentum_for_shields"] = True
+        result.data["momentum_shield_bonus"] = 2
+
     # Consume Reserve Power if action required it (and didn't restore it)
     if config.get("requires_reserve_power", False) and not on_success.get("restore_power", False):
         ship.has_reserve_power = False
@@ -359,6 +396,10 @@ def check_action_requirements(
     # Check reserve power requirement
     if config.get("requires_reserve_power", False) and not ship.has_reserve_power:
         return False, f"{action_name} requires Reserve Power!"
+
+    # Check shields raised requirement (for Regenerate Shields)
+    if config.get("requires_shields_raised", False) and not ship.shields_raised:
+        return False, f"{action_name} requires shields to be ONLINE! Raise shields first."
 
     # Check flag requirement
     required_flag = config.get("requires_flag")

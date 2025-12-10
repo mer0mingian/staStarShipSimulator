@@ -60,6 +60,7 @@
             background: var(--lcars-butterscotch);
             color: var(--lcars-text-dark);
             text-decoration: none;
+            font-family: var(--font-primary);
             font-size: 0.85rem;
             font-weight: 700;
             text-transform: uppercase;
@@ -887,6 +888,15 @@
                         </div>
                     </div>
 
+                    <!-- Viewscreen Audio Toggle -->
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px; padding: 10px; background: #1a1a1a; border-radius: 8px;">
+                        <span style="color: var(--lcars-almond); font-size: 0.9rem;">Viewscreen Audio</span>
+                        <button id="viewscreen-audio-btn" class="btn btn-small" onclick="toggleViewscreenAudio()" style="background: {% if encounter.viewscreen_audio_enabled is not defined or encounter.viewscreen_audio_enabled %}var(--lcars-success){% else %}var(--lcars-tomato){% endif %}; min-width: 60px;">
+                            {% if encounter.viewscreen_audio_enabled is not defined or encounter.viewscreen_audio_enabled %}ON{% else %}OFF{% endif %}
+                        </button>
+                        <span style="color: #666; font-size: 0.8rem;">(Bridge ambient & sound effects)</span>
+                    </div>
+
                     <!-- End Turn Button -->
                     <div class="end-turn-section">
                         <button class="btn btn-violet" onclick="nextTurn()" id="end-turn-btn" style="width: 100%; max-width: 400px;">
@@ -1457,6 +1467,35 @@
             });
             const data = await response.json();
             document.getElementById('threat').textContent = data.threat;
+        }
+
+        // Viewscreen Audio Toggle
+        let viewscreenAudioEnabled = {{ 'true' if encounter.viewscreen_audio_enabled is not defined or encounter.viewscreen_audio_enabled else 'false' }};
+
+        async function toggleViewscreenAudio() {
+            viewscreenAudioEnabled = !viewscreenAudioEnabled;
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/viewscreen-audio`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({enabled: viewscreenAudioEnabled})
+                });
+                const data = await response.json();
+                viewscreenAudioEnabled = data.viewscreen_audio_enabled;
+                updateViewscreenAudioButton();
+            } catch (err) {
+                // Revert on error
+                viewscreenAudioEnabled = !viewscreenAudioEnabled;
+                console.error('Failed to toggle viewscreen audio:', err);
+            }
+        }
+
+        function updateViewscreenAudioButton() {
+            const btn = document.getElementById('viewscreen-audio-btn');
+            if (btn) {
+                btn.textContent = viewscreenAudioEnabled ? 'ON' : 'OFF';
+                btn.style.background = viewscreenAudioEnabled ? 'var(--lcars-success)' : 'var(--lcars-tomato)';
+            }
         }
 
         // Reserve Power
