@@ -231,12 +231,6 @@
 </div>
 
 <!-- Actions Panel -->
-<div style="margin-bottom: 10px; padding: 8px; background: #1a1a1a; border-radius: 5px; font-size: 0.85em;">
-    <strong>Status Legend:</strong>
-    <span class="status-badge status-done">DONE</span> Implemented & Tested
-    <span class="status-badge status-rft">RFT</span> Ready For Testing
-    <span class="status-badge status-not-impl">TODO</span> Not Yet Implemented
-</div>
 <div class="grid">
     <div class="panel">
         <h2>Minor Actions</h2>
@@ -248,26 +242,17 @@
             {% if action.name == 'Raise/Lower Shields' %}
             <li id="shields-action-btn" onclick="toggleShields()" class="">
                 <strong>{{ 'Lower Shields' if player_ship.shields_raised else 'Raise Shields' }}</strong>
-                <span class="status-badge status-done">DONE</span>
-                <div class="action-type">{{ action.description[:80] }}...</div>
+                <div class="action-type">{{ action.description }}</div>
             </li>
             {% elif action.name == 'Arm/Disarm Weapons' %}
             <li id="weapons-action-btn" onclick="toggleWeapons()" class="">
                 <strong>{{ 'Disarm Weapons' if player_ship.weapons_armed else 'Arm Weapons' }}</strong>
-                <span class="status-badge status-done">DONE</span>
-                <div class="action-type">{{ action.description[:80] }}...</div>
+                <div class="action-type">{{ action.description }}</div>
             </li>
             {% else %}
             <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})" class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                 <strong>{{ action.name }}</strong>
-                {% if action.status == 'DONE' %}
-                <span class="status-badge status-done">DONE</span>
-                {% elif action.status == 'RFT' %}
-                <span class="status-badge status-rft">RFT</span>
-                {% else %}
-                <span class="status-badge status-not-impl">TODO</span>
-                {% endif %}
-                <div class="action-type">{{ action.description[:80] }}...</div>
+                <div class="action-type">{{ action.description }}</div>
             </li>
             {% endif %}
             {% endfor %}
@@ -279,14 +264,7 @@
             {% for action in actions.standard_minor %}
             <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})" class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                 <strong>{{ action.name }}</strong>
-                {% if action.status == 'DONE' %}
-                <span class="status-badge status-done">DONE</span>
-                {% elif action.status == 'RFT' %}
-                <span class="status-badge status-rft">RFT</span>
-                {% else %}
-                <span class="status-badge status-not-impl">TODO</span>
-                {% endif %}
-                <div class="action-type">{{ action.description[:80] }}...</div>
+                <div class="action-type">{{ action.description }}</div>
             </li>
             {% endfor %}
         </ul>
@@ -301,17 +279,10 @@
             {% for action in actions.position_major %}
             <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})" class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                 <strong>{{ action.name }}</strong>
-                {% if action.status == 'DONE' %}
-                <span class="status-badge status-done">DONE</span>
-                {% elif action.status == 'RFT' %}
-                <span class="status-badge status-rft">RFT</span>
-                {% else %}
-                <span class="status-badge status-not-impl">TODO</span>
-                {% endif %}
                 {% if action.difficulty > 0 %}
                 <span style="color: var(--lcars-tan);">(Diff {{ action.difficulty }})</span>
                 {% endif %}
-                <div class="action-type">{{ action.description[:80] }}...</div>
+                <div class="action-type">{{ action.description }}</div>
             </li>
             {% endfor %}
         </ul>
@@ -322,17 +293,10 @@
             {% for action in actions.standard_major %}
             <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})" class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                 <strong>{{ action.name }}</strong>
-                {% if action.status == 'DONE' %}
-                <span class="status-badge status-done">DONE</span>
-                {% elif action.status == 'RFT' %}
-                <span class="status-badge status-rft">RFT</span>
-                {% else %}
-                <span class="status-badge status-not-impl">TODO</span>
-                {% endif %}
                 {% if action.difficulty > 0 %}
                 <span style="color: var(--lcars-tan);">(Diff {{ action.difficulty }})</span>
                 {% endif %}
-                <div class="action-type">{{ action.description[:80] }}...</div>
+                <div class="action-type">{{ action.description }}</div>
             </li>
             {% endfor %}
         </ul>
@@ -526,14 +490,6 @@
         font-weight: bold;
         margin-left: 8px;
         vertical-align: middle;
-    }
-    .status-done {
-        background: var(--lcars-green);
-        color: #000;
-    }
-    .status-rft {
-        background: var(--lcars-orange);
-        color: #000;
     }
     .status-not-impl {
         background: #666;

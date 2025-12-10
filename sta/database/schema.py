@@ -288,6 +288,9 @@ class EncounterRecord(Base):
     # Structure: {"player": {"q": int, "r": int}, "enemy_0": {"q": int, "r": int}, ...}
     ship_positions_json: Mapped[str] = mapped_column(Text, default="{}")
 
+    # Viewscreen audio settings (GM-controlled)
+    viewscreen_audio_enabled: Mapped[bool] = mapped_column(default=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 

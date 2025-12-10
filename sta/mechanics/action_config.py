@@ -276,16 +276,18 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         "type": "task_roll",
         "requires_reserve_power": True,
         "requires_system": "structure",
+        "requires_shields_raised": True,  # Shields must be online to regenerate
         "roll": {
             "attribute": "control",
             "discipline": "engineering",
-            "difficulty": 2,
+            "difficulty": 2,  # Base difficulty; +1 if shields at 0
             "focus_eligible": True,
             "ship_assist_system": "structure",
             "ship_assist_department": "engineering",
         },
         "on_success": {
-            # Custom: restore shields
+            "restore_shields": True,  # Restore shields = Engineering discipline
+            # Momentum spend: +2 shields per Momentum (Repeatable) - handled in UI
         }
     },
 
@@ -522,6 +524,24 @@ def get_breach_difficulty_modifier(action_name: str, ship) -> int:
         return ship.get_breach_potency(system_type)
     except ValueError:
         return 0
+
+
+def get_shields_zero_difficulty_modifier(action_name: str, ship) -> int:
+    """
+    Get the difficulty modifier when shields are at 0.
+
+    Per the rules, Regenerate Shields is Difficulty 3 (not 2) when shields are at 0.
+
+    Args:
+        action_name: Name of the action
+        ship: Starship model with shield data
+
+    Returns:
+        The difficulty modifier (0 or 1)
+    """
+    if action_name == "Regenerate Shields" and ship.shields == 0:
+        return 1  # +1 difficulty when shields at 0
+    return 0
 
 
 def get_all_actions_availability(ship) -> dict[str, dict]:

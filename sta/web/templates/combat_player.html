@@ -18,96 +18,97 @@
 </div>
 {% endif %}
 
-<!-- Turn Indicator Banner -->
-<div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'player' %}your-turn{% else %}enemy-turn{% endif %}">
-    <div id="turn-text" class="turn-text">
-        {% if encounter.current_turn != 'player' %}
-        ENEMY TURN - Waiting for Game Master...
-        {% elif is_multiplayer %}
-            {% if encounter.current_player_id == my_player_id %}
-            YOUR TURN - Take one action
-            {% elif encounter.current_player_id %}
-            {{ current_player_name }} is acting...
-            {% else %}
-            PLAYER TURN - Claim your turn to act
-            {% endif %}
-        {% else %}
-        YOUR TURN - Take one action
-        {% endif %}
-    </div>
-
-    {% if is_multiplayer %}
-    <!-- Multi-player turn claiming UI -->
-    <div id="claim-turn-section" style="margin-top: 10px; {% if encounter.current_turn != 'player' or encounter.current_player_id %}display: none;{% endif %}">
-        <button id="claim-turn-btn" class="btn" onclick="claimTurn()" style="background: var(--lcars-green); font-size: 1.1em; padding: 10px 30px;">
-            CLAIM TURN
-        </button>
-    </div>
-
-    <!-- Release turn button (only shown when this player has claimed) -->
-    <div id="release-turn-section" style="margin-top: 10px; {% if encounter.current_player_id != my_player_id %}display: none;{% endif %}">
-        <button class="btn btn-small" onclick="releaseTurn()" style="background: #555;">
-            Release Turn
-        </button>
-    </div>
-
-    <!-- "Already acted" indicator -->
-    <div id="already-acted-section" style="margin-top: 10px; display: none;">
-        <span style="color: var(--lcars-tan);">You've acted this round. Waiting for others...</span>
-    </div>
-    {% endif %}
-
-    <div id="turn-counter" style="margin-top: 5px; font-size: 0.9em; display: flex; justify-content: center; gap: 30px;">
-        <span style="color: var(--lcars-green);">
-            {% if is_multiplayer %}
-            Players: <span id="player-turns-used">0</span> / <span id="player-turns-total">{{ campaign_players | length }}</span>
-            {% else %}
-            Your Turns: <span id="player-turns-used">0</span> / <span id="player-turns-total">0</span>
-            {% endif %}
-        </span>
-        <span style="color: var(--lcars-red);">
-            Enemy: <span id="enemy-turns-used">0</span> / <span id="enemy-turns-total">0</span>
-        </span>
-    </div>
-
-    {% if is_multiplayer %}
-    <!-- Player list showing who has acted -->
-    <div id="players-status" style="margin-top: 10px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
-        {% for player in campaign_players %}
-        <span class="player-status-badge" data-player-id="{{ player.id }}"
-              style="padding: 3px 8px; border-radius: 3px; font-size: 0.85em;
-                     background: {% if player.has_acted %}var(--lcars-green){% elif player.is_current %}var(--lcars-purple){% else %}#444{% endif %};
-                     color: {% if player.has_acted or player.is_current %}#000{% else %}#ccc{% endif %};">
-            {{ player.name }}{% if player.is_current %} (acting){% elif player.has_acted %} ✓{% endif %}
-        </span>
-        {% endfor %}
-    </div>
-    {% endif %}
-</div>
-
-<div class="grid">
-    <!-- Resource Pools (Read-only for player) -->
-    <div class="panel">
-        <h2>Resources</h2>
-        <div class="resource-pool momentum">
-            <span>Momentum</span>
-            <span class="value" id="momentum">{{ encounter.momentum }}</span>
-            <span style="color: #666;">/ 6</span>
+<!-- Compact Turn & Resources Bar -->
+<div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: stretch; flex-wrap: wrap;">
+    <!-- Resources (compact horizontal) -->
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="resource-pool momentum" style="margin: 0; padding: 6px 12px; display: flex; align-items: center; gap: 5px;">
+            <span style="font-size: 0.8em;">Momentum</span>
+            <span class="value" id="momentum" style="font-size: 1.3em;">{{ encounter.momentum }}</span>
+            <span style="color: #666; font-size: 0.8em;">/6</span>
         </div>
-        <div class="resource-pool threat">
-            <span>Threat</span>
-            <span class="value" id="threat">{{ encounter.threat }}</span>
+        <div class="resource-pool threat" style="margin: 0; padding: 6px 12px; display: flex; align-items: center; gap: 5px;">
+            <span style="font-size: 0.8em;">Threat</span>
+            <span class="value" id="threat" style="font-size: 1.3em;">{{ encounter.threat }}</span>
         </div>
-        <div class="resource-pool" style="margin-top: 10px; padding: 8px; background: {{ '#1a3a1a' if player_ship.has_reserve_power else '#3a1a1a' }}; border: 2px solid {{ 'var(--lcars-green)' if player_ship.has_reserve_power else 'var(--lcars-red)' }}; border-radius: 5px;">
-            <span style="color: {{ 'var(--lcars-green)' if player_ship.has_reserve_power else 'var(--lcars-red)' }};">Reserve Power</span>
-            <span id="reserve-power-status" class="value" style="color: {{ 'var(--lcars-green)' if player_ship.has_reserve_power else 'var(--lcars-red)' }};">
-                {{ '[AVAILABLE]' if player_ship.has_reserve_power else '[DEPLETED]' }}
+        <div id="reserve-power-box" style="padding: 6px 12px; background: {{ '#1a3a1a' if player_ship.has_reserve_power else '#3a1a1a' }}; border: 2px solid {{ 'var(--lcars-green)' if player_ship.has_reserve_power else 'var(--lcars-red)' }}; border-radius: 5px; display: flex; align-items: center; gap: 5px;">
+            <span style="color: {{ 'var(--lcars-green)' if player_ship.has_reserve_power else 'var(--lcars-red)' }}; font-size: 0.8em;">Reserve</span>
+            <span id="reserve-power-status" style="color: {{ 'var(--lcars-green)' if player_ship.has_reserve_power else 'var(--lcars-red)' }}; font-weight: bold;">
+                {{ '✓' if player_ship.has_reserve_power else '✗' }}
             </span>
         </div>
-        <div id="end-turn-section" style="margin-top: 15px; {% if encounter.current_turn != 'player' %}display: none;{% endif %}">
-            <button class="btn" onclick="nextTurn()">End Turn</button>
+    </div>
+
+    <!-- Turn Indicator (compact) -->
+    <div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'player' %}your-turn{% else %}enemy-turn{% endif %}" style="flex: 1; margin: 0; padding: 8px 15px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+            <div id="turn-text" class="turn-text" style="font-size: 1.1em; margin: 0;">
+                {% if encounter.current_turn != 'player' %}
+                ENEMY TURN - Waiting for GM...
+                {% elif is_multiplayer %}
+                    {% if encounter.current_player_id == my_player_id %}
+                    YOUR TURN
+                    {% elif encounter.current_player_id %}
+                    {{ current_player_name }} acting...
+                    {% else %}
+                    PLAYER TURN
+                    {% endif %}
+                {% else %}
+                YOUR TURN
+                {% endif %}
+            </div>
+            <div id="turn-counter" style="font-size: 0.85em; color: var(--lcars-green);">
+                {% if is_multiplayer %}
+                Players: <span id="player-turns-used">0</span>/<span id="player-turns-total">{{ campaign_players | length }}</span>
+                {% else %}
+                Turns: <span id="player-turns-used">0</span>/<span id="player-turns-total">0</span>
+                {% endif %}
+            </div>
+            <!-- Enemy turns hidden from players -->
+            <span id="enemy-turns-display" style="display: none;">
+                <span id="enemy-turns-used">0</span>/<span id="enemy-turns-total">0</span>
+            </span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px;">
+            {% if is_multiplayer %}
+            <!-- Multi-player turn claiming UI -->
+            <div id="claim-turn-section" style="{% if encounter.current_turn != 'player' or encounter.current_player_id %}display: none;{% endif %}">
+                <button id="claim-turn-btn" class="btn" onclick="claimTurn()" style="background: var(--lcars-green); padding: 6px 15px; font-size: 0.9em;">
+                    CLAIM
+                </button>
+            </div>
+            <div id="release-turn-section" style="{% if encounter.current_player_id != my_player_id %}display: none;{% endif %}">
+                <button class="btn btn-small" onclick="releaseTurn()" style="background: #555; padding: 4px 10px; font-size: 0.8em;">
+                    Release
+                </button>
+            </div>
+            <div id="already-acted-section" style="display: none;">
+                <span style="color: var(--lcars-tan); font-size: 0.85em;">Waiting...</span>
+            </div>
+            {% endif %}
+            <div id="end-turn-section" style="{% if encounter.current_turn != 'player' %}display: none;{% endif %}">
+                <button class="btn" onclick="nextTurn()" style="padding: 6px 15px; font-size: 0.9em;">End Turn</button>
+            </div>
         </div>
     </div>
+</div>
+
+{% if is_multiplayer %}
+<!-- Player status badges (separate row for multiplayer) -->
+<div id="players-status" style="margin-bottom: 15px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+    {% for player in campaign_players %}
+    <span class="player-status-badge" data-player-id="{{ player.id }}"
+          style="padding: 3px 8px; border-radius: 3px; font-size: 0.8em;
+                 background: {% if player.has_acted %}var(--lcars-green){% elif player.is_current %}var(--lcars-purple){% else %}#444{% endif %};
+                 color: {% if player.has_acted or player.is_current %}#000{% else %}#ccc{% endif %};">
+        {{ player.name }}{% if player.is_current %} ●{% elif player.has_acted %} ✓{% endif %}
+    </span>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="grid">
 
     <!-- Player Character -->
     {% if player_char %}
@@ -197,14 +198,14 @@
         <div class="stat-row">
             <span>Shields</span>
             <span class="stat-value" id="player-shields">
-                {{ player_ship.shields }} / {{ player_ship.shields_max }}
+                {{ player_ship.shields if player_ship.shields_raised else 0 }} / {{ player_ship.shields_max }}
                 <span id="shields-status" style="margin-left: 8px; font-size: 0.8em; {% if player_ship.shields_raised %}color: var(--lcars-green);{% else %}color: var(--lcars-red);{% endif %}">
                     [{{ 'ONLINE' if player_ship.shields_raised else 'OFFLINE' }}]
                 </span>
             </span>
         </div>
         <div class="shields-bar">
-            <div class="fill" id="player-shields-bar" style="width: {{ (player_ship.shields / player_ship.shields_max * 100) | int }}%;{% if not player_ship.shields_raised %} background: var(--lcars-red);{% endif %}"></div>
+            <div class="fill" id="player-shields-bar" style="width: {{ ((player_ship.shields / player_ship.shields_max * 100) | int) if player_ship.shields_raised else 0 }}%;{% if not player_ship.shields_raised %} background: var(--lcars-red);{% endif %}"></div>
         </div>
         <div class="stat-row">
             <span>Resistance</span>
@@ -295,12 +296,6 @@
 
 <!-- Actions Panel (only visible on player turn) -->
 <div id="actions-container" style="{% if encounter.current_turn != 'player' %}display: none;{% endif %}">
-    <div style="margin-bottom: 10px; padding: 8px; background: #1a1a1a; border-radius: 5px; font-size: 0.85em;">
-        <strong>Status Legend:</strong>
-        <span class="status-badge status-done">DONE</span> Implemented & Tested
-        <span class="status-badge status-rft">RFT</span> Ready For Testing
-        <span class="status-badge status-not-impl">TODO</span> Not Yet Implemented
-    </div>
     <div class="grid">
         <div class="panel">
             <h2>Minor Actions</h2>
@@ -312,31 +307,22 @@
                 {% if action.name == 'Raise/Lower Shields' %}
                 <li id="shields-action-btn" onclick="toggleShields()" class="" data-action-name="Raise Shields">
                     <strong>{{ 'Lower Shields' if player_ship.shields_raised else 'Raise Shields' }}</strong>
-                    <span class="status-badge status-done">DONE</span>
                     <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
-                    <div class="action-type">{{ action.description[:80] }}...</div>
+                    <div class="action-type">{{ action.description }}</div>
                 </li>
                 {% elif action.name == 'Arm/Disarm Weapons' %}
                 <li id="weapons-action-btn" onclick="toggleWeapons()" class="" data-action-name="Arm Weapons">
                     <strong>{{ 'Disarm Weapons' if player_ship.weapons_armed else 'Arm Weapons' }}</strong>
-                    <span class="status-badge status-done">DONE</span>
                     <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
-                    <div class="action-type">{{ action.description[:80] }}...</div>
+                    <div class="action-type">{{ action.description }}</div>
                 </li>
                 {% else %}
                 <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})"
                     data-action-name="{{ action.name }}"
                     class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                     <strong>{{ action.name }}</strong>
-                    {% if action.status == 'DONE' %}
-                    <span class="status-badge status-done">DONE</span>
-                    {% elif action.status == 'RFT' %}
-                    <span class="status-badge status-rft">RFT</span>
-                    {% else %}
-                    <span class="status-badge status-not-impl">TODO</span>
-                    {% endif %}
                     <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
-                    <div class="action-type">{{ action.description[:80] }}...</div>
+                    <div class="action-type">{{ action.description }}</div>
                 </li>
                 {% endif %}
                 {% endfor %}
@@ -350,15 +336,8 @@
                     data-action-name="{{ action.name }}"
                     class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                     <strong>{{ action.name }}</strong>
-                    {% if action.status == 'DONE' %}
-                    <span class="status-badge status-done">DONE</span>
-                    {% elif action.status == 'RFT' %}
-                    <span class="status-badge status-rft">RFT</span>
-                    {% else %}
-                    <span class="status-badge status-not-impl">TODO</span>
-                    {% endif %}
                     <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
-                    <div class="action-type">{{ action.description[:80] }}...</div>
+                    <div class="action-type">{{ action.description }}</div>
                 </li>
                 {% endfor %}
             </ul>
@@ -376,18 +355,11 @@
                     data-base-difficulty="{{ action.difficulty }}"
                     class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                     <strong>{{ action.name }}</strong>
-                    {% if action.status == 'DONE' %}
-                    <span class="status-badge status-done">DONE</span>
-                    {% elif action.status == 'RFT' %}
-                    <span class="status-badge status-rft">RFT</span>
-                    {% else %}
-                    <span class="status-badge status-not-impl">TODO</span>
-                    {% endif %}
                     {% if action.difficulty > 0 %}
                     <span class="difficulty-display" style="color: var(--lcars-tan);">(Diff {{ action.difficulty }})</span>
                     {% endif %}
                     <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
-                    <div class="action-type">{{ action.description[:80] }}...</div>
+                    <div class="action-type">{{ action.description }}</div>
                 </li>
                 {% endfor %}
             </ul>
@@ -401,18 +373,11 @@
                     data-base-difficulty="{{ action.difficulty }}"
                     class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                     <strong>{{ action.name }}</strong>
-                    {% if action.status == 'DONE' %}
-                    <span class="status-badge status-done">DONE</span>
-                    {% elif action.status == 'RFT' %}
-                    <span class="status-badge status-rft">RFT</span>
-                    {% else %}
-                    <span class="status-badge status-not-impl">TODO</span>
-                    {% endif %}
                     {% if action.difficulty > 0 %}
                     <span class="difficulty-display" style="color: var(--lcars-tan);">(Diff {{ action.difficulty }})</span>
                     {% endif %}
                     <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
-                    <div class="action-type">{{ action.description[:80] }}...</div>
+                    <div class="action-type">{{ action.description }}</div>
                 </li>
                 {% endfor %}
             </ul>
@@ -866,14 +831,6 @@
         margin-left: 8px;
         vertical-align: middle;
     }
-    .status-done {
-        background: var(--lcars-green);
-        color: #000;
-    }
-    .status-rft {
-        background: var(--lcars-orange);
-        color: #000;
-    }
     .status-not-impl {
         background: #666;
         color: #ccc;
@@ -995,11 +952,14 @@
         const shieldsEl = document.getElementById('player-shields');
         const barEl = document.getElementById('player-shields-bar');
 
+        // Display 0 when shields are offline
+        const displayValue = raised ? shields : 0;
+
         // Update text
-        shieldsEl.innerHTML = `${shields} / ${shieldsMax} <span id="shields-status" style="margin-left: 8px; font-size: 0.8em; color: var(--lcars-${raised ? 'green' : 'red'});">[${raised ? 'ONLINE' : 'OFFLINE'}]</span>`;
+        shieldsEl.innerHTML = `${displayValue} / ${shieldsMax} <span id="shields-status" style="margin-left: 8px; font-size: 0.8em; color: var(--lcars-${raised ? 'green' : 'red'});">[${raised ? 'ONLINE' : 'OFFLINE'}]</span>`;
 
         // Update bar
-        barEl.style.width = `${(shields / shieldsMax) * 100}%`;
+        barEl.style.width = `${(displayValue / shieldsMax) * 100}%`;
         barEl.style.background = raised ? '' : 'var(--lcars-red)';
 
         // Update action button text
@@ -1248,17 +1208,16 @@
                 <div style="color: var(--lcars-tan); margin-top: 5px;">Enemy Turn - Waiting for GM...</div>
             `;
         } else {
-            // Check if enemy is out of turns (player gets consecutive turns)
-            const enemyOutOfTurns = turnData && turnData.enemy_turns_used >= turnData.enemy_turns_total;
+            // Check if player has consecutive turns remaining
             const playerTurnsRemaining = turnData ? (turnData.player_turns_total - turnData.player_turns_used) : null;
 
             indicator.style.background = 'linear-gradient(135deg, #1a2a1a 0%, #203a20 100%)';
             indicator.style.border = '2px solid var(--lcars-green)';
 
-            if (enemyOutOfTurns && playerTurnsRemaining > 0) {
+            if (playerTurnsRemaining && playerTurnsRemaining > 0) {
                 indicator.innerHTML = `
                     <div style="color: var(--lcars-green); font-size: 1.1em;">ACTION COMPLETE - CONTINUE!</div>
-                    <div style="color: var(--lcars-tan); margin-top: 5px;">Enemy out of turns - You have ${playerTurnsRemaining} turn(s) remaining</div>
+                    <div style="color: var(--lcars-tan); margin-top: 5px;">You have ${playerTurnsRemaining} turn(s) remaining</div>
                 `;
             } else {
                 indicator.innerHTML = `
@@ -2342,11 +2301,11 @@
         // Update any reserve power indicators on the page
         const powerStatus = document.getElementById('reserve-power-status');
         if (powerStatus) {
-            powerStatus.textContent = hasReservePower ? '[AVAILABLE]' : '[DEPLETED]';
+            powerStatus.textContent = hasReservePower ? '✓' : '✗';
             powerStatus.style.color = hasReservePower ? 'var(--lcars-green)' : 'var(--lcars-red)';
 
             // Update the container styling too
-            const container = powerStatus.closest('.resource-pool');
+            const container = document.getElementById('reserve-power-box');
             if (container) {
                 container.style.background = hasReservePower ? '#1a3a1a' : '#3a1a1a';
                 container.style.borderColor = hasReservePower ? 'var(--lcars-green)' : 'var(--lcars-red)';
