@@ -1172,9 +1172,7 @@
                                     <span style="color: var(--lcars-almond); font-size: 0.9em;">Waiting for others...</span>
                                 </div>
                                 {% else %}
-                                <div id="end-turn-section" style="{% if encounter.current_turn != 'player' %}display: none;{% endif %}">
-                                    <button class="btn btn-primary" onclick="nextTurn()" style="padding: 6px 15px;">END TURN</button>
-                                </div>
+                                <!-- End Turn button removed - players must use the "Pass" major action to end their turn -->
                                 {% endif %}
                             </div>
                         </div>
@@ -2355,6 +2353,10 @@
             } else if (MAJOR_BUFF_ACTIONS.includes(name)) {
                 executeMajorBuffAction(name);
                 return;
+            } else if (name === 'Pass') {
+                // Pass action - immediately execute, no roll needed
+                executePassAction();
+                return;
             } else {
                 // Generic dice roll action - fetch config from server
                 try {
@@ -2645,6 +2647,34 @@
                     actionName,
                     'major',
                     data.message || 'Action completed',
+                    true
+                );
+
+                if (data.current_turn) {
+                    fetchTurnStatus();
+                }
+            } else {
+                showErrorToast(data.error || 'Action failed');
+            }
+        }
+
+        async function executePassAction() {
+            // Pass action - end turn without doing anything
+            const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action_name: 'Pass', character_id: playerCharId })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                showSuccessToast('Turn passed.');
+
+                // Log this major action
+                logTurnAction(
+                    'Pass',
+                    'major',
+                    'Passed turn without acting.',
                     true
                 );
 
@@ -4364,7 +4394,7 @@
             const turnText = document.getElementById('turn-text');
 
             // Get UI elements - some may not exist depending on multiplayer mode
-            const endTurnSection = document.getElementById('end-turn-section');
+            // Note: end-turn-section removed - players must use "Pass" action to end turn
             const mpEndTurnSection = document.getElementById('mp-end-turn-section');
             const claimTurnSection = document.getElementById('claim-turn-section');
             const releaseTurnSection = document.getElementById('release-turn-section');
@@ -4405,13 +4435,11 @@
                     }
                 } else {
                     turnText.textContent = 'YOUR TURN - Take one action';
-                    if (endTurnSection) endTurnSection.style.display = 'block';
                 }
             } else {
                 banner.classList.remove('your-turn');
                 banner.classList.add('enemy-turn');
                 turnText.textContent = 'ENEMY TURN - Waiting for Game Master...';
-                if (endTurnSection) endTurnSection.style.display = 'none';
                 if (mpEndTurnSection) mpEndTurnSection.style.display = 'none';
                 if (claimTurnSection) claimTurnSection.style.display = 'none';
                 if (releaseTurnSection) releaseTurnSection.style.display = 'none';
