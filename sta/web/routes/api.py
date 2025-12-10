@@ -25,6 +25,7 @@ from sta.mechanics.action_config import (
     is_buff_action,
     is_task_roll_action,
     is_toggle_action,
+    is_major_action,
     is_npc_action,
     is_action_available,
     get_breach_difficulty_modifier,
@@ -703,6 +704,14 @@ def alternate_turn_after_action(session, encounter, player_id: int = None):
         # New round starts with player (or could alternate who starts)
         encounter.current_turn = "player"
         round_advanced = True
+
+        # Clear end-of-round effects (Attack Pattern, Evasive Action, etc.)
+        active_effects_data = json.loads(encounter.active_effects_json)
+        active_effects = [ActiveEffect.from_dict(e) for e in active_effects_data]
+        # Filter out effects that expire at end of round
+        remaining_effects = [e for e in active_effects if e.duration != "end_of_round"]
+        encounter.active_effects_json = json.dumps([e.to_dict() for e in remaining_effects])
+
         # Recalculate after reset
         enemy_info = get_enemy_turn_info(session, encounter)
         player_info = get_player_turn_info(session, encounter)
@@ -932,7 +941,7 @@ def claim_turn(encounter_id: str):
     - player_id: ID of the player claiming the turn
 
     Returns success/failure and who has the turn claimed.
-    Uses timestamp-based conflict resolution for race conditions.
+    Uses database row locking to prevent race conditions.
     """
     from sta.database import CampaignPlayerRecord
 
@@ -944,9 +953,11 @@ def claim_turn(encounter_id: str):
         if not player_id:
             return jsonify({"error": "player_id is required"}), 400
 
+        # Use SELECT FOR UPDATE to lock the row and prevent race conditions
+        # This ensures only one player can claim at a time
         encounter = session.query(EncounterRecord).filter_by(
             encounter_id=encounter_id
-        ).first()
+        ).with_for_update().first()
 
         if not encounter:
             return jsonify({"error": "Encounter not found"}), 404
@@ -1567,8 +1578,19 @@ def ram_action(encounter_id: str):
             return jsonify({"error": "Target ship not found"}), 404
         target_ship = target_record.to_model()
 
-        # TODO: Check range - Ram requires Close range (same zone or adjacent)
-        # Zone tracking not fully implemented, so we allow Ram for now
+        # Check range - Ram requires Close range (same hex)
+        ship_positions = get_ship_positions_from_encounter(encounter)
+        player_pos = ship_positions.get("player", {"q": 0, "r": 0})
+        target_pos = ship_positions.get(f"enemy_{target_index}", {"q": 0, "r": 0})
+        player_coord = HexCoord(q=player_pos.get("q", 0), r=player_pos.get("r", 0))
+        target_coord = HexCoord(q=target_pos.get("q", 0), r=target_pos.get("r", 0))
+        hex_distance = player_coord.distance_to(target_coord)
+
+        if hex_distance > 0:
+            current_range = get_range_name_for_distance(hex_distance)
+            return jsonify({
+                "error": f"Target is out of range for Ram! Ram requires Close range (same hex), but target is at {current_range} range ({hex_distance} hex{'es' if hex_distance != 1 else ''} away)."
+            }), 400
 
         # Perform task roll: Daring + Conn, assisted by Engines + Conn
         result = assisted_task_roll(
@@ -2316,6 +2338,14 @@ def execute_action(encounter_id: str):
                 else:
                     return jsonify({"error": f"Cannot override action type: {target_config.get('type')}"}), 400
 
+            elif action_name == "Pass":
+                # Pass action - player chooses to end their turn without doing anything
+                # No roll, no effect - just log the action
+                result = ActionExecutionResult(
+                    True,
+                    f"Passed turn."
+                )
+
             else:
                 return jsonify({"error": f"Special action not implemented: {action_name}"}), 400
 
@@ -2331,10 +2361,8 @@ def execute_action(encounter_id: str):
             player_ship_record.has_reserve_power = player_ship.has_reserve_power
 
         # Determine if this is a major action (uses a turn)
-        # buff and toggle actions are minor; task_roll and most special actions are major
-        # Exception: Change Position is a special action but is minor
-        action_type = config.get("type")
-        is_major_action = action_type in ("task_roll", "special") and action_name != "Change Position"
+        # Uses centralized is_major_action() function from action_config
+        action_is_major = is_major_action(action_name)
 
         response = result.to_dict()
 
@@ -2361,7 +2389,7 @@ def execute_action(encounter_id: str):
             alternate_turn_after_action, log_combat_action
         )
 
-        if is_major_action:
+        if action_is_major:
             turn_state = manager.complete_player_major(
                 actor_name=actor_name,
                 ship_name=player_ship.name,
@@ -2427,9 +2455,6 @@ def npc_action(encounter_id: str):
     department = data.get("department", 3)  # Crew quality department
     focus = data.get("focus", True)  # NPCs always have focus
 
-    # Determine if this is a major action (ends turn)
-    is_major_action = action_category.endswith("_major")
-
     if not action_name:
         return jsonify({"error": "action_name required"}), 400
 
@@ -2460,8 +2485,12 @@ def npc_action(encounter_id: str):
             return jsonify({"error": "NPC ship not found"}), 404
         npc_ship = npc_ship_record.to_model()
 
+        # Determine if this is a major action (ends turn)
+        # Uses centralized is_major_action() function from action_config
+        action_is_major = is_major_action(action_name)
+
         # Check if ship can act (for major actions, must have turns remaining)
-        if is_major_action and ship_turns_used >= npc_ship_record.scale:
+        if action_is_major and ship_turns_used >= npc_ship_record.scale:
             return jsonify({
                 "error": f"{npc_ship.name} has used all {npc_ship_record.scale} turns this round!"
             }), 400
@@ -2598,6 +2627,20 @@ def npc_action(encounter_id: str):
                 if not player_ship_record:
                     return jsonify({"error": "Player ship not found"}), 404
                 player_ship = player_ship_record.to_model()
+
+                # Check range - Ram requires Close range (same hex)
+                ship_positions = get_ship_positions_from_encounter(encounter_record)
+                npc_pos = ship_positions.get(f"enemy_{ship_index}", {"q": 0, "r": 0})
+                player_pos = ship_positions.get("player", {"q": 0, "r": 0})
+                npc_coord = HexCoord(q=npc_pos.get("q", 0), r=npc_pos.get("r", 0))
+                player_coord = HexCoord(q=player_pos.get("q", 0), r=player_pos.get("r", 0))
+                hex_distance = npc_coord.distance_to(player_coord)
+
+                if hex_distance > 0:
+                    current_range = get_range_name_for_distance(hex_distance)
+                    return jsonify({
+                        "error": f"Target is out of range for Ram! Ram requires Close range (same hex), but player ship is at {current_range} range ({hex_distance} hex{'es' if hex_distance != 1 else ''} away)."
+                    }), 400
 
                 # Perform task roll using NPC crew quality
                 target_number = attribute + department
@@ -2848,7 +2891,7 @@ def npc_action(encounter_id: str):
             alternate_turn_after_action, log_combat_action
         )
 
-        if is_major_action:
+        if action_is_major:
             turn_state = manager.complete_enemy_major(
                 enemy_id=ship_id,
                 enemy_scale=npc_ship_record.scale,
@@ -3336,17 +3379,26 @@ def resolve_defensive_roll(encounter_id: str):
         enemy_ids = json.loads(encounter_record.enemy_ship_ids_json)
         enemy_index = pending_attack["attacker_index"]
         if enemy_index >= len(enemy_ids):
-            return jsonify({"error": "Invalid enemy ship"}), 400
+            # Clear invalid pending attack to prevent getting stuck
+            encounter_record.pending_attack_json = None
+            session.commit()
+            return jsonify({"error": "Invalid enemy ship - pending attack cleared"}), 400
 
         enemy_id = enemy_ids[enemy_index]
         enemy_record = session.query(StarshipRecord).filter_by(id=enemy_id).first()
         if not enemy_record:
-            return jsonify({"error": "Enemy ship not found"}), 404
+            # Clear invalid pending attack to prevent getting stuck
+            encounter_record.pending_attack_json = None
+            session.commit()
+            return jsonify({"error": "Enemy ship not found - pending attack cleared"}), 404
         enemy_ship = enemy_record.to_model()
 
         weapon_index = pending_attack["weapon_index"]
         if weapon_index >= len(enemy_ship.weapons):
-            return jsonify({"error": "Invalid weapon"}), 400
+            # Clear invalid pending attack to prevent getting stuck
+            encounter_record.pending_attack_json = None
+            session.commit()
+            return jsonify({"error": "Invalid weapon - pending attack cleared"}), 400
         weapon = enemy_ship.weapons[weapon_index]
 
         # Load active effects for later

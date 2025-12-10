@@ -87,9 +87,7 @@
                 <span style="color: var(--lcars-tan); font-size: 0.85em;">Waiting...</span>
             </div>
             {% endif %}
-            <div id="end-turn-section" style="{% if encounter.current_turn != 'player' %}display: none;{% endif %}">
-                <button class="btn" onclick="nextTurn()" style="padding: 6px 15px; font-size: 0.9em;">End Turn</button>
-            </div>
+            <!-- End Turn button removed - players must use the "Pass" major action to end their turn -->
         </div>
     </div>
 </div>
@@ -1152,18 +1150,16 @@
         currentTurn = newTurn;
         const banner = document.getElementById('turn-banner');
         const actionsContainer = document.getElementById('actions-container');
-        const endTurnSection = document.getElementById('end-turn-section');
+        // Note: end-turn-section removed - players must use "Pass" action to end turn
 
         if (newTurn === 'player') {
             banner.className = 'turn-banner your-turn';
             banner.querySelector('.turn-text').textContent = 'YOUR TURN - Take one action';
             actionsContainer.style.display = 'block';
-            endTurnSection.style.display = 'block';
         } else {
             banner.className = 'turn-banner enemy-turn';
             banner.querySelector('.turn-text').textContent = 'ENEMY TURN - Waiting for Game Master...';
             actionsContainer.style.display = 'none';
-            endTurnSection.style.display = 'none';
 
             // Also hide all action panels (they're outside actions-container)
             document.getElementById('fire-panel').style.display = 'none';
@@ -1278,7 +1274,7 @@
         const releaseSection = document.getElementById('release-turn-section');
         const actedSection = document.getElementById('already-acted-section');
         const actionsContainer = document.getElementById('actions-container');
-        const endTurnSection = document.getElementById('end-turn-section');
+        // Note: end-turn-section removed - players must use "Pass" action to end turn
 
         if (currentTurn !== 'player') {
             // Enemy's turn
@@ -1287,7 +1283,6 @@
             if (releaseSection) releaseSection.style.display = 'none';
             if (actedSection) actedSection.style.display = 'none';
             if (actionsContainer) actionsContainer.style.display = 'none';
-            if (endTurnSection) endTurnSection.style.display = 'none';
         } else if (myHasActed) {
             // Player already acted this round
             turnText.textContent = "You've acted this round. Waiting for others...";
@@ -1295,7 +1290,6 @@
             if (releaseSection) releaseSection.style.display = 'none';
             if (actedSection) actedSection.style.display = 'block';
             if (actionsContainer) actionsContainer.style.display = 'none';
-            if (endTurnSection) endTurnSection.style.display = 'none';
         } else if (currentPlayerId === myPlayerId) {
             // This player has claimed the turn
             turnText.textContent = 'YOUR TURN - Take one action';
@@ -1303,7 +1297,6 @@
             if (releaseSection) releaseSection.style.display = 'block';
             if (actedSection) actedSection.style.display = 'none';
             if (actionsContainer) actionsContainer.style.display = 'block';
-            if (endTurnSection) endTurnSection.style.display = 'block';
         } else if (currentPlayerId) {
             // Another player has claimed the turn
             const currentName = data?.current_player_name || 'Another player';
@@ -1312,7 +1305,6 @@
             if (releaseSection) releaseSection.style.display = 'none';
             if (actedSection) actedSection.style.display = 'none';
             if (actionsContainer) actionsContainer.style.display = 'none';
-            if (endTurnSection) endTurnSection.style.display = 'none';
         } else {
             // No one has claimed - show claim button
             turnText.textContent = 'PLAYER TURN - Claim your turn to act';
@@ -1320,7 +1312,6 @@
             if (releaseSection) releaseSection.style.display = 'none';
             if (actedSection) actedSection.style.display = 'none';
             if (actionsContainer) actionsContainer.style.display = 'none';
-            if (endTurnSection) endTurnSection.style.display = 'none';
         }
     }
 
@@ -1789,6 +1780,10 @@
         } else if (MAJOR_BUFF_ACTIONS.includes(name)) {
             // Major buff actions execute immediately and end turn
             executeMajorBuffAction(name);
+            return;
+        } else if (name === 'Pass') {
+            // Pass action - immediately execute, no roll needed
+            executePassAction();
             return;
         } else {
             try {
@@ -2582,6 +2577,59 @@
             }
         } else {
             showErrorToast(data.error || `${actionName} failed!`);
+        }
+    }
+
+    async function executePassAction() {
+        // Pass action - end turn without doing anything
+        const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                action_name: 'Pass',
+                character_id: playerCharId
+            })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            // Show results in dice panel
+            const resultsDiv = document.getElementById('dice-results');
+            const displayDiv = document.getElementById('dice-display');
+            document.getElementById('dice-panel').style.display = 'block';
+            resultsDiv.style.display = 'block';
+
+            displayDiv.innerHTML = `
+                <div class="alert alert-info" style="padding: 15px; background: #1a2a3a; border: 2px solid var(--lcars-blue); border-radius: 5px;">
+                    <h4 style="margin: 0 0 10px 0; color: var(--lcars-blue);">PASS</h4>
+                    <p style="margin: 0; color: var(--lcars-text);">Turn passed without acting.</p>
+                </div>
+            `;
+
+            // Handle turn transition
+            if (data.current_turn) {
+                updateTurnDisplay(data.current_turn, data.round, data);
+                pollForTurnChanges();
+
+                // Clear action state
+                activeMinorAction = null;
+                selectedMajorAction = null;
+                updateMajorActionHighlights();
+                clearActionSelections('minor');
+                clearActionSelections('major');
+
+                // Add turn indicator
+                addTurnOverIndicator('dice-display', data.current_turn, data);
+            }
+
+            if (data.player_turns_used !== undefined) {
+                updateTurnCounters(
+                    data.player_turns_used, data.player_turns_total,
+                    data.enemy_turns_used, data.enemy_turns_total
+                );
+            }
+        } else {
+            showErrorToast(data.error || 'Pass action failed!');
         }
     }
 

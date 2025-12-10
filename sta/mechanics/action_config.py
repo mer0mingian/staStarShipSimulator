@@ -175,6 +175,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Attack Pattern": {
         "type": "buff",
+        "is_major": True,  # This is a major action per STA 2e rules
         "requires_system": "engines",
         "effect": {
             "applies_to": "all",  # Affects ship's attacks and enemies attacking the ship
@@ -185,6 +186,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
 
     "Evasive Action": {
         "type": "buff",
+        "is_major": True,  # This is a major action per STA 2e rules
         "requires_system": "engines",
         "effect": {
             "applies_to": "defense",
@@ -330,6 +332,14 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         }
     },
 
+    # ===== STANDARD ACTIONS =====
+
+    "Pass": {
+        "type": "special",
+        "is_major": True,  # Pass is a major action - it ends the turn without doing anything
+        # No roll, no effect - just logs the action and ends the turn
+    },
+
     # ===== TOGGLE ACTIONS =====
 
     "Raise Shields": {
@@ -375,6 +385,47 @@ def is_toggle_action(action_name: str) -> bool:
     """Check if an action is a toggle action."""
     config = get_action_config(action_name)
     return config is not None and config.get("type") == "toggle"
+
+
+def is_major_action(action_name: str) -> bool:
+    """
+    Determine if an action is major (ends turn) or minor (doesn't end turn).
+
+    This is the centralized function for determining action type across
+    both player and NPC actions. Use this instead of ad-hoc checks.
+
+    Rules:
+    - If the action config has an explicit "is_major" field, use that
+    - Otherwise, use these defaults:
+      - task_roll actions → major
+      - special actions → major (except "Change Position" which is minor)
+      - buff actions → minor (unless explicitly marked is_major: True)
+      - toggle actions → minor
+
+    Returns:
+        True if the action is major (should end turn), False if minor
+    """
+    config = get_action_config(action_name)
+    if not config:
+        # Unknown action - default to major to be safe (will trigger turn end)
+        return True
+
+    # Explicit override takes precedence
+    if "is_major" in config:
+        return config["is_major"]
+
+    # Default rules based on action type
+    action_type = config.get("type")
+
+    if action_type == "task_roll":
+        return True
+
+    if action_type == "special":
+        # Special actions are major except Change Position
+        return action_name != "Change Position"
+
+    # buff and toggle actions are minor by default
+    return False
 
 
 # ===== NPC ACTIONS =====
