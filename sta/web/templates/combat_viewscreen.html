@@ -105,6 +105,52 @@
             50% { opacity: 0.7; }
         }
 
+        /* Turn Phase Indicator - shows what's happening in combat */
+        .turn-phase-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .turn-phase-status {
+            font-size: 1rem;
+            color: var(--lcars-text-dark);
+            opacity: 0.9;
+            max-width: 300px;
+            text-align: center;
+        }
+
+        .turn-phase-progress {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .phase-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .phase-dot.active {
+            background: var(--lcars-text-dark);
+            box-shadow: 0 0 8px var(--lcars-text-dark);
+        }
+
+        .phase-dot.completed {
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .phase-label {
+            font-size: 0.7rem;
+            color: var(--lcars-text-dark);
+            opacity: 0.7;
+            margin: 0 8px;
+        }
+
         /* Main content area - 3 column layout */
         .viewscreen-content {
             flex: 1;
@@ -517,8 +563,23 @@
                 <span class="viewscreen-title">{{ encounter.name }}</span>
                 <div style="display: flex; align-items: center; gap: 20px;">
                     <span class="round-indicator">ROUND <span id="round-number">{{ encounter.round }}</span></span>
-                    <div class="turn-indicator {% if encounter.current_turn == 'player' %}turn-player{% else %}turn-enemy{% endif %}" id="turn-indicator">
-                        {% if encounter.current_turn == 'player' %}CREW TURN{% else %}ENEMY TURN{% endif %}
+                    <div class="turn-phase-container">
+                        <div class="turn-indicator {% if encounter.current_turn == 'player' %}turn-player{% else %}turn-enemy{% endif %}" id="turn-indicator">
+                            {% if encounter.current_turn == 'player' %}CREW TURN{% else %}ENEMY TURN{% endif %}
+                        </div>
+                        <div class="turn-phase-status" id="turn-phase-status">
+                            {% if encounter.current_turn == 'player' %}
+                            Crew members are taking actions
+                            {% else %}
+                            Enemy vessels are maneuvering
+                            {% endif %}
+                        </div>
+                        <div class="turn-phase-progress">
+                            <span class="phase-label">CREW</span>
+                            <div class="phase-dot {% if encounter.current_turn == 'player' %}active{% else %}completed{% endif %}" id="phase-dot-player"></div>
+                            <div class="phase-dot {% if encounter.current_turn == 'enemy' %}active{% endif %}" id="phase-dot-enemy"></div>
+                            <span class="phase-label">ENEMY</span>
+                        </div>
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 25px;">
@@ -1111,14 +1172,41 @@
                     return;
                 }
 
-                // Update turn indicator
+                // Update turn indicator and phase status
                 const turnIndicator = document.getElementById('turn-indicator');
+                const phaseStatus = document.getElementById('turn-phase-status');
+                const phaseDotPlayer = document.getElementById('phase-dot-player');
+                const phaseDotEnemy = document.getElementById('phase-dot-enemy');
+
                 if (data.current_turn === 'player') {
                     turnIndicator.textContent = 'CREW TURN';
                     turnIndicator.className = 'turn-indicator turn-player';
+
+                    // Update phase dots
+                    phaseDotPlayer.className = 'phase-dot active';
+                    phaseDotEnemy.className = 'phase-dot';
+
+                    // Update status message based on turns used
+                    const turnsUsed = data.player_turns_used || 0;
+                    const turnsTotal = data.player_turns_total || 1;
+
+                    if (turnsUsed === 0) {
+                        phaseStatus.textContent = 'Crew members are taking actions';
+                    } else if (turnsUsed < turnsTotal) {
+                        phaseStatus.textContent = `${turnsUsed} of ${turnsTotal} crew actions complete`;
+                    } else {
+                        phaseStatus.textContent = 'All crew actions complete';
+                    }
                 } else {
                     turnIndicator.textContent = 'ENEMY TURN';
                     turnIndicator.className = 'turn-indicator turn-enemy';
+
+                    // Update phase dots
+                    phaseDotPlayer.className = 'phase-dot completed';
+                    phaseDotEnemy.className = 'phase-dot active';
+
+                    // Update status message
+                    phaseStatus.textContent = 'Enemy vessels are maneuvering';
                 }
 
                 // Update round
