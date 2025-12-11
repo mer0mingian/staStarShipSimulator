@@ -5,7 +5,7 @@ import uuid
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from sta.database import (
     get_session, EncounterRecord, CharacterRecord, StarshipRecord,
-    CampaignRecord
+    CampaignRecord, CampaignPlayerRecord
 )
 from sta.generators import generate_character, generate_starship
 from sta.generators.starship import generate_enemy_ship
@@ -236,6 +236,23 @@ def combat(encounter_id: str):
             flash("Encounter not found")
             return redirect(url_for("main.index"))
 
+        # For GM role, verify they have a valid GM session for this campaign
+        if role == "gm" and encounter.campaign_id:
+            session_token = request.cookies.get("sta_session_token")
+            gm_player = session.query(CampaignPlayerRecord).filter_by(
+                campaign_id=encounter.campaign_id,
+                is_gm=True
+            ).first()
+
+            if not gm_player or session_token != gm_player.session_token:
+                # Not authenticated as GM - redirect to GM login
+                campaign = session.query(CampaignRecord).filter_by(id=encounter.campaign_id).first()
+                if campaign:
+                    return redirect(url_for("campaigns.gm_login", campaign_id=campaign.campaign_id))
+                else:
+                    flash("Campaign not found")
+                    return redirect(url_for("main.index"))
+
         # Load player character - from campaign membership if available, otherwise from encounter
         player_char = None
         player_char_db_id = None
@@ -248,7 +265,6 @@ def combat(encounter_id: str):
         if encounter.campaign_id and role == "player":
             session_token = request.cookies.get("sta_session_token")
             if session_token:
-                from sta.database import CampaignPlayerRecord
                 current_campaign_player = session.query(CampaignPlayerRecord).filter_by(
                     session_token=session_token,
                     campaign_id=encounter.campaign_id

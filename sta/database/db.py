@@ -70,6 +70,17 @@ def run_migrations():
             conn.commit()
             print("Migration: Added description column to encounters table")
 
+        # GM password migration
+        result = conn.execute(text("PRAGMA table_info(campaigns)"))
+        campaign_columns = [row[1] for row in result.fetchall()]
+
+        if 'gm_password_hash' not in campaign_columns:
+            # Default password hash for "ENGAGE1" using werkzeug's pbkdf2:sha256
+            # We'll set NULL here and let the app set proper hashes
+            conn.execute(text("ALTER TABLE campaigns ADD COLUMN gm_password_hash VARCHAR(255)"))
+            conn.commit()
+            print("Migration: Added gm_password_hash column to campaigns table")
+
 
 def init_db():
     """Initialize the database, creating all tables."""

@@ -4,6 +4,10 @@ import json
 import uuid
 import secrets
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, make_response
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# Default GM password
+DEFAULT_GM_PASSWORD = "ENGAGE1"
 from sta.database import (
     get_session, EncounterRecord, CharacterRecord, StarshipRecord,
     CampaignRecord, CampaignPlayerRecord, CampaignShipRecord
@@ -90,6 +94,7 @@ def new_campaign():
                 campaign_id=str(uuid.uuid4())[:8],  # Short ID for easy sharing
                 name=name,
                 description=description,
+                gm_password_hash=generate_password_hash(DEFAULT_GM_PASSWORD),
             )
             session.add(campaign)
             session.flush()
@@ -133,20 +138,23 @@ def campaign_dashboard(campaign_id: str):
             flash("Campaign not found")
             return redirect(url_for("campaigns.campaign_list"))
 
-        # Single-GM mode: if role=gm, skip membership checks and set GM cookie
+        # Check if user wants GM access via ?role=gm
         gm_token_to_set = None
         if role == "gm":
-            is_gm = True
-            # Find the GM player record to get their token
+            # Check if they already have a valid GM session
+            session_token = request.cookies.get("sta_session_token")
             gm_player = session.query(CampaignPlayerRecord).filter_by(
                 campaign_id=campaign.id,
                 is_gm=True
             ).first()
-            if gm_player:
+
+            if gm_player and session_token == gm_player.session_token:
+                # Already authenticated as GM
+                is_gm = True
                 current_player = gm_player
-                gm_token_to_set = gm_player.session_token
             else:
-                current_player = None
+                # Redirect to GM login page
+                return redirect(url_for("campaigns.gm_login", campaign_id=campaign_id))
         else:
             # Get current user from session token
             session_token = request.cookies.get("sta_session_token")
@@ -248,6 +256,54 @@ def campaign_dashboard(campaign_id: str):
             response.set_cookie("sta_session_token", gm_token_to_set, max_age=60*60*24*365)
 
         return response
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/<campaign_id>/gm-login", methods=["GET", "POST"])
+def gm_login(campaign_id: str):
+    """GM login page - requires password to access GM controls."""
+    session = get_session()
+    try:
+        campaign = session.query(CampaignRecord).filter_by(
+            campaign_id=campaign_id
+        ).first()
+
+        if not campaign:
+            flash("Campaign not found")
+            return redirect(url_for("campaigns.campaign_list"))
+
+        error = None
+
+        if request.method == "POST":
+            password = request.form.get("password", "")
+
+            # Check password - use default if no hash stored (legacy campaigns)
+            password_hash = campaign.gm_password_hash
+            if not password_hash:
+                # Legacy campaign without password - set default and check
+                password_hash = generate_password_hash(DEFAULT_GM_PASSWORD)
+                campaign.gm_password_hash = password_hash
+                session.commit()
+
+            if check_password_hash(password_hash, password):
+                # Password correct - find/create GM player and set cookie
+                gm_player = session.query(CampaignPlayerRecord).filter_by(
+                    campaign_id=campaign.id,
+                    is_gm=True
+                ).first()
+
+                if gm_player:
+                    response = redirect(url_for("campaigns.campaign_dashboard", campaign_id=campaign_id))
+                    response.set_cookie("sta_session_token", gm_player.session_token, max_age=60*60*24*365)
+                    return response
+                else:
+                    # No GM player exists (shouldn't happen, but handle it)
+                    error = "GM account not found for this campaign"
+            else:
+                error = "Incorrect password"
+
+        return render_template("gm_login.html", campaign=campaign, error=error)
     finally:
         session.close()
 
@@ -525,6 +581,7 @@ def api_generate_random_campaign():
             campaign_id=str(uuid.uuid4())[:8],
             name=campaign_name,
             description="Quick-start campaign with ship and encounter ready",
+            gm_password_hash=generate_password_hash(DEFAULT_GM_PASSWORD),
         )
         session.add(campaign)
         session.flush()
@@ -1286,6 +1343,60 @@ def api_update_encounter_status(encounter_id: str):
         session.commit()
 
         return jsonify({"success": True, "status": new_status})
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/change-gm-password", methods=["POST"])
+def api_change_gm_password(campaign_id: str):
+    """API: Change GM password (GM only)."""
+    session = get_session()
+    try:
+        campaign = session.query(CampaignRecord).filter_by(
+            campaign_id=campaign_id
+        ).first()
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        # Verify GM session
+        session_token = request.cookies.get("sta_session_token")
+        if not session_token:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        gm = session.query(CampaignPlayerRecord).filter_by(
+            session_token=session_token,
+            campaign_id=campaign.id,
+            is_gm=True
+        ).first()
+
+        if not gm:
+            return jsonify({"error": "Only GM can change the password"}), 403
+
+        data = request.get_json()
+        current_password = data.get("current_password", "")
+        new_password = data.get("new_password", "")
+
+        if not new_password:
+            return jsonify({"error": "New password is required"}), 400
+
+        if len(new_password) < 4:
+            return jsonify({"error": "Password must be at least 4 characters"}), 400
+
+        # Verify current password
+        password_hash = campaign.gm_password_hash
+        if not password_hash:
+            # Legacy campaign - use default
+            password_hash = generate_password_hash(DEFAULT_GM_PASSWORD)
+
+        if not check_password_hash(password_hash, current_password):
+            return jsonify({"error": "Current password is incorrect"}), 403
+
+        # Update password
+        campaign.gm_password_hash = generate_password_hash(new_password)
+        session.commit()
+
+        return jsonify({"success": True, "message": "Password changed successfully"})
     finally:
         session.close()
 
