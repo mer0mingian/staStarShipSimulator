@@ -1357,6 +1357,7 @@ def api_get_encounter(encounter_id: str):
         return jsonify({
             "encounter_id": encounter.encounter_id,
             "name": encounter.name,
+            "description": encounter.description,
             "status": encounter.status,
             "round": encounter.round,
             "threat": encounter.threat,
@@ -1382,6 +1383,8 @@ def api_update_encounter(encounter_id: str):
         # Update fields
         if "name" in data:
             encounter.name = data["name"]
+        if "description" in data:
+            encounter.description = data["description"] if data["description"] else None
         if "threat" in data:
             encounter.threat = data["threat"]
 
@@ -1393,7 +1396,7 @@ def api_update_encounter(encounter_id: str):
 
 @campaigns_bp.route("/api/encounter/<encounter_id>", methods=["DELETE"])
 def api_delete_encounter(encounter_id: str):
-    """API: Delete encounter (GM only, draft only)."""
+    """API: Delete encounter (GM only)."""
     session = get_session()
     try:
         encounter = session.query(EncounterRecord).filter_by(
@@ -1403,8 +1406,9 @@ def api_delete_encounter(encounter_id: str):
         if not encounter:
             return jsonify({"error": "Encounter not found"}), 404
 
-        if encounter.status != "draft":
-            return jsonify({"error": "Can only delete draft encounters"}), 400
+        # Completed encounters cannot be deleted (historical record)
+        if encounter.status == "completed":
+            return jsonify({"error": "Cannot delete completed encounters"}), 400
 
         session.delete(encounter)
         session.commit()

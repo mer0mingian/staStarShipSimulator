@@ -58,6 +58,9 @@
                 <button class="btn btn-small" onclick="editEncounter('{{ active_encounter.encounter_id }}')" style="background: var(--lcars-tan);">
                     Edit
                 </button>
+                <button class="btn btn-small btn-danger" onclick="deleteEncounter('{{ active_encounter.encounter_id }}', '{{ active_encounter.name }}', true)">
+                    Delete
+                </button>
                 {% else %}
                 <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='player') }}"
                    class="btn btn-small">
@@ -119,15 +122,11 @@
         <h2>Crew Roster</h2>
         {% if players %}
             <div class="crew-list">
-                {% for player in players %}
-                    <div class="crew-member" style="background: #222; border-radius: 5px; padding: 10px; margin-bottom: 10px;
-                                {% if player.is_gm %}border-left: 3px solid var(--lcars-purple);{% endif %}">
+                {% for player in players if not player.is_gm %}
+                    <div class="crew-member" style="background: #222; border-radius: 5px; padding: 10px; margin-bottom: 10px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <div>
                                 <strong style="font-size: 1.1em;">{{ player.player_name }}</strong>
-                                {% if player.is_gm %}
-                                    <span style="color: var(--lcars-purple);">(Q)</span>
-                                {% endif %}
                                 {% if player.character %}
                                     <span style="color: var(--lcars-tan); font-size: 0.85em; margin-left: 5px;">
                                         {{ player.character.rank or '' }} {{ player.character.species or '' }}
@@ -135,9 +134,7 @@
                                 {% endif %}
                             </div>
                             <div style="display: flex; gap: 5px;">
-                                {% if player.is_gm %}
-                                    <span class="action-type" style="color: var(--lcars-purple);">Game Master</span>
-                                {% elif is_gm %}
+                                {% if is_gm %}
                                     <button class="btn btn-small" onclick="editPlayer({{ player.id }})" title="Edit player">
                                         Edit
                                     </button>
@@ -147,7 +144,7 @@
                                 {% endif %}
                             </div>
                         </div>
-                        {% if player.character and not player.is_gm %}
+                        {% if player.character %}
                             <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; font-size: 0.75em;">
                                 <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-orange);">CTL</div>
@@ -200,7 +197,7 @@
                                     <div>{{ player.character.disciplines.security }}</div>
                                 </div>
                             </div>
-                        {% elif not player.is_gm %}
+                        {% else %}
                             <p style="color: var(--lcars-tan); font-size: 0.85em; font-style: italic;">No character assigned</p>
                         {% endif %}
                     </div>
@@ -535,29 +532,6 @@
     </div>
 </div>
 
-<!-- Edit Encounter Modal -->
-<div id="edit-encounter-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
-    <div class="panel" style="max-width: 400px; width: 90%;">
-        <h2>Edit Encounter</h2>
-        <form id="edit-encounter-form" onsubmit="saveEncounter(event)">
-            <input type="hidden" id="edit-encounter-id">
-            <div style="margin-bottom: 15px;">
-                <label for="edit-encounter-name">Encounter Name</label>
-                <input type="text" id="edit-encounter-name" required style="width: 100%;">
-            </div>
-            <div style="margin-bottom: 15px;">
-                <label for="edit-encounter-threat">Starting Threat</label>
-                <input type="number" id="edit-encounter-threat" min="0" max="10" value="2" style="width: 100%;">
-            </div>
-
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button type="button" class="btn btn-small" style="background: #666;" onclick="hideEditEncounterModal()">Cancel</button>
-                <button type="submit" class="btn btn-small">Save Changes</button>
-            </div>
-        </form>
-    </div>
-</div>
-
 <script>
 const campaignId = '{{ campaign.campaign_id }}';
 
@@ -782,8 +756,12 @@ async function activateEncounter(encounterId) {
     }
 }
 
-async function deleteEncounter(encounterId, encounterName) {
-    if (!confirm(`Delete encounter "${encounterName}"? This cannot be undone.`)) return;
+async function deleteEncounter(encounterId, encounterName, isActive = false) {
+    const message = isActive
+        ? `Delete ACTIVE encounter "${encounterName}"? This will end the encounter and cannot be undone.`
+        : `Delete encounter "${encounterName}"? This cannot be undone.`;
+
+    if (!confirm(message)) return;
 
     try {
         const response = await fetch(`/campaigns/api/encounter/${encounterId}`, {
@@ -983,53 +961,9 @@ async function saveShip(event) {
 }
 
 // Edit Encounter Functions
-async function editEncounter(encounterId) {
-    try {
-        const response = await fetch(`/campaigns/api/encounter/${encounterId}`);
-        if (!response.ok) {
-            alert('Error loading encounter data');
-            return;
-        }
-        const encounter = await response.json();
-
-        document.getElementById('edit-encounter-id').value = encounter.encounter_id;
-        document.getElementById('edit-encounter-name').value = encounter.name || '';
-        document.getElementById('edit-encounter-threat').value = encounter.threat || 2;
-
-        document.getElementById('edit-encounter-modal').style.display = 'flex';
-    } catch (error) {
-        alert('Error loading encounter: ' + error.message);
-    }
-}
-
-function hideEditEncounterModal() {
-    document.getElementById('edit-encounter-modal').style.display = 'none';
-}
-
-async function saveEncounter(event) {
-    event.preventDefault();
-    const encounterId = document.getElementById('edit-encounter-id').value;
-
-    const data = {
-        name: document.getElementById('edit-encounter-name').value,
-        threat: parseInt(document.getElementById('edit-encounter-threat').value),
-    };
-
-    try {
-        const response = await fetch(`/campaigns/api/encounter/${encounterId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        if (response.ok) {
-            window.location.reload();
-        } else {
-            const result = await response.json();
-            alert('Error: ' + (result.error || 'Unknown error'));
-        }
-    } catch (error) {
-        alert('Error saving encounter: ' + error.message);
-    }
+function editEncounter(encounterId) {
+    // Redirect to the full edit page
+    window.location.href = `/encounters/${encounterId}/edit`;
 }
 </script>
 {% endblock %}

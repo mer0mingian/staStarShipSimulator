@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}New Encounter - {{ campaign.name }}{% endblock %}
-{% block header %}New Encounter{% endblock %}
+{% block title %}Edit Encounter - {{ encounter.name }}{% endblock %}
+{% block header %}Edit Encounter{% endblock %}
 
 {% block content %}
 <!-- Campaign Context Banner -->
@@ -10,6 +10,9 @@
         <div>
             <span style="color: var(--lcars-tan);">Campaign:</span>
             <strong style="color: var(--lcars-purple);">{{ campaign.name }}</strong>
+            <span style="margin-left: 15px; color: var(--lcars-tan);">Encounter:</span>
+            <strong style="color: var(--lcars-orange);">{{ encounter.name }}</strong>
+            <span class="action-type" style="margin-left: 10px;">{{ encounter.status.title() }}</span>
         </div>
         <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
            class="btn btn-small" style="background: #666;">
@@ -19,100 +22,43 @@
 </div>
 
 <form method="POST" id="encounter-form">
-    <input type="hidden" name="campaign_id" value="{{ campaign.campaign_id }}">
-    <input type="hidden" name="tactical_map_json" id="tactical_map_json" value="{}">
-    <input type="hidden" name="ship_positions_json" id="ship_positions_json" value="{}">
-    <input type="hidden" name="enemy_count" id="enemy_count_input" value="1">
+    <input type="hidden" name="tactical_map_json" id="tactical_map_json" value="{{ tactical_map_json }}">
+    <input type="hidden" name="ship_positions_json" id="ship_positions_json" value="{{ ship_positions_json }}">
 
     <div class="grid">
         <div class="panel">
             <h2>Encounter Details</h2>
             <label for="name">Encounter Name</label>
-            <input type="text" name="name" id="name" value="Battle at the Neutral Zone" style="width: 100%;">
+            <input type="text" name="name" id="name" value="{{ encounter.name }}" style="width: 100%;">
             <label for="description" style="margin-top: 10px;">Description (optional)</label>
-            <textarea name="description" id="description" rows="3" style="width: 100%;" placeholder="Brief description of this encounter..."></textarea>
+            <textarea name="description" id="description" rows="3" style="width: 100%;" placeholder="Brief description of this encounter...">{{ encounter.description or '' }}</textarea>
+            <label for="threat" style="margin-top: 10px;">Threat Pool</label>
+            <input type="number" name="threat" id="threat" min="0" max="20" value="{{ encounter.threat }}" style="width: 100%;">
         </div>
 
-        <div class="panel">
-            <h2>Bridge Position</h2>
-            <label for="position">Default Player Position</label>
-            <select name="position" id="position" style="width: 100%;">
-                {% for pos in positions %}
-                    <option value="{{ pos }}" {% if pos == 'captain' %}selected{% endif %}>
-                        {{ pos.title() }}
-                    </option>
+        <div class="panel" style="border-color: var(--lcars-red);">
+            <h2 style="color: var(--lcars-red);">Enemy Ships ({{ enemy_ships | length }})</h2>
+            <div id="enemy-ships-list">
+                {% for enemy in enemy_ships %}
+                <div style="background: #222; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                    <strong style="color: var(--lcars-red);">{{ enemy.name }}</strong>
+                    <div style="font-size: 0.85em; color: var(--lcars-tan);">
+                        Scale {{ enemy.scale }} | {{ enemy.crew_quality or 'Standard' }} Crew
+                    </div>
+                </div>
                 {% endfor %}
-            </select>
-        </div>
-    </div>
-
-    <div class="grid">
-        <div class="panel">
-            <h2>Character</h2>
-            <label>
-                <input type="radio" name="character_action" value="generate" checked>
-                Generate Random Character
-            </label>
-            {% if characters %}
-                <label>
-                    <input type="radio" name="character_action" value="existing">
-                    Use Existing:
-                </label>
-                <select name="character_id" style="width: 100%;">
-                    {% for char in characters %}
-                        <option value="{{ char.id }}">{{ char.name }} ({{ char.rank }})</option>
-                    {% endfor %}
-                </select>
-            {% endif %}
-        </div>
-
-        <!-- Campaign Ship Info -->
-        <div class="panel" style="border-color: var(--lcars-blue);">
-            <h2>Campaign Ship</h2>
-            <p style="color: var(--lcars-tan);">This encounter will use the campaign's active ship.</p>
-            {% if campaign.active_ship_id %}
-                <p style="color: var(--lcars-green); margin-top: 10px;">Ship assigned and ready.</p>
-            {% else %}
-                <p style="color: var(--lcars-red); margin-top: 10px;">
-                    No ship assigned! Go to the campaign dashboard to assign a ship first.
-                </p>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- Enemy Ships Panel -->
-    <div class="panel" style="border-color: var(--lcars-red);">
-        <h2 style="color: var(--lcars-red);">Enemy Ships</h2>
-        <div class="grid" style="gap: 15px;">
-            <div>
-                <label for="enemy_count">Number of Enemy Ships</label>
-                <select id="enemy_count" style="width: 100%;" onchange="updateEnemyCount()">
-                    <option value="1" selected>1 Ship</option>
-                    <option value="2">2 Ships</option>
-                    <option value="3">3 Ships</option>
-                    <option value="4">4 Ships</option>
-                </select>
             </div>
-            <div>
-                <label for="crew_quality">Crew Quality</label>
-                <select name="crew_quality" id="crew_quality" style="width: 100%;">
-                    <option value="basic">Basic (Attribute 8, Dept 1)</option>
-                    <option value="proficient">Proficient (Attribute 9, Dept 2)</option>
-                    <option value="talented" selected>Talented (Attribute 10, Dept 3)</option>
-                    <option value="exceptional">Exceptional (Attribute 11, Dept 4)</option>
-                </select>
-            </div>
+            <p style="font-size: 0.8em; color: var(--lcars-tan); margin-top: 10px;">
+                Enemy ships can be managed from the GM combat view.
+            </p>
         </div>
-        <p style="font-size: 0.85em; color: var(--lcars-tan); margin-top: 10px;">
-            Random enemy ships will be generated. You can edit them after creating the encounter.
-        </p>
     </div>
 
     <!-- Tactical Map Setup -->
     <div class="panel" style="border-color: var(--lcars-orange);">
         <h2 style="color: var(--lcars-orange);">Tactical Map</h2>
         <p style="color: var(--lcars-tan); margin-bottom: 15px;">
-            Configure the battlefield terrain and starting positions. Click hexes to paint terrain, then place ships.
+            Configure the battlefield terrain and ship positions. Click hexes to paint terrain, then place ships.
         </p>
 
         <div class="grid" style="gap: 15px;">
@@ -156,7 +102,10 @@
                 <div id="ship-controls" style="display: none;">
                     <label for="ship-to-place">Select Ship to Place</label>
                     <select id="ship-to-place" style="width: 100%;">
-                        <option value="player">Player Ship</option>
+                        <option value="player">{{ player_ship.name if player_ship else 'Player Ship' }}</option>
+                        {% for enemy in enemy_ships %}
+                        <option value="enemy_{{ loop.index0 }}">{{ enemy.name }}</option>
+                        {% endfor %}
                     </select>
                     <p style="font-size: 0.8em; color: var(--lcars-tan); margin-top: 5px;">
                         Click a hex on the map to place the selected ship.
@@ -179,34 +128,12 @@
         </div>
     </div>
 
-    <!-- Encounter Options -->
-    <div class="panel" style="border-color: var(--lcars-purple);">
-        <h2 style="color: var(--lcars-purple);">Encounter Options</h2>
-        <p style="color: var(--lcars-tan); margin-bottom: 15px;">Choose how to create this encounter:</p>
-        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: #222; border-radius: 5px; flex: 1; min-width: 150px;">
-                <input type="radio" name="status" value="active" checked>
-                <div>
-                    <strong style="color: var(--lcars-green);">Start Now</strong>
-                    <div style="font-size: 0.85em; color: var(--lcars-tan);">Create and activate immediately</div>
-                </div>
-            </label>
-            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: #222; border-radius: 5px; flex: 1; min-width: 150px;">
-                <input type="radio" name="status" value="draft">
-                <div>
-                    <strong style="color: var(--lcars-tan);">Save as Draft</strong>
-                    <div style="font-size: 0.85em; color: var(--lcars-tan);">Prepare for later activation</div>
-                </div>
-            </label>
-        </div>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button type="submit" class="btn">Save Changes</button>
+        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}" class="btn" style="background: #666;">
+            Cancel
+        </a>
     </div>
-
-    <button type="submit" class="btn" {% if not campaign.active_ship_id %}disabled style="opacity: 0.5;"{% endif %}>
-        Create Encounter
-    </button>
-    <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}" class="btn" style="background: #666;">
-        Cancel
-    </a>
 </form>
 
 <style>
@@ -220,17 +147,22 @@
 
 <script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
 <script>
-// Map state
-let tacticalMapData = { radius: 3, tiles: [] };
-let shipPositions = {
-    player: { q: -2, r: 1 }
-};
-let enemyCount = 1;
+// Initialize from server data
+let tacticalMapData = {{ tactical_map | tojson | safe }};
+let shipPositions = {{ ship_positions | tojson | safe }};
 let editMode = 'terrain';
 let selectedTerrain = 'open';
 let selectedShip = 'player';
 
-// Default enemy positions
+// Ship data for rendering
+const playerShipName = "{{ player_ship.name if player_ship else 'Player Ship' }}";
+const enemyShips = [
+    {% for enemy in enemy_ships %}
+    { id: "enemy_{{ loop.index0 }}", name: "{{ enemy.name }}" }{{ "," if not loop.last else "" }}
+    {% endfor %}
+];
+
+// Default positions
 const defaultEnemyPositions = [
     { q: 2, r: -1 },
     { q: 2, r: 0 },
@@ -239,8 +171,25 @@ const defaultEnemyPositions = [
 ];
 
 function initMap() {
-    // Initialize enemy positions
-    updateEnemyCount();
+    // Ensure we have valid data structures
+    if (!tacticalMapData || !tacticalMapData.radius) {
+        tacticalMapData = { radius: 3, tiles: [] };
+    }
+    if (!shipPositions || typeof shipPositions !== 'object') {
+        shipPositions = {};
+    }
+    if (!shipPositions.player) {
+        shipPositions.player = { q: -2, r: 1 };
+    }
+
+    // Initialize enemy positions if missing
+    enemyShips.forEach((enemy, i) => {
+        const key = `enemy_${i}`;
+        if (!shipPositions[key]) {
+            shipPositions[key] = { ...defaultEnemyPositions[i] };
+        }
+    });
+
     renderMap();
 }
 
@@ -250,24 +199,21 @@ function renderMap() {
     // Player ship
     ships.push({
         id: 'player',
-        name: 'Player Ship',
+        name: playerShipName,
         faction: 'player',
-        position: shipPositions.player
+        position: shipPositions.player || { q: -2, r: 1 }
     });
 
     // Enemy ships
-    for (let i = 0; i < enemyCount; i++) {
+    enemyShips.forEach((enemy, i) => {
         const key = `enemy_${i}`;
-        if (!shipPositions[key]) {
-            shipPositions[key] = { ...defaultEnemyPositions[i] };
-        }
         ships.push({
             id: key,
-            name: `Enemy ${i + 1}`,
+            name: enemy.name,
             faction: 'enemy',
-            position: shipPositions[key]
+            position: shipPositions[key] || defaultEnemyPositions[i]
         });
-    }
+    });
 
     HexMap.render('tactical-map-container', tacticalMapData, ships, {
         onHexClick: handleHexClick
@@ -279,8 +225,6 @@ function renderMap() {
 
 function handleHexClick(q, r, terrain) {
     if (editMode === 'terrain') {
-        // Update terrain
-        const key = `${q},${r}`;
         let tile = tacticalMapData.tiles.find(t => t.coord.q === q && t.coord.r === r);
 
         if (tile) {
@@ -293,7 +237,6 @@ function handleHexClick(q, r, terrain) {
         }
         renderMap();
     } else if (editMode === 'ships') {
-        // Place selected ship
         shipPositions[selectedShip] = { q, r };
         renderMap();
     }
@@ -309,54 +252,17 @@ function setEditMode(mode) {
     document.getElementById('ship-controls').style.display = mode === 'ships' ? 'block' : 'none';
 }
 
-function updateEnemyCount() {
-    const select = document.getElementById('enemy_count');
-    enemyCount = parseInt(select.value);
-    document.getElementById('enemy_count_input').value = enemyCount;
-
-    // Update ship selector
-    const shipSelect = document.getElementById('ship-to-place');
-    shipSelect.innerHTML = '<option value="player">Player Ship</option>';
-    for (let i = 0; i < enemyCount; i++) {
-        const opt = document.createElement('option');
-        opt.value = `enemy_${i}`;
-        opt.textContent = `Enemy Ship ${i + 1}`;
-        shipSelect.appendChild(opt);
-    }
-
-    // Initialize positions for new enemies
-    for (let i = 0; i < enemyCount; i++) {
-        const key = `enemy_${i}`;
-        if (!shipPositions[key]) {
-            shipPositions[key] = { ...defaultEnemyPositions[i] };
-        }
-    }
-
-    // Remove extra enemies
-    Object.keys(shipPositions).forEach(key => {
-        if (key.startsWith('enemy_')) {
-            const idx = parseInt(key.split('_')[1]);
-            if (idx >= enemyCount) {
-                delete shipPositions[key];
-            }
-        }
-    });
-
-    renderMap();
-}
-
 function updateShipPositionsList() {
     const container = document.getElementById('ship-positions-list');
     let html = '<div style="color: var(--lcars-tan);">Current positions:</div>';
 
-    html += `<div style="color: var(--lcars-green);">Player: (${shipPositions.player.q}, ${shipPositions.player.r})</div>`;
+    const playerPos = shipPositions.player || { q: 0, r: 0 };
+    html += `<div style="color: var(--lcars-green);">${playerShipName}: (${playerPos.q}, ${playerPos.r})</div>`;
 
-    for (let i = 0; i < enemyCount; i++) {
-        const pos = shipPositions[`enemy_${i}`];
-        if (pos) {
-            html += `<div style="color: var(--lcars-red);">Enemy ${i + 1}: (${pos.q}, ${pos.r})</div>`;
-        }
-    }
+    enemyShips.forEach((enemy, i) => {
+        const pos = shipPositions[`enemy_${i}`] || { q: 0, r: 0 };
+        html += `<div style="color: var(--lcars-red);">${enemy.name}: (${pos.q}, ${pos.r})</div>`;
+    });
 
     container.innerHTML = html;
 }
@@ -374,9 +280,8 @@ function clearMap() {
 function randomizeMap() {
     tacticalMapData.tiles = [];
     const terrains = ['open', 'dust_cloud', 'debris_field', 'asteroid_field', 'dense_nebula'];
-    const radius = tacticalMapData.radius;
+    const radius = tacticalMapData.radius || 3;
 
-    // Generate random terrain for ~30% of hexes
     for (let q = -radius; q <= radius; q++) {
         const r1 = Math.max(-radius, -q - radius);
         const r2 = Math.min(radius, -q + radius);
@@ -397,9 +302,9 @@ function resetPositions() {
     shipPositions = {
         player: { q: -2, r: 1 }
     };
-    for (let i = 0; i < enemyCount; i++) {
+    enemyShips.forEach((enemy, i) => {
         shipPositions[`enemy_${i}`] = { ...defaultEnemyPositions[i] };
-    }
+    });
     renderMap();
 }
 

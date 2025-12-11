@@ -1,5 +1,6 @@
 """Encounter routes for combat management."""
 
+import json
 import uuid
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from sta.database import (
@@ -56,21 +57,33 @@ def new_encounter():
             else:
                 char_id = int(request.form.get("character_id", 0))
 
-            # Generate enemy ship with selected crew quality
+            # Generate enemy ships with selected crew quality
             crew_quality_str = request.form.get("crew_quality", "talented")
             try:
                 crew_quality = CrewQuality(crew_quality_str)
             except ValueError:
                 crew_quality = CrewQuality.TALENTED
 
-            enemy = generate_enemy_ship(difficulty="standard", crew_quality=crew_quality)
-            enemy_record = StarshipRecord.from_model(enemy)
-            session.add(enemy_record)
-            session.flush()
+            # Get enemy count from form (default 1)
+            enemy_count = int(request.form.get("enemy_count", 1))
+            enemy_count = max(1, min(4, enemy_count))  # Clamp to 1-4
+
+            enemy_ids = []
+            for _ in range(enemy_count):
+                enemy = generate_enemy_ship(difficulty="standard", crew_quality=crew_quality)
+                enemy_record = StarshipRecord.from_model(enemy)
+                session.add(enemy_record)
+                session.flush()
+                enemy_ids.append(enemy_record.id)
 
             # Create encounter
             encounter_name = request.form.get("name", "New Encounter")
+            encounter_description = request.form.get("description", "").strip() or None
             position = request.form.get("position", "captain")
+
+            # Get tactical map and ship positions from form
+            tactical_map_json = request.form.get("tactical_map_json", "{}")
+            ship_positions_json = request.form.get("ship_positions_json", "{}")
 
             # Determine initial status (draft if in campaign, active otherwise)
             initial_status = "active"
@@ -80,12 +93,15 @@ def new_encounter():
             encounter = EncounterRecord(
                 encounter_id=str(uuid.uuid4()),
                 name=encounter_name,
+                description=encounter_description,
                 campaign_id=campaign_db_id,
                 status=initial_status,
                 player_character_id=char_id,
                 player_ship_id=ship_id,
                 player_position=position,
-                enemy_ship_ids_json=f"[{enemy_record.id}]",
+                enemy_ship_ids_json=json.dumps(enemy_ids),
+                tactical_map_json=tactical_map_json,
+                ship_positions_json=ship_positions_json,
                 threat=2,  # Starting threat
             )
             session.add(encounter)
@@ -118,6 +134,85 @@ def new_encounter():
             characters=characters,
             positions=positions,
             campaign=campaign,
+        )
+    finally:
+        session.close()
+
+
+@encounters_bp.route("/<encounter_id>/edit", methods=["GET", "POST"])
+def edit_encounter(encounter_id: str):
+    """Edit an existing encounter."""
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            flash("Encounter not found")
+            return redirect(url_for("campaigns.gm_home"))
+
+        # Load campaign
+        campaign = session.query(CampaignRecord).filter_by(
+            id=encounter.campaign_id
+        ).first()
+
+        if not campaign:
+            flash("Campaign not found")
+            return redirect(url_for("campaigns.gm_home"))
+
+        if request.method == "POST":
+            # Update basic fields
+            encounter.name = request.form.get("name", encounter.name)
+            encounter.description = request.form.get("description", "").strip() or None
+            encounter.threat = int(request.form.get("threat", encounter.threat))
+
+            # Update tactical map and ship positions
+            tactical_map_json = request.form.get("tactical_map_json")
+            if tactical_map_json:
+                encounter.tactical_map_json = tactical_map_json
+
+            ship_positions_json = request.form.get("ship_positions_json")
+            if ship_positions_json:
+                encounter.ship_positions_json = ship_positions_json
+
+            session.commit()
+            flash("Encounter updated successfully")
+            return redirect(url_for("campaigns.campaign_dashboard", campaign_id=campaign.campaign_id))
+
+        # GET - Load data for the form
+        # Load player ship
+        player_ship = None
+        if encounter.player_ship_id:
+            player_ship = session.query(StarshipRecord).filter_by(
+                id=encounter.player_ship_id
+            ).first()
+
+        # Load enemy ships
+        enemy_ship_ids = json.loads(encounter.enemy_ship_ids_json or "[]")
+        enemy_ships = []
+        for eid in enemy_ship_ids:
+            enemy = session.query(StarshipRecord).filter_by(id=eid).first()
+            if enemy:
+                enemy_ships.append(enemy)
+
+        # Parse tactical map and ship positions
+        tactical_map = json.loads(encounter.tactical_map_json or "{}")
+        if not tactical_map or "radius" not in tactical_map:
+            tactical_map = {"radius": 3, "tiles": []}
+
+        ship_positions = json.loads(encounter.ship_positions_json or "{}")
+
+        return render_template(
+            "edit_encounter.html",
+            encounter=encounter,
+            campaign=campaign,
+            player_ship=player_ship,
+            enemy_ships=enemy_ships,
+            tactical_map=tactical_map,
+            ship_positions=ship_positions,
+            tactical_map_json=encounter.tactical_map_json or "{}",
+            ship_positions_json=encounter.ship_positions_json or "{}",
         )
     finally:
         session.close()

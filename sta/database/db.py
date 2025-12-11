@@ -65,6 +65,11 @@ def run_migrations():
             conn.commit()
             print("Migration: Added turn_claimed_at column to encounters table")
 
+        if 'description' not in encounter_columns:
+            conn.execute(text("ALTER TABLE encounters ADD COLUMN description TEXT"))
+            conn.commit()
+            print("Migration: Added description column to encounters table")
+
 
 def init_db():
     """Initialize the database, creating all tables."""
