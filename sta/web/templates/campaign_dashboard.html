@@ -58,6 +58,9 @@
                 <button class="btn btn-small" onclick="editEncounter('{{ active_encounter.encounter_id }}')" style="background: var(--lcars-tan);">
                     Edit
                 </button>
+                <button class="btn btn-small" onclick="deactivateEncounter('{{ active_encounter.encounter_id }}')" style="background: var(--lcars-orange);">
+                    Deactivate
+                </button>
                 <button class="btn btn-small btn-danger" onclick="deleteEncounter('{{ active_encounter.encounter_id }}', '{{ active_encounter.name }}', true)">
                     Delete
                 </button>
@@ -753,6 +756,26 @@ async function activateEncounter(encounterId) {
         }
     } catch (error) {
         alert('Error activating encounter: ' + error.message);
+    }
+}
+
+async function deactivateEncounter(encounterId) {
+    if (!confirm("Deactivate this encounter? It will be moved back to draft status.")) return;
+
+    try {
+        const response = await fetch(`/campaigns/api/encounter/${encounterId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'draft' })
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error deactivating encounter: ' + error.message);
     }
 }
 
