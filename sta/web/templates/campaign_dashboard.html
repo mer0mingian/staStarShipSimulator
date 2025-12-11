@@ -472,6 +472,16 @@
                 <div><label>Security</label><input type="number" id="edit-disc-security" min="1" max="5" value="2" style="width: 100%;"></div>
             </div>
 
+            <h3 style="color: var(--lcars-ice); margin: 15px 0 10px 0; font-size: 1em;">Focuses</h3>
+            <div>
+                <textarea id="edit-focuses" rows="2" style="width: 100%; background: #1a1a1a; color: var(--lcars-ice); border: 1px solid #333; border-radius: 3px; padding: 8px;" placeholder="Separate focuses with commas"></textarea>
+            </div>
+
+            <h3 style="color: var(--lcars-purple); margin: 15px 0 10px 0; font-size: 1em;">Talents</h3>
+            <div>
+                <textarea id="edit-talents" rows="3" style="width: 100%; background: #1a1a1a; color: var(--lcars-ice); border: 1px solid #333; border-radius: 3px; padding: 8px;" placeholder="One talent per line"></textarea>
+            </div>
+
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                 <button type="button" class="btn btn-small" style="background: #666;" onclick="hideEditPlayerModal()">Cancel</button>
                 <button type="submit" class="btn btn-small">Save Changes</button>
@@ -837,6 +847,12 @@ async function editPlayer(playerId) {
             document.getElementById('edit-disc-medicine').value = player.character.disciplines?.medicine || 2;
             document.getElementById('edit-disc-science').value = player.character.disciplines?.science || 2;
             document.getElementById('edit-disc-security').value = player.character.disciplines?.security || 2;
+
+            // Populate focuses and talents
+            const focuses = player.character.focuses || [];
+            const talents = player.character.talents || [];
+            document.getElementById('edit-focuses').value = focuses.join(', ');
+            document.getElementById('edit-talents').value = talents.join('\n');
         }
 
         document.getElementById('edit-player-modal').style.display = 'flex';
@@ -852,6 +868,12 @@ function hideEditPlayerModal() {
 async function savePlayer(event) {
     event.preventDefault();
     const playerId = document.getElementById('edit-player-id').value;
+
+    // Parse focuses and talents
+    const focusesText = document.getElementById('edit-focuses').value;
+    const talentsText = document.getElementById('edit-talents').value;
+    const focuses = focusesText.split(',').map(f => f.trim()).filter(f => f);
+    const talents = talentsText.split('\n').map(t => t.trim()).filter(t => t);
 
     const data = {
         name: document.getElementById('edit-char-name').value,
@@ -873,7 +895,9 @@ async function savePlayer(event) {
             medicine: parseInt(document.getElementById('edit-disc-medicine').value),
             science: parseInt(document.getElementById('edit-disc-science').value),
             security: parseInt(document.getElementById('edit-disc-security').value),
-        }
+        },
+        focuses: focuses,
+        talents: talents
     };
 
     try {
