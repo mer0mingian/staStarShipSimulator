@@ -925,6 +925,14 @@ def api_update_player(campaign_id: str, player_id: int):
                     current_discs.update(data["disciplines"])
                     char_record.disciplines_json = json.dumps(current_discs)
 
+                # Update focuses JSON
+                if "focuses" in data:
+                    char_record.focuses_json = json.dumps(data["focuses"] if isinstance(data["focuses"], list) else [])
+
+                # Update talents JSON
+                if "talents" in data:
+                    char_record.talents_json = json.dumps(data["talents"] if isinstance(data["talents"], list) else [])
+
         session.commit()
         return jsonify({"success": True})
     finally:

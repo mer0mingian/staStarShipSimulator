@@ -2337,6 +2337,21 @@
         const bonusDice = parseInt(document.getElementById('ram-bonus').value) || 0;
         const resultsDiv = document.getElementById('ram-results');
 
+        // Validate range - Ram requires Close range (same hex)
+        const enemies = getVisibleEnemies();
+        const targetEnemy = enemies[targetIndex];
+        if (targetEnemy) {
+            const playerPos = getPlayerPosition();
+            const targetDistance = hexDistance(playerPos, targetEnemy.position);
+            if (targetDistance > 0) {
+                const rangeCategory = getRangeCategory(targetDistance);
+                alert(`Ram requires Close range (same hex). Target is at ${rangeCategory} range (${targetDistance} hex${targetDistance !== 1 ? 'es' : ''} away).`);
+                resultsDiv.style.display = 'block';
+                resultsDiv.innerHTML = `<div class="info-box danger"><strong>OUT OF RANGE:</strong> Ram requires Close range (same hex). Target is at ${rangeCategory} range (${targetDistance} hex${targetDistance !== 1 ? 'es' : ''} away).</div>`;
+                return;
+            }
+        }
+
         try {
             const response = await fetch(`/api/encounter/${encounterId}/ram`, {
                 method: 'POST',

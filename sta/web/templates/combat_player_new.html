@@ -2021,21 +2021,21 @@
                             </div>
                         </div>
 
-                        {% if player_char.focuses %}
                         <h4 class="section-header">FOCUSES</h4>
                         <div style="padding: 10px; background: #1a1a1a; border-radius: 5px;">
-                            {{ player_char.focuses | join(', ') }}
+                            <textarea id="char-focuses" style="width: 100%; height: 60px; padding: 8px; background: #0a0a0a; color: var(--lcars-ice); border: 1px solid #333; border-radius: 3px; font-family: inherit; resize: vertical;">{{ player_char.focuses | join(', ') }}</textarea>
+                            <small style="color: var(--lcars-almond);">Separate focuses with commas</small>
                         </div>
-                        {% endif %}
 
-                        {% if player_char.talents %}
                         <h4 class="section-header">TALENTS</h4>
                         <div style="padding: 10px; background: #1a1a1a; border-radius: 5px;">
-                            {% for talent in player_char.talents %}
-                            <div style="margin: 5px 0;">• {{ talent }}</div>
-                            {% endfor %}
+                            <textarea id="char-talents" style="width: 100%; height: 100px; padding: 8px; background: #0a0a0a; color: var(--lcars-ice); border: 1px solid #333; border-radius: 3px; font-family: inherit; resize: vertical;">{{ player_char.talents | join('\n') }}</textarea>
+                            <small style="color: var(--lcars-almond);">One talent per line</small>
                         </div>
-                        {% endif %}
+
+                        <button onclick="saveCharacterFocusesTalents()" class="btn" style="margin-top: 15px; background: var(--lcars-bluey); color: var(--lcars-text-dark); width: 100%;">
+                            SAVE FOCUSES & TALENTS
+                        </button>
                     </div>
                     {% else %}
                     <div class="character-panel">
@@ -2219,6 +2219,33 @@
         function showSuccessToast(message) { showToast(message, 'success'); }
         function showErrorToast(message) { showToast(message, 'error'); }
         function showInfoToast(message) { showToast(message, 'info'); }
+
+        // Save character focuses and talents
+        async function saveCharacterFocusesTalents() {
+            const focusesText = document.getElementById('char-focuses')?.value || '';
+            const talentsText = document.getElementById('char-talents')?.value || '';
+
+            const focuses = focusesText.split(',').map(f => f.trim()).filter(f => f);
+            const talents = talentsText.split('\n').map(t => t.trim()).filter(t => t);
+
+            try {
+                const response = await fetch(`/api/campaign/{{ campaign.campaign_id }}/player/{{ player.id }}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ focuses, talents })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    showSuccessToast('Character saved successfully!');
+                } else {
+                    showErrorToast('Error saving character: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error saving character:', error);
+                showErrorToast('Error saving character');
+            }
+        }
 
         // Weapons tracking
         let weaponsArmed = {{ 'true' if player_ship.weapons_armed else 'false' }};
@@ -3723,6 +3750,21 @@
             const bonusDice = parseInt(document.getElementById('ram-bonus').value) || 0;
             const resultsDiv = document.getElementById('ram-results');
 
+            // Validate range - Ram requires Close range (same hex)
+            const enemies = getVisibleEnemies();
+            const targetEnemy = enemies[targetIndex];
+            if (targetEnemy) {
+                const playerPos = getPlayerPosition();
+                const targetDistance = hexDistance(playerPos, targetEnemy.position);
+                if (targetDistance > 0) {
+                    const rangeCategory = getRangeCategory(targetDistance);
+                    showErrorToast(`Ram requires Close range (same hex). Target is at ${rangeCategory} range (${targetDistance} hex${targetDistance !== 1 ? 'es' : ''} away).`);
+                    resultsDiv.style.display = 'block';
+                    resultsDiv.innerHTML = `<div class="info-box danger"><strong>OUT OF RANGE:</strong> Ram requires Close range (same hex). Target is at ${rangeCategory} range (${targetDistance} hex${targetDistance !== 1 ? 'es' : ''} away).</div>`;
+                    return;
+                }
+            }
+
             try {
                 const response = await fetch(`/api/encounter/${encounterId}/ram`, {
                     method: 'POST',
@@ -3923,6 +3965,7 @@
                 showInfoToast(`Impulse: Select a destination hex (${validMoveDestinations.length} options). Click again to cancel.`);
 
                 renderTacticalMapWithMoves();
+                showTab('map');
 
             } catch (error) {
                 console.error('Error fetching valid moves:', error);
