@@ -17,6 +17,9 @@
             <span style="color: var(--lcars-purple);">
                 Q (Game Master)
             </span>
+            <button class="btn btn-small" onclick="showChangePasswordModal()" style="margin-left: 10px; background: var(--lcars-african-violet);">
+                Change Password
+            </button>
         {% elif current_player %}
             <span style="color: var(--lcars-green);">
                 {{ current_player.player_name }}
@@ -425,6 +428,32 @@
     </div>
 </div>
 
+<!-- Change GM Password Modal -->
+<div id="change-password-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 400px; width: 90%;">
+        <h2>Change GM Password</h2>
+        <form id="change-password-form" onsubmit="changePassword(event)">
+            <div style="margin-bottom: 15px;">
+                <label for="current-password">Current Password</label>
+                <input type="password" id="current-password" required style="width: 100%;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label for="new-password">New Password</label>
+                <input type="password" id="new-password" required minlength="4" style="width: 100%;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label for="confirm-password">Confirm New Password</label>
+                <input type="password" id="confirm-password" required minlength="4" style="width: 100%;">
+            </div>
+            <div id="password-error" style="display: none; color: var(--lcars-tomato); margin-bottom: 15px;"></div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-small" style="background: #666;" onclick="hideChangePasswordModal()">Cancel</button>
+                <button type="submit" class="btn btn-small">Change Password</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Edit Player Modal -->
 <div id="edit-player-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
     <div class="panel" style="max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
@@ -553,6 +582,59 @@ function copyJoinLink() {
     navigator.clipboard.writeText(link).then(() => {
         alert('Join link copied to clipboard!');
     });
+}
+
+// Change Password Modal Functions
+function showChangePasswordModal() {
+    document.getElementById('change-password-modal').style.display = 'flex';
+    document.getElementById('current-password').value = '';
+    document.getElementById('new-password').value = '';
+    document.getElementById('confirm-password').value = '';
+    document.getElementById('password-error').style.display = 'none';
+}
+
+function hideChangePasswordModal() {
+    document.getElementById('change-password-modal').style.display = 'none';
+}
+
+async function changePassword(event) {
+    event.preventDefault();
+
+    const currentPassword = document.getElementById('current-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+    const errorDiv = document.getElementById('password-error');
+
+    // Validate passwords match
+    if (newPassword !== confirmPassword) {
+        errorDiv.textContent = 'New passwords do not match';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/change-gm-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                current_password: currentPassword,
+                new_password: newPassword
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert('Password changed successfully!');
+            hideChangePasswordModal();
+        } else {
+            errorDiv.textContent = result.error || 'Failed to change password';
+            errorDiv.style.display = 'block';
+        }
+    } catch (error) {
+        errorDiv.textContent = 'Error: ' + error.message;
+        errorDiv.style.display = 'block';
+    }
 }
 
 // Player Modal Functions

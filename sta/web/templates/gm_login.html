@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}GM Login - {{ campaign.name }}{% endblock %}
+
+{% block header %}Game Master Access{% endblock %}
+
+{% block sidebar_nav %}
+<a href="{{ url_for('campaigns.campaign_list') }}" class="lcars-sidebar-btn color-6">Back</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 500px; margin: 0 auto;">
+    <!-- Campaign Info -->
+    <div class="lcars-bar-capped">
+        <div class="bar-cap" style="background: var(--lcars-gold);"></div>
+        <div class="bar-content">{{ campaign.name }}</div>
+        <div class="bar-cap" style="background: var(--lcars-orange);"></div>
+    </div>
+
+    <!-- Password Form -->
+    <div class="lcars-panel panel-orange">
+        <p style="color: var(--lcars-almond); margin-bottom: 20px;">
+            Enter the Game Master password to access the GM controls.
+        </p>
+
+        {% if error %}
+        <div style="background: rgba(204, 102, 102, 0.2); border: 1px solid var(--lcars-tomato); padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+            <strong style="color: var(--lcars-tomato);">Access Denied:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('campaigns.gm_login', campaign_id=campaign.campaign_id) }}">
+            <div class="mb-3">
+                <label class="lcars-label" for="password">GM Password</label>
+                <input type="password" id="password" name="password" class="lcars-input" required
+                       placeholder="Enter password" autofocus>
+            </div>
+
+            <div style="display: flex; gap: 15px; justify-content: flex-end; margin-top: 20px;">
+                <a href="{{ url_for('campaigns.join_campaign', campaign_id=campaign.campaign_id) }}"
+                   class="lcars-btn btn-sm" style="background: var(--lcars-gray);">
+                    Join as Player
+                </a>
+                <button type="submit" class="lcars-btn">Access GM Controls</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Help Text -->
+    <div class="lcars-bar" style="background: var(--lcars-ice); margin-top: 20px;">Need Help?</div>
+    <div class="lcars-panel panel-blue">
+        <p style="color: var(--lcars-text); font-size: 0.9em;">
+            The default GM password is <strong>ENGAGE1</strong>. If the GM has changed the password,
+            contact them for access.
+        </p>
+    </div>
+</div>
+{% endblock %}
