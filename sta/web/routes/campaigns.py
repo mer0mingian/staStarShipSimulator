@@ -3,7 +3,7 @@
 import json
 import uuid
 import secrets
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, make_response
 from sta.database import (
     get_session, EncounterRecord, CharacterRecord, StarshipRecord,
     CampaignRecord, CampaignPlayerRecord, CampaignShipRecord
@@ -133,10 +133,20 @@ def campaign_dashboard(campaign_id: str):
             flash("Campaign not found")
             return redirect(url_for("campaigns.campaign_list"))
 
-        # Single-GM mode: if role=gm, skip membership checks
+        # Single-GM mode: if role=gm, skip membership checks and set GM cookie
+        gm_token_to_set = None
         if role == "gm":
             is_gm = True
-            current_player = None
+            # Find the GM player record to get their token
+            gm_player = session.query(CampaignPlayerRecord).filter_by(
+                campaign_id=campaign.id,
+                is_gm=True
+            ).first()
+            if gm_player:
+                current_player = gm_player
+                gm_token_to_set = gm_player.session_token
+            else:
+                current_player = None
         else:
             # Get current user from session token
             session_token = request.cookies.get("sta_session_token")
@@ -219,7 +229,7 @@ def campaign_dashboard(campaign_id: str):
 
         positions = [p.value for p in Position]
 
-        return render_template(
+        response = make_response(render_template(
             "campaign_dashboard.html",
             campaign=campaign,
             current_player=current_player,
@@ -231,7 +241,13 @@ def campaign_dashboard(campaign_id: str):
             draft_encounters=draft_encounters,
             completed_encounters=completed_encounters,
             positions=positions,
-        )
+        ))
+
+        # Set GM cookie if accessing via ?role=gm
+        if gm_token_to_set:
+            response.set_cookie("sta_session_token", gm_token_to_set, max_age=60*60*24*365)
+
+        return response
     finally:
         session.close()
 
