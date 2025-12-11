@@ -495,7 +495,6 @@ def combat(encounter_id: str):
         is_multiplayer = False
 
         if encounter.campaign_id:
-            from sta.database import CampaignPlayerRecord
             campaign_players_query = session.query(CampaignPlayerRecord).filter_by(
                 campaign_id=encounter.campaign_id,
                 is_active=True,
