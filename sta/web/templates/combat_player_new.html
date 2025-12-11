@@ -2229,7 +2229,7 @@
             const talents = talentsText.split('\n').map(t => t.trim()).filter(t => t);
 
             try {
-                const response = await fetch(`/api/campaign/{{ campaign.campaign_id }}/player/{{ player.id }}`, {
+                const response = await fetch(`/api/campaign/{{ campaign.campaign_id }}/player/{{ my_player_id }}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ focuses, talents })
