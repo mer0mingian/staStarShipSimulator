@@ -184,9 +184,71 @@
             color: var(--lcars-tomato);
         }
 
+        .turn-banner.waiting-turn {
+            background: linear-gradient(135deg, #2a2a1a, #3a3a2a);
+            border: 3px solid var(--lcars-butterscotch);
+            color: var(--lcars-butterscotch);
+        }
+
         @keyframes pulse-glow {
             0%, 100% { box-shadow: 0 0 10px var(--lcars-success); }
             50% { box-shadow: 0 0 25px var(--lcars-success); }
+        }
+
+        /* Claim Turn Panel - prominent call to action */
+        .claim-turn-panel {
+            padding: 25px;
+            background: linear-gradient(135deg, #1a2a3a, #2a3a4a);
+            border: 3px solid var(--lcars-ice);
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .claim-turn-panel h3 {
+            color: var(--lcars-ice);
+            margin: 0 0 10px 0;
+            font-size: 1.3em;
+        }
+
+        .claim-turn-panel p {
+            color: var(--lcars-almond);
+            margin: 0 0 15px 0;
+            font-size: 0.95em;
+        }
+
+        .claim-turn-btn {
+            padding: 15px 40px;
+            font-size: 1.2em;
+            background: var(--lcars-success);
+            border: none;
+            border-radius: 25px;
+            color: var(--lcars-text-dark);
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.2s ease;
+            animation: pulse-claim 2s ease-in-out infinite;
+        }
+
+        .claim-turn-btn:hover {
+            background: var(--lcars-ice);
+            transform: scale(1.05);
+        }
+
+        @keyframes pulse-claim {
+            0%, 100% { box-shadow: 0 0 10px var(--lcars-success); }
+            50% { box-shadow: 0 0 25px var(--lcars-success), 0 0 40px rgba(153, 204, 153, 0.3); }
+        }
+
+        /* Turn instruction text */
+        .turn-instruction {
+            font-size: 0.9em;
+            color: var(--lcars-almond);
+            margin-top: 8px;
+            font-weight: normal;
+            text-transform: none;
         }
 
         /* Resource Panel */
@@ -475,6 +537,51 @@
             font-size: 0.85em;
             color: #888;
             margin-top: 3px;
+        }
+
+        /* Action cost badges */
+        .action-cost-badges {
+            display: flex;
+            gap: 6px;
+            margin-top: 5px;
+        }
+
+        .action-cost-badge {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .action-cost-badge.momentum {
+            background: rgba(153, 204, 255, 0.2);
+            border: 1px solid var(--lcars-ice);
+            color: var(--lcars-ice);
+        }
+
+        .action-cost-badge.threat {
+            background: rgba(255, 102, 102, 0.2);
+            border: 1px solid var(--lcars-tomato);
+            color: var(--lcars-tomato);
+        }
+
+        .action-cost-badge.reserve-power {
+            background: rgba(153, 204, 153, 0.2);
+            border: 1px solid var(--lcars-success);
+            color: var(--lcars-success);
+        }
+
+        .action-cost-badge.difficulty {
+            background: rgba(255, 153, 0, 0.2);
+            border: 1px solid var(--lcars-orange);
+            color: var(--lcars-orange);
+        }
+
+        .action-cost-badge.no-roll {
+            background: rgba(170, 102, 204, 0.2);
+            border: 1px solid var(--lcars-african-violet);
+            color: var(--lcars-african-violet);
         }
 
 
@@ -1132,24 +1239,43 @@
                         </div>
 
                         <!-- Turn indicator row -->
-                        <div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'player' %}your-turn{% else %}enemy-turn{% endif %}" style="margin: 0; padding: 10px 15px; display: flex; align-items: center; justify-content: space-between; gap: 15px; flex-wrap: wrap;">
-                            <div style="display: flex; align-items: center; gap: 15px;">
+                        <div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'player' %}{% if is_multiplayer and encounter.current_player_id != my_player_id %}waiting-turn{% else %}your-turn{% endif %}{% else %}enemy-turn{% endif %}" style="margin: 0; padding: 10px 15px; display: flex; align-items: center; justify-content: space-between; gap: 15px; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 15px; flex-direction: column; align-items: flex-start;">
                                 <div id="turn-text" style="font-size: 1.1em; font-weight: bold;">
                                     {% if encounter.current_turn != 'player' %}
-                                    ENEMY TURN - Waiting for GM...
+                                    ENEMY TURN
                                     {% elif is_multiplayer %}
                                         {% if encounter.current_player_id == my_player_id %}
-                                        YOUR TURN - Take one action
+                                        YOUR TURN
                                         {% elif encounter.current_player_id %}
-                                        {{ current_player_name }} is acting...
+                                        {{ current_player_name }}'S TURN
                                         {% else %}
-                                        PLAYER TURN - Claim to act
+                                        CREW TURN
                                         {% endif %}
                                     {% else %}
-                                    YOUR TURN - Take one action
+                                    YOUR TURN
                                     {% endif %}
                                 </div>
-                                <div class="turn-counter" style="font-size: 0.9em; color: var(--lcars-almond);">
+                                <div id="turn-instruction" class="turn-instruction">
+                                    {% if encounter.current_turn != 'player' %}
+                                    The Game Master is controlling enemy ships. Stand by...
+                                    {% elif is_multiplayer %}
+                                        {% if encounter.current_player_id == my_player_id %}
+                                        Select a minor action (optional) then a major action to complete your turn.
+                                        {% elif encounter.current_player_id %}
+                                        Waiting for {{ current_player_name }} to complete their action...
+                                        {% else %}
+                                        It's the crew's turn! Press CLAIM to take your action.
+                                        {% endif %}
+                                    {% else %}
+                                    Select a minor action (optional) then a major action to complete your turn.
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <div class="turn-counter" style="font-size: 0.9em; color: var(--lcars-almond); text-align: center;">
+                                    <div style="font-size: 0.7em; text-transform: uppercase; letter-spacing: 1px;">Actions</div>
                                     {% if is_multiplayer %}
                                     <span id="player-turns-used">0</span> / <span id="player-turns-total">{{ campaign_players | length }}</span>
                                     {% else %}
@@ -1158,21 +1284,17 @@
                                 </div>
                                 <!-- Enemy turns hidden -->
                                 <span style="display: none;"><span id="enemy-turns-used">0</span>/<span id="enemy-turns-total">0</span></span>
-                            </div>
 
-                            <div style="display: flex; align-items: center; gap: 10px;">
                                 {% if is_multiplayer %}
                                 <div id="claim-turn-section" style="{% if encounter.current_turn != 'player' or encounter.current_player_id %}display: none;{% endif %}">
-                                    <button class="btn btn-success" onclick="claimTurn()" style="padding: 6px 15px;">CLAIM TURN</button>
+                                    <button class="claim-turn-btn" onclick="claimTurn()">CLAIM</button>
                                 </div>
                                 <div id="release-turn-section" style="{% if encounter.current_player_id != my_player_id %}display: none;{% endif %}">
                                     <button class="btn btn-secondary" onclick="releaseTurn()" style="padding: 5px 12px; font-size: 0.85em;">RELEASE</button>
                                 </div>
                                 <div id="already-acted-section" style="display: none;">
-                                    <span style="color: var(--lcars-almond); font-size: 0.9em;">Waiting for others...</span>
+                                    <span style="color: var(--lcars-success); font-size: 0.9em; font-weight: bold;">ACTION COMPLETE</span>
                                 </div>
-                                {% else %}
-                                <!-- End Turn button removed - players must use the "Pass" major action to end their turn -->
                                 {% endif %}
                             </div>
                         </div>
@@ -1214,6 +1336,28 @@
                             <div class="action-panel minor">
                                 <h3>Minor Actions</h3>
 
+                                {# Macro for rendering action cost badges #}
+                                {% macro action_cost_badges(action) %}
+                                <div class="action-cost-badges">
+                                    {% if action.difficulty > 0 %}
+                                    <span class="action-cost-badge difficulty">Diff {{ action.difficulty }}</span>
+                                    {% elif action.difficulty == 0 and action.attribute %}
+                                    <span class="action-cost-badge difficulty">Diff 0</span>
+                                    {% else %}
+                                    <span class="action-cost-badge no-roll">No Roll</span>
+                                    {% endif %}
+                                    {% if action.momentum_cost > 0 %}
+                                    <span class="action-cost-badge momentum">{{ action.momentum_cost }} Momentum</span>
+                                    {% endif %}
+                                    {% if action.threat_cost > 0 %}
+                                    <span class="action-cost-badge threat">{{ action.threat_cost }} Threat</span>
+                                    {% endif %}
+                                    {% if action.requires_reserve_power %}
+                                    <span class="action-cost-badge reserve-power">Reserve Power</span>
+                                    {% endif %}
+                                </div>
+                                {% endmacro %}
+
                                 {% if actions.position_minor %}
                                 <h4 class="section-header" style="color: var(--lcars-orange);">{{ actions.position_name }} Specific</h4>
                                 <ul class="action-list">
@@ -1223,12 +1367,18 @@
                                         <strong>{{ 'Lower Shields' if player_ship.shields_raised else 'Raise Shields' }}</strong>
                                         <span class="breach-warning" style="display: none;"></span>
                                         <div class="action-type">{{ action.description }}</div>
+                                        <div class="action-cost-badges">
+                                            <span class="action-cost-badge no-roll">No Roll</span>
+                                        </div>
                                     </li>
                                     {% elif action.name == 'Arm/Disarm Weapons' %}
                                     <li id="weapons-action-btn" onclick="toggleWeapons()" data-action-name="Arm Weapons">
                                         <strong>{{ 'Disarm Weapons' if player_ship.weapons_armed else 'Arm Weapons' }}</strong>
                                         <span class="breach-warning" style="display: none;"></span>
                                         <div class="action-type">{{ action.description }}</div>
+                                        <div class="action-cost-badges">
+                                            <span class="action-cost-badge no-roll">No Roll</span>
+                                        </div>
                                     </li>
                                     {% else %}
                                     <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})"
@@ -1237,6 +1387,7 @@
                                         <strong>{{ action.name }}</strong>
                                         <span class="breach-warning" style="display: none;"></span>
                                         <div class="action-type">{{ action.description }}</div>
+                                        {{ action_cost_badges(action) }}
                                     </li>
                                     {% endif %}
                                     {% endfor %}
@@ -1252,6 +1403,7 @@
                                         <strong>{{ action.name }}</strong>
                                         <span class="breach-warning" style="display: none;"></span>
                                         <div class="action-type">{{ action.description }}</div>
+                                        {{ action_cost_badges(action) }}
                                     </li>
                                     {% endfor %}
                                 </ul>
@@ -1270,11 +1422,9 @@
                                         data-base-difficulty="{{ action.difficulty }}"
                                         class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                                         <strong>{{ action.name }}</strong>
-                                        {% if action.difficulty > 0 %}
-                                        <span class="difficulty-display" style="color: var(--lcars-almond);">(Diff {{ action.difficulty }})</span>
-                                        {% endif %}
                                         <span class="breach-warning" style="display: none;"></span>
                                         <div class="action-type">{{ action.description }}</div>
+                                        {{ action_cost_badges(action) }}
                                     </li>
                                     {% endfor %}
                                 </ul>
@@ -1288,11 +1438,9 @@
                                         data-base-difficulty="{{ action.difficulty }}"
                                         class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
                                         <strong>{{ action.name }}</strong>
-                                        {% if action.difficulty > 0 %}
-                                        <span class="difficulty-display" style="color: var(--lcars-almond);">(Diff {{ action.difficulty }})</span>
-                                        {% endif %}
                                         <span class="breach-warning" style="display: none;"></span>
                                         <div class="action-type">{{ action.description }}</div>
+                                        {{ action_cost_badges(action) }}
                                     </li>
                                     {% endfor %}
                                 </ul>
@@ -4392,6 +4540,7 @@
 
             const banner = document.getElementById('turn-banner');
             const turnText = document.getElementById('turn-text');
+            const turnInstruction = document.getElementById('turn-instruction');
 
             // Get UI elements - some may not exist depending on multiplayer mode
             // Note: end-turn-section removed - players must use "Pass" action to end turn
@@ -4402,44 +4551,65 @@
 
             if (data.current_turn === 'player') {
                 banner.classList.remove('enemy-turn');
-                banner.classList.add('your-turn');
 
                 if (isMultiplayer) {
                     // Check if current player has already acted this round
                     const hasActed = data.players_info?.find(p => p.player_id === myPlayerId)?.has_acted || false;
 
                     if (hasActed) {
-                        turnText.textContent = 'Waiting for other players...';
+                        // Player has already acted - waiting state
+                        banner.classList.remove('your-turn');
+                        banner.classList.add('waiting-turn');
+                        turnText.textContent = 'WAITING';
+                        turnInstruction.textContent = 'You have acted this round. Waiting for other crew members...';
                         if (claimTurnSection) claimTurnSection.style.display = 'none';
                         if (releaseTurnSection) releaseTurnSection.style.display = 'none';
                         if (mpEndTurnSection) mpEndTurnSection.style.display = 'none';
                         if (alreadyActedSection) alreadyActedSection.style.display = 'block';
                     } else if (data.current_player_id === myPlayerId) {
-                        turnText.textContent = 'YOUR TURN - Take one action';
+                        // This player's turn - active state
+                        banner.classList.remove('waiting-turn');
+                        banner.classList.add('your-turn');
+                        turnText.textContent = 'YOUR TURN';
+                        turnInstruction.textContent = 'Select a minor action (optional) then a major action to complete your turn.';
                         if (claimTurnSection) claimTurnSection.style.display = 'none';
                         if (releaseTurnSection) releaseTurnSection.style.display = 'block';
                         if (mpEndTurnSection) mpEndTurnSection.style.display = 'block';
                         if (alreadyActedSection) alreadyActedSection.style.display = 'none';
                     } else if (data.current_player_id) {
-                        turnText.textContent = `${data.current_player_name || 'Another player'} is acting...`;
+                        // Another player is acting - waiting state
+                        banner.classList.remove('your-turn');
+                        banner.classList.add('waiting-turn');
+                        turnText.textContent = `${data.current_player_name || 'CREW MEMBER'}'S TURN`;
+                        turnInstruction.textContent = `Waiting for ${data.current_player_name || 'another player'} to complete their action...`;
                         if (claimTurnSection) claimTurnSection.style.display = 'none';
                         if (releaseTurnSection) releaseTurnSection.style.display = 'none';
                         if (mpEndTurnSection) mpEndTurnSection.style.display = 'none';
                         if (alreadyActedSection) alreadyActedSection.style.display = 'none';
                     } else {
-                        turnText.textContent = 'PLAYER TURN - Claim your turn to act';
+                        // No one has claimed - prompt to claim
+                        banner.classList.remove('waiting-turn');
+                        banner.classList.add('your-turn');
+                        turnText.textContent = 'CREW TURN';
+                        turnInstruction.textContent = "It's the crew's turn! Press CLAIM to take your action.";
                         if (claimTurnSection) claimTurnSection.style.display = 'block';
                         if (releaseTurnSection) releaseTurnSection.style.display = 'none';
                         if (mpEndTurnSection) mpEndTurnSection.style.display = 'none';
                         if (alreadyActedSection) alreadyActedSection.style.display = 'none';
                     }
                 } else {
-                    turnText.textContent = 'YOUR TURN - Take one action';
+                    // Single player mode
+                    banner.classList.add('your-turn');
+                    turnText.textContent = 'YOUR TURN';
+                    turnInstruction.textContent = 'Select a minor action (optional) then a major action to complete your turn.';
                 }
             } else {
+                // Enemy turn
                 banner.classList.remove('your-turn');
+                banner.classList.remove('waiting-turn');
                 banner.classList.add('enemy-turn');
-                turnText.textContent = 'ENEMY TURN - Waiting for Game Master...';
+                turnText.textContent = 'ENEMY TURN';
+                turnInstruction.textContent = 'The Game Master is controlling enemy ships. Stand by...';
                 if (mpEndTurnSection) mpEndTurnSection.style.display = 'none';
                 if (claimTurnSection) claimTurnSection.style.display = 'none';
                 if (releaseTurnSection) releaseTurnSection.style.display = 'none';
