@@ -846,7 +846,9 @@ def api_get_player(campaign_id: str, player_id: int):
                         "medicine": char.disciplines.medicine,
                         "science": char.disciplines.science,
                         "security": char.disciplines.security,
-                    }
+                    },
+                    "focuses": char.focuses or [],
+                    "talents": char.talents or []
                 }
 
         return jsonify({
