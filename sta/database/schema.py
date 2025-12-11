@@ -239,6 +239,7 @@ class EncounterRecord(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     encounter_id: Mapped[str] = mapped_column(String(50), unique=True)
     name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Campaign association (nullable for backward compatibility)
     campaign_id: Mapped[Optional[int]] = mapped_column(ForeignKey("campaigns.id"), nullable=True)
