@@ -848,22 +848,29 @@
             <div class="gm-content">
                 <!-- MAIN TAB -->
                 <div id="tab-main" class="tab-panel active">
-                    <!-- Turn Banner -->
+                    <!-- Turn Banner with Pass Button -->
                     <div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'enemy' %}your-turn{% else %}player-turn{% endif %}">
-                        <div class="turn-text">
-                            {% if encounter.current_turn == 'enemy' %}
-                            YOUR TURN (GM) - Select an enemy action
-                            {% else %}
-                            PLAYER'S TURN - Waiting for crew...
-                            {% endif %}
-                        </div>
-                        <div class="turn-counter">
-                            <span class="turn-count player">
-                                Crew: <span id="player-turns-used">0</span>/<span id="player-turns-total">0</span>
-                            </span>
-                            <span class="turn-count enemy">
-                                Enemy: <span id="enemy-turns-used">0</span>/<span id="enemy-turns-total">0</span>
-                            </span>
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;">
+                            <div>
+                                <div class="turn-text">
+                                    {% if encounter.current_turn == 'enemy' %}
+                                    YOUR TURN (GM) - Select a ship to take action
+                                    {% else %}
+                                    PLAYER'S TURN - Waiting for crew...
+                                    {% endif %}
+                                </div>
+                                <div class="turn-counter">
+                                    <span class="turn-count player">
+                                        Crew: <span id="player-turns-used">0</span>/<span id="player-turns-total">0</span>
+                                    </span>
+                                    <span class="turn-count enemy">
+                                        Enemy: <span id="enemy-turns-used">0</span>/<span id="enemy-turns-total">0</span>
+                                    </span>
+                                </div>
+                            </div>
+                            <button class="btn btn-violet" onclick="nextTurn()" id="end-turn-btn" style="min-width: 180px;">
+                                {% if encounter.current_turn == 'enemy' %}Pass (End Enemy Turns){% else %}Pass (End Player Turns){% endif %}
+                            </button>
                         </div>
                     </div>
 
@@ -888,20 +895,64 @@
                         </div>
                     </div>
 
-                    <!-- Viewscreen Audio Toggle -->
-                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px; padding: 10px; background: #1a1a1a; border-radius: 8px;">
-                        <span style="color: var(--lcars-almond); font-size: 0.9rem;">Viewscreen Audio</span>
-                        <button id="viewscreen-audio-btn" class="btn btn-small" onclick="toggleViewscreenAudio()" style="background: {% if encounter.viewscreen_audio_enabled is not defined or encounter.viewscreen_audio_enabled %}var(--lcars-success){% else %}var(--lcars-tomato){% endif %}; min-width: 60px;">
-                            {% if encounter.viewscreen_audio_enabled is not defined or encounter.viewscreen_audio_enabled %}ON{% else %}OFF{% endif %}
-                        </button>
-                        <span style="color: #666; font-size: 0.8rem;">(Bridge ambient & sound effects)</span>
-                    </div>
+                    <!-- Ships Overview - All ships with shield status and action buttons -->
+                    <div style="margin-bottom: 15px;">
+                        <h3 style="color: var(--lcars-bluey); margin-bottom: 10px;">ALL SHIPS</h3>
 
-                    <!-- End Turn Button -->
-                    <div class="end-turn-section">
-                        <button class="btn btn-violet" onclick="nextTurn()" id="end-turn-btn" style="width: 100%; max-width: 400px;">
-                            {% if encounter.current_turn == 'enemy' %}Pass (End Enemy Turns){% else %}Pass (End Player Turns){% endif %}
-                        </button>
+                        <!-- Player Ship -->
+                        {% if player_ship %}
+                        <div class="ship-overview-card player-ship-card" style="display: flex; align-items: center; gap: 15px; padding: 12px; background: #1a2a1a; border: 2px solid var(--lcars-success); border-radius: 8px; margin-bottom: 8px;">
+                            <div style="flex: 1;">
+                                <div style="color: var(--lcars-success); font-weight: 700;">{{ player_ship.name }}</div>
+                                <div style="color: var(--lcars-almond); font-size: 0.85em;">{{ player_ship.ship_class }}-class (Scale {{ player_ship.scale }})</div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="text-align: center;">
+                                    <div style="font-size: 0.75em; color: var(--lcars-almond);">Shields</div>
+                                    <div style="font-size: 1.1em; color: var(--lcars-success);">
+                                        <span id="overview-player-shields">{{ player_ship.shields }}</span>/{{ player_ship.shields_max }}
+                                    </div>
+                                    <div class="shields-bar" style="width: 80px; height: 6px;">
+                                        <div class="fill" id="overview-player-shields-bar" style="width: {{ (player_ship.shields / player_ship.shields_max * 100) | int }}%; background: var(--lcars-success);"></div>
+                                    </div>
+                                </div>
+                                <span style="padding: 4px 8px; border-radius: 4px; font-size: 0.75em; background: {% if player_ship.shields_raised %}var(--lcars-success){% else %}#555{% endif %}; color: #000;">
+                                    {{ 'UP' if player_ship.shields_raised else 'DOWN' }}
+                                </span>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Enemy Ships with Action Buttons -->
+                        {% for enemy in enemy_ships %}
+                        <div class="ship-overview-card enemy-ship-card" style="display: flex; align-items: center; gap: 15px; padding: 12px; background: #2a1a1a; border: 2px solid var(--lcars-tomato); border-radius: 8px; margin-bottom: 8px;" data-ship-index="{{ loop.index0 }}">
+                            <div style="flex: 1;">
+                                <div style="color: var(--lcars-tomato); font-weight: 700;">{{ enemy.name }}</div>
+                                <div style="color: var(--lcars-almond); font-size: 0.85em;">{{ enemy.ship_class }}-class (Scale {{ enemy.scale }})</div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="text-align: center;">
+                                    <div style="font-size: 0.75em; color: var(--lcars-almond);">Shields</div>
+                                    <div style="font-size: 1.1em; color: var(--lcars-tomato);">
+                                        <span class="overview-enemy-shields">{{ enemy.shields }}</span>/{{ enemy.shields_max }}
+                                    </div>
+                                    <div class="shields-bar" style="width: 80px; height: 6px;">
+                                        <div class="fill overview-enemy-shields-bar" style="width: {{ (enemy.shields / enemy.shields_max * 100) | int }}%; background: var(--lcars-tomato);"></div>
+                                    </div>
+                                </div>
+                                <span style="padding: 4px 8px; border-radius: 4px; font-size: 0.75em; background: {% if enemy.shields_raised %}var(--lcars-tomato){% else %}#555{% endif %}; color: #000;">
+                                    {{ 'UP' if enemy.shields_raised else 'DOWN' }}
+                                </span>
+                                <button class="btn btn-small btn-danger" onclick="selectShipForAction({{ loop.index0 }})" style="min-width: 100px;">
+                                    Take Action
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+
+                        {% if not enemy_ships %}
+                        <p style="color: #666; padding: 15px; background: #1a1a1a; border-radius: 8px;">No enemy ships. Add one from the Ships tab.</p>
+                        {% endif %}
                     </div>
 
                     <!-- Map and Combat Log -->
@@ -911,31 +962,6 @@
                             <div id="tactical-map-container">
                                 <p style="color: #666;">Loading map...</p>
                             </div>
-                            <details style="margin-top: 10px;">
-                                <summary style="cursor: pointer; color: var(--lcars-almond);">Map Editor</summary>
-                                <div style="margin-top: 10px; padding: 10px; background: #1a1a1a; border-radius: 5px;">
-                                    <div style="margin-bottom: 15px;">
-                                        <label class="gm-select-label">Paint Terrain</label>
-                                        <select id="terrain-palette" class="gm-select select-bluey">
-                                            <option value="open">Open Space</option>
-                                            <option value="dust_cloud">Dust Cloud</option>
-                                            <option value="debris_field">Debris Field</option>
-                                            <option value="asteroid_field">Asteroid Field</option>
-                                            <option value="dense_nebula">Dense Nebula</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="gm-select-label">Move Ship</label>
-                                        <select id="ship-to-place" class="gm-select select-success">
-                                            <option value="">-- Select --</option>
-                                            <option value="player">{{ player_ship.name if player_ship else 'Player Ship' }}</option>
-                                            {% for enemy in enemy_ships %}
-                                            <option value="enemy_{{ loop.index0 }}">{{ enemy.name }}</option>
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                </div>
-                            </details>
                         </div>
 
                         <div class="combat-log-panel">
@@ -1179,11 +1205,42 @@
                             </div>
                         </div>
 
-                        <!-- Crew Quality Display -->
-                        <div style="padding: 10px; background: #222; border-radius: 5px; margin-bottom: 15px;">
-                            <strong style="color: var(--lcars-orange);">Crew:</strong>
-                            <span id="npc-crew-quality-display">Talented</span>
-                            <span style="color: var(--lcars-almond);">(Target <span id="npc-target-display">13</span>)</span>
+                        <!-- Selected Ship Details Panel -->
+                        <div id="npc-ship-details" style="padding: 15px; background: #1a1a1a; border: 2px solid var(--lcars-tomato); border-radius: 8px; margin-bottom: 15px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                                <!-- Shields & Status -->
+                                <div>
+                                    <div style="font-size: 0.8em; color: var(--lcars-almond); margin-bottom: 5px;">SHIELDS</div>
+                                    <div style="font-size: 1.4em; color: var(--lcars-tomato);">
+                                        <span id="npc-ship-shields">0</span>/<span id="npc-ship-shields-max">0</span>
+                                    </div>
+                                    <div class="shields-bar" style="width: 100%; height: 8px; margin-top: 5px;">
+                                        <div id="npc-ship-shields-bar" class="fill" style="width: 100%; background: var(--lcars-tomato);"></div>
+                                    </div>
+                                    <div style="font-size: 0.8em; color: var(--lcars-almond); margin-top: 10px;">
+                                        Crew: <span id="npc-crew-quality-display" style="color: var(--lcars-orange);">Talented</span>
+                                        (TN <span id="npc-target-display">13</span>)
+                                    </div>
+                                </div>
+                                <!-- Systems -->
+                                <div>
+                                    <div style="font-size: 0.8em; color: var(--lcars-almond); margin-bottom: 5px;">SYSTEMS</div>
+                                    <div id="npc-ship-systems" style="font-size: 0.85em; display: grid; grid-template-columns: 1fr 1fr; gap: 3px;">
+                                        <!-- Populated by JS -->
+                                    </div>
+                                </div>
+                                <!-- Weapons -->
+                                <div>
+                                    <div style="font-size: 0.8em; color: var(--lcars-almond); margin-bottom: 5px;">WEAPONS</div>
+                                    <div id="npc-ship-weapons" style="font-size: 0.85em;">
+                                        <!-- Populated by JS -->
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Breaches & Effects -->
+                            <div id="npc-ship-breaches-effects" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #333; font-size: 0.85em;">
+                                <!-- Populated by JS -->
+                            </div>
                         </div>
 
                         <!-- Action Lists -->
@@ -1256,6 +1313,46 @@
                 <!-- OVERRIDE TAB -->
                 <div id="tab-override" class="tab-panel">
                     <h2 style="color: var(--lcars-taupe); margin-bottom: 15px;">GM OVERRIDE CONTROLS</h2>
+
+                    <!-- Viewscreen Audio Toggle -->
+                    <div style="margin-bottom: 20px; padding: 15px; background: #1a1a1a; border: 2px solid var(--lcars-bluey); border-radius: 10px;">
+                        <h4 style="color: var(--lcars-bluey); margin-bottom: 10px;">Viewscreen Settings</h4>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <span style="color: var(--lcars-almond); font-size: 0.9rem;">Viewscreen Audio</span>
+                            <button id="viewscreen-audio-btn" class="btn btn-small" onclick="toggleViewscreenAudio()" style="background: {% if encounter.viewscreen_audio_enabled is not defined or encounter.viewscreen_audio_enabled %}var(--lcars-success){% else %}var(--lcars-tomato){% endif %}; min-width: 60px;">
+                                {% if encounter.viewscreen_audio_enabled is not defined or encounter.viewscreen_audio_enabled %}ON{% else %}OFF{% endif %}
+                            </button>
+                            <span style="color: #666; font-size: 0.8rem;">(Bridge ambient & sound effects)</span>
+                        </div>
+                    </div>
+
+                    <!-- Map Editor -->
+                    <div style="margin-bottom: 20px; padding: 15px; background: #0a1a0a; border: 2px solid var(--lcars-success); border-radius: 10px;">
+                        <h4 style="color: var(--lcars-success); margin-bottom: 10px;">Map Editor</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <label class="gm-select-label">Paint Terrain</label>
+                                <select id="terrain-palette" class="gm-select select-bluey">
+                                    <option value="open">Open Space</option>
+                                    <option value="dust_cloud">Dust Cloud</option>
+                                    <option value="debris_field">Debris Field</option>
+                                    <option value="asteroid_field">Asteroid Field</option>
+                                    <option value="dense_nebula">Dense Nebula</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="gm-select-label">Move Ship</label>
+                                <select id="ship-to-place" class="gm-select select-success">
+                                    <option value="">-- Select --</option>
+                                    <option value="player">{{ player_ship.name if player_ship else 'Player Ship' }}</option>
+                                    {% for enemy in enemy_ships %}
+                                    <option value="enemy_{{ loop.index0 }}">{{ enemy.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <p style="color: #666; font-size: 0.8em; margin-top: 10px;">Click on the tactical map to paint terrain or place ships.</p>
+                    </div>
 
                     <!-- Visibility Override -->
                     <div style="margin-bottom: 20px; padding: 15px; background: #1a1a2a; border: 2px solid var(--lcars-african-violet); border-radius: 10px;">
@@ -1392,7 +1489,7 @@
         const playerInFog = {{ 'true' if player_in_fog else 'false' }};  // Is player ship in fog terrain?
 
         // Tab navigation
-        function showTab(tabName) {
+        function showTab(tabName, saveToStorage = true) {
             // Hide all panels
             document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.gm-nav-tab').forEach(t => t.classList.remove('active'));
@@ -1400,6 +1497,32 @@
             // Show selected
             document.getElementById('tab-' + tabName).classList.add('active');
             document.querySelector('.tab-' + tabName).classList.add('active');
+
+            // Save to sessionStorage so we can restore after reload
+            if (saveToStorage) {
+                sessionStorage.setItem('gm_active_tab', tabName);
+            }
+        }
+
+        // Restore tab from sessionStorage on page load
+        (function restoreTab() {
+            const savedTab = sessionStorage.getItem('gm_active_tab');
+            if (savedTab) {
+                showTab(savedTab, false);
+            }
+        })();
+
+        // Select a ship and go to NPC Actions tab
+        function selectShipForAction(shipIndex) {
+            // Set the ship dropdown in NPC Actions tab
+            const shipSelect = document.getElementById('npc-action-ship');
+            if (shipSelect) {
+                shipSelect.value = shipIndex;
+                // Trigger the change event to update ship info
+                updateNpcActionShipInfo();
+            }
+            // Switch to NPC Actions tab
+            showTab('npc');
         }
 
         // Toast notification
@@ -1682,9 +1805,25 @@
             {% for enemy in enemy_ships %}
             {
                 name: "{{ enemy.name }}",
+                shipClass: "{{ enemy.ship_class }}",
+                scale: {{ enemy.scale }},
                 shipId: {{ enemy_ship_db_ids[loop.index0] }},
+                crew_quality: "{{ enemy.crew_quality.value if enemy.crew_quality else 'talented' }}",
                 crew_target: {{ enemy.crew_quality.target_number if enemy.crew_quality else 13 }},
-                weapons: [{% for weapon in enemy.weapons %}{ name: "{{ weapon.name }}", damage: {{ weapon.damage }} }{% if not loop.last %},{% endif %}{% endfor %}],
+                shields: {{ enemy.shields }},
+                shieldsMax: {{ enemy.shields_max }},
+                shieldsRaised: {{ 'true' if enemy.shields_raised else 'false' }},
+                resistance: {{ enemy.resistance }},
+                systems: {
+                    comms: {{ enemy.systems.comms }},
+                    computers: {{ enemy.systems.computers }},
+                    engines: {{ enemy.systems.engines }},
+                    sensors: {{ enemy.systems.sensors }},
+                    structure: {{ enemy.systems.structure }},
+                    weapons: {{ enemy.systems.weapons }}
+                },
+                breaches: [{% for breach in enemy.breaches %}{ system: "{{ breach.system_name }}", potency: {{ breach.potency }} }{% if not loop.last %},{% endif %}{% endfor %}],
+                weapons: [{% for weapon in enemy.weapons %}{ name: "{{ weapon.name }}", damage: {{ weapon.damage }}, range: "{{ weapon.range.value }}" }{% if not loop.last %},{% endif %}{% endfor %}],
                 weaponsDamageBonus: {{ enemy.weapons_damage_bonus() }}
             }{% if not loop.last %},{% endif %}
             {% endfor %}
@@ -1693,6 +1832,7 @@
         let selectedNpcAction = null;
         let selectedActionCategory = null;
         let selectedImpulseDestination = null;
+        let npcMinorUsed = false;  // Track if minor action used this turn
 
         function initNpcActionPanel() {
             updateNpcActionDisplay();
@@ -1704,8 +1844,48 @@
             const option = select.options[select.selectedIndex];
             const shipData = enemyShipsData[parseInt(select.value)];
 
-            document.getElementById('npc-crew-quality-display').textContent = option.dataset.crewQuality || 'Talented';
-            document.getElementById('npc-target-display').textContent = option.dataset.crewTarget || '13';
+            if (!shipData) return;
+
+            // Update crew quality
+            document.getElementById('npc-crew-quality-display').textContent = shipData.crew_quality || 'Talented';
+            document.getElementById('npc-target-display').textContent = shipData.crew_target || '13';
+
+            // Update shields
+            document.getElementById('npc-ship-shields').textContent = shipData.shields;
+            document.getElementById('npc-ship-shields-max').textContent = shipData.shieldsMax;
+            const shieldPercent = shipData.shieldsMax > 0 ? (shipData.shields / shipData.shieldsMax * 100) : 0;
+            document.getElementById('npc-ship-shields-bar').style.width = shieldPercent + '%';
+
+            // Update systems
+            const systemsDiv = document.getElementById('npc-ship-systems');
+            const systemNames = {comms: 'COM', computers: 'CPU', engines: 'ENG', sensors: 'SEN', structure: 'STR', weapons: 'WPN'};
+            let systemsHtml = '';
+            for (const [key, label] of Object.entries(systemNames)) {
+                const value = shipData.systems[key];
+                const breach = shipData.breaches.find(b => b.system === key);
+                const breachPenalty = breach ? breach.potency : 0;
+                const color = breachPenalty > 0 ? 'var(--lcars-tomato)' : 'var(--lcars-text)';
+                systemsHtml += `<div style="color: ${color}">${label}: ${value}${breachPenalty > 0 ? ` (-${breachPenalty})` : ''}</div>`;
+            }
+            systemsDiv.innerHTML = systemsHtml;
+
+            // Update weapons
+            const weaponsDiv = document.getElementById('npc-ship-weapons');
+            let weaponsHtml = '';
+            shipData.weapons.forEach(w => {
+                weaponsHtml += `<div>${w.name}: ${w.damage}+${shipData.weaponsDamageBonus} (${w.range})</div>`;
+            });
+            weaponsDiv.innerHTML = weaponsHtml || '<div style="color: #666;">No weapons</div>';
+
+            // Update breaches and effects
+            const breachesEffectsDiv = document.getElementById('npc-ship-breaches-effects');
+            let beHtml = '';
+            if (shipData.breaches.length > 0) {
+                beHtml += '<span style="color: var(--lcars-tomato);">Breaches: ';
+                beHtml += shipData.breaches.map(b => `${b.system} (${b.potency})`).join(', ');
+                beHtml += '</span>';
+            }
+            breachesEffectsDiv.innerHTML = beHtml || '<span style="color: #666;">No breaches</span>';
 
             updateFireWeaponOptions(shipData);
             clearActionSelection();
@@ -1765,6 +1945,12 @@
         function selectNpcAction(action, category, element) {
             if (currentTurn !== 'enemy') {
                 showToast("Not enemy's turn!", 'error');
+                return;
+            }
+
+            // Prevent selecting another minor action if one was already used
+            if (category === 'minor' && npcMinorUsed) {
+                showToast("Minor action already used this turn", 'error');
                 return;
             }
 
@@ -2004,8 +2190,26 @@
 
                 resultsDiv.innerHTML = resultHtml;
 
+                // Save category before clearing (clearActionSelection nulls it)
+                const wasMinorAction = selectedActionCategory === 'minor';
                 clearActionSelection();
-                setTimeout(() => location.reload(), 2500);
+
+                // Check if this was a minor action
+                // Minor actions: stay on screen, allow major action next
+                // Major actions: always reload (even if enemy has more turns)
+                if (wasMinorAction) {
+                    // Minor action - stay on screen, disable minor actions, allow major action
+                    resultsDiv.innerHTML += `<div style="margin-top: 10px; color: var(--lcars-almond);">Minor action complete. Select a major action to continue.</div>`;
+                    // Disable minor action buttons
+                    document.querySelectorAll('#npc-minor-actions li').forEach(li => {
+                        li.style.opacity = '0.5';
+                        li.style.pointerEvents = 'none';
+                    });
+                    npcMinorUsed = true;
+                } else {
+                    // Major action - always reload to refresh state
+                    setTimeout(() => location.reload(), 2500);
+                }
             } catch (err) {
                 resultsDiv.style.display = 'block';
                 resultsDiv.innerHTML = `<strong style="color: var(--lcars-tomato);">ERROR:</strong> ${err.message}`;

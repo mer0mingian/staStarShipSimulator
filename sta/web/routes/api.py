@@ -3,7 +3,7 @@
 import json
 from datetime import datetime
 from flask import Blueprint, request, jsonify
-from sta.database import get_session, EncounterRecord, StarshipRecord, CharacterRecord, CombatLogRecord
+from sta.database import get_session, EncounterRecord, StarshipRecord, CharacterRecord, CombatLogRecord, CampaignRecord
 from sta.mechanics import task_roll, assisted_task_roll
 from sta.models.enums import SystemType, TerrainType, Range
 from sta.models.combat import ActiveEffect, HexCoord, TacticalMap, HexTile
@@ -519,12 +519,25 @@ def get_enemy_turn_info(session, encounter):
     """Calculate enemy turn economy info.
 
     Returns dict with:
-        - total_turns: sum of all enemy ship Scales
+        - total_turns: sum of all enemy ship Scales (with multiplier applied)
         - turns_used: total turns used this round
         - ships_info: list of {ship_id, name, scale, turns_used, turns_remaining}
+
+    If the encounter has an associated campaign with an enemy_turn_multiplier,
+    that multiplier is applied to each ship's scale (rounded up) to determine
+    how many turns each ship gets per round.
     """
+    import math
+
     enemy_ids = json.loads(encounter.enemy_ship_ids_json)
     ships_turns_used = json.loads(encounter.ships_turns_used_json)
+
+    # Get the turn multiplier from the campaign if available
+    turn_multiplier = 1.0  # Default: ships get Scale turns
+    if encounter.campaign_id:
+        campaign = session.query(CampaignRecord).filter_by(id=encounter.campaign_id).first()
+        if campaign and campaign.enemy_turn_multiplier is not None:
+            turn_multiplier = campaign.enemy_turn_multiplier
 
     ships_info = []
     total_turns = 0
@@ -533,16 +546,19 @@ def get_enemy_turn_info(session, encounter):
     for ship_id in enemy_ids:
         ship = session.query(StarshipRecord).filter_by(id=ship_id).first()
         if ship:
+            # Apply multiplier and round up (minimum 1 turn)
+            ship_turns = max(1, math.ceil(ship.scale * turn_multiplier))
             turns_used = ships_turns_used.get(str(ship_id), 0)
             ships_info.append({
                 "ship_id": ship_id,
                 "name": ship.name,
                 "scale": ship.scale,
+                "ship_turns": ship_turns,  # Effective turns after multiplier
                 "turns_used": turns_used,
-                "turns_remaining": ship.scale - turns_used,
-                "can_act": turns_used < ship.scale,
+                "turns_remaining": ship_turns - turns_used,
+                "can_act": turns_used < ship_turns,
             })
-            total_turns += ship.scale
+            total_turns += ship_turns
             total_used += turns_used
 
     return {
@@ -550,6 +566,7 @@ def get_enemy_turn_info(session, encounter):
         "turns_used": total_used,
         "turns_remaining": total_turns - total_used,
         "ships_info": ships_info,
+        "turn_multiplier": turn_multiplier,
     }
 
 
@@ -727,6 +744,18 @@ def alternate_turn_after_action(session, encounter, player_id: int = None):
             encounter.current_turn = "enemy"
         # else stay on player (they get consecutive turns)
 
+    # Apply any pending position changes when switching to player turn
+    if encounter.current_turn == "player" and encounter.campaign_id:
+        from sta.database.schema import CampaignPlayerRecord
+        campaign_players = session.query(CampaignPlayerRecord).filter_by(
+            campaign_id=encounter.campaign_id,
+            is_active=True
+        ).all()
+        for player in campaign_players:
+            if player.pending_position:
+                player.position = player.pending_position
+                player.pending_position = None
+
     return {
         "current_turn": encounter.current_turn,
         "round": encounter.round,
@@ -832,7 +861,9 @@ def next_turn(encounter_id: str):
             # Enemy passes - mark all enemy turns as used
             ships_turns_used = json.loads(encounter.ships_turns_used_json)
             for ship_info in enemy_info["ships_info"]:
-                ships_turns_used[str(ship_info["ship_id"])] = ship_info["scale"]
+                # Use ship_turns (with multiplier) if available, else fall back to scale
+                max_turns = ship_info.get("ship_turns", ship_info["scale"])
+                ships_turns_used[str(ship_info["ship_id"])] = max_turns
             encounter.ships_turns_used_json = json.dumps(ships_turns_used)
 
         # Now alternate to determine next turn owner
@@ -1127,6 +1158,13 @@ def fire_weapon():
             enc = session.query(EncounterRecord).filter_by(encounter_id=encounter_id).first()
             if enc and enc.current_turn != "player":
                 return jsonify({"error": "It's not the player's turn!"}), 403
+
+            # Multiplayer: Check if this specific player has already acted this round
+            if enc and enc.campaign_id and player_id:
+                players_turns_used = json.loads(enc.players_turns_used_json or "{}")
+                player_data = players_turns_used.get(str(player_id), {})
+                if player_data.get("acted", False):
+                    return jsonify({"error": "You have already acted this round"}), 403
         finally:
             session.close()
 
@@ -1527,6 +1565,7 @@ def ram_action(encounter_id: str):
     focus = data.get("focus", False)
     bonus_dice = data.get("bonus_dice", 0)
     character_id = data.get("character_id")  # Optional: override acting character for logging
+    player_id = data.get("player_id")  # Campaign player ID for multiplayer turn tracking
 
     session = get_session()
     try:
@@ -1540,6 +1579,13 @@ def ram_action(encounter_id: str):
         # Check turn ownership
         if encounter.current_turn != "player":
             return jsonify({"error": "It's not the player's turn!"}), 403
+
+        # Multiplayer: Check if this specific player has already acted this round
+        if encounter.campaign_id and player_id:
+            players_turns_used = json.loads(encounter.players_turns_used_json or "{}")
+            player_data = players_turns_used.get(str(player_id), {})
+            if player_data.get("acted", False):
+                return jsonify({"error": "You have already acted this round"}), 403
 
         # Validate and deduct momentum for bonus dice (escalating: 1st=1, 2nd=2, 3rd=3)
         if bonus_dice > 0:
@@ -1792,6 +1838,7 @@ def ram_action(encounter_id: str):
                 "succeeded": result.succeeded,
             },
             damage_dealt=player_collision_damage if result.succeeded else 0,
+            player_id=player_id,
         )
         response.update(turn_state)
 
@@ -1901,6 +1948,7 @@ def execute_action(encounter_id: str):
     action_name = data.get("action_name")
     role = data.get("role", "player")  # Default to player for backward compatibility
     character_id = data.get("character_id")  # Optional: override acting character for logging
+    player_id = data.get("player_id")  # Campaign player ID for multiplayer turn tracking
 
     # Check turn ownership for player actions
     if role == "player":
@@ -1909,6 +1957,19 @@ def execute_action(encounter_id: str):
             enc = session.query(EncounterRecord).filter_by(encounter_id=encounter_id).first()
             if enc and enc.current_turn != "player":
                 return jsonify({"error": "It's not the player's turn!"}), 403
+
+            # Multiplayer: Check if this specific player has already acted this round
+            if enc and enc.campaign_id and player_id:
+                players_turns_used = json.loads(enc.players_turns_used_json or "{}")
+                player_data = players_turns_used.get(str(player_id), {})
+                if player_data.get("acted", False):
+                    return jsonify({"error": "You have already acted this round"}), 403
+
+                # Check if trying to do a minor action when already used minor this turn
+                action_config = get_action_config(action_name)
+                if action_config and not is_major_action(action_name):
+                    if player_data.get("minor_used", False):
+                        return jsonify({"error": "You have already used your minor action this turn"}), 403
         finally:
             session.close()
 
@@ -2396,6 +2457,7 @@ def execute_action(encounter_id: str):
                 action_name=action_name,
                 description=result.message,
                 task_result=task_result_data,
+                player_id=player_id,
             )
             response.update(turn_state)
         else:
@@ -2405,6 +2467,7 @@ def execute_action(encounter_id: str):
                 action_name=action_name,
                 description=result.message,
                 task_result=task_result_data,
+                player_id=player_id,
             )
 
         # Always include current momentum (may have been spent on bonus dice)
@@ -2485,14 +2548,22 @@ def npc_action(encounter_id: str):
             return jsonify({"error": "NPC ship not found"}), 404
         npc_ship = npc_ship_record.to_model()
 
+        # Calculate effective turns using campaign multiplier
+        import math
+        ship_max_turns = npc_ship_record.scale  # Default: scale turns
+        if encounter_record.campaign_id:
+            campaign = session.query(CampaignRecord).filter_by(id=encounter_record.campaign_id).first()
+            if campaign and campaign.enemy_turn_multiplier is not None:
+                ship_max_turns = max(1, math.ceil(npc_ship_record.scale * campaign.enemy_turn_multiplier))
+
         # Determine if this is a major action (ends turn)
         # Uses centralized is_major_action() function from action_config
         action_is_major = is_major_action(action_name)
 
         # Check if ship can act (for major actions, must have turns remaining)
-        if action_is_major and ship_turns_used >= npc_ship_record.scale:
+        if action_is_major and ship_turns_used >= ship_max_turns:
             return jsonify({
-                "error": f"{npc_ship.name} has used all {npc_ship_record.scale} turns this round!"
+                "error": f"{npc_ship.name} has used all {ship_max_turns} turns this round!"
             }), 400
 
         # Load active effects
@@ -2910,6 +2981,9 @@ def npc_action(encounter_id: str):
                 description=result.get("message", f"{npc_ship.name} performed {action_name}"),
                 task_result=task_result_data,
             )
+            # Add turn state info for minor action - turn doesn't end
+            result["turn_ended"] = False
+            result["current_turn"] = "enemy"
 
         session.commit()
 
@@ -2972,9 +3046,18 @@ def gm_attack(encounter_id: str):
         # Check if this ship can still act (has turns remaining)
         ships_turns_used = json.loads(encounter_record.ships_turns_used_json)
         ship_turns_used = ships_turns_used.get(str(enemy_id), 0)
-        if ship_turns_used >= enemy_record.scale:
+
+        # Calculate effective turns using campaign multiplier
+        import math
+        ship_max_turns = enemy_record.scale  # Default: scale turns
+        if encounter_record.campaign_id:
+            campaign = session.query(CampaignRecord).filter_by(id=encounter_record.campaign_id).first()
+            if campaign and campaign.enemy_turn_multiplier is not None:
+                ship_max_turns = max(1, math.ceil(enemy_record.scale * campaign.enemy_turn_multiplier))
+
+        if ship_turns_used >= ship_max_turns:
             return jsonify({
-                "error": f"{enemy_ship.name} has used all {enemy_record.scale} turns this round!"
+                "error": f"{enemy_ship.name} has used all {ship_max_turns} turns this round!"
             }), 400
 
         # Get enemy weapon
