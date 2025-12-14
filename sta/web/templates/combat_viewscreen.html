@@ -1422,10 +1422,14 @@
             initViewscreen();
             createAudioOverlay();
 
-            // Initialize announcements system
+            // Initialize announcements system with TTS for viewscreen
             const announcements = new CombatAnnouncements(encounterId, {
                 pollInterval: 2000,      // Poll every 2 seconds
-                displayDuration: 6000    // Show for 6 seconds
+                displayDuration: 6000,   // Show for 6 seconds
+                enableTTS: true,         // Enable text-to-speech for viewscreen
+                ttsRate: 1.1,            // Slightly faster speech
+                ttsPitch: 0.9,           // Slightly lower pitch (more "computer-like")
+                ttsVolume: 1.0           // Full volume
             });
         });
     </script>
