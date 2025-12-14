@@ -340,6 +340,10 @@ class CampaignRecord(Base):
     # GM password (hashed) - default is "ENGAGE1"
     gm_password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
+    # Enemy turn multiplier - scales enemy ship turns (default 0.5 = half of Scale)
+    # e.g., Scale 6 ship with 0.5 multiplier gets 3 turns per round
+    enemy_turn_multiplier: Mapped[Optional[float]] = mapped_column(default=0.5, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -354,7 +358,8 @@ class CampaignPlayerRecord(Base):
 
     # Player identity (session-based)
     player_name: Mapped[str] = mapped_column(String(50))  # Display name
-    session_token: Mapped[str] = mapped_column(String(100), unique=True)  # For identifying returning players
+    # session_token is None for unclaimed characters, set when a player claims them
+    session_token: Mapped[Optional[str]] = mapped_column(String(100), unique=True, nullable=True)
 
     # Bridge position assignment
     position: Mapped[str] = mapped_column(String(20), default="captain")

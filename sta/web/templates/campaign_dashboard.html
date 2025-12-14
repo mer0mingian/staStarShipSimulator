@@ -224,6 +224,28 @@
         {% endif %}
     </div>
 
+    <!-- Campaign Settings Panel (GM Only) -->
+    {% if is_gm %}
+    <div class="panel" style="border-color: var(--lcars-orange);">
+        <h2>Combat Settings</h2>
+        <div style="margin-bottom: 15px;">
+            <label style="display: block; color: var(--lcars-tan); font-size: 0.9em; margin-bottom: 5px;">
+                Enemy Turn Multiplier
+            </label>
+            <p style="color: #666; font-size: 0.8em; margin-bottom: 10px;">
+                Scales the number of turns enemy ships get per round. Default: 0.5 (half of Scale).
+                <br>Example: Scale 6 ship with 0.5 multiplier = 3 turns per round.
+            </p>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="number" id="enemy-turn-multiplier" value="{{ campaign.enemy_turn_multiplier or 0.5 }}"
+                       min="0.1" max="2.0" step="0.1" style="width: 80px; text-align: center;">
+                <button class="btn btn-small" onclick="updateTurnMultiplier()">Save</button>
+                <span id="turn-multiplier-status" style="font-size: 0.85em; color: var(--lcars-almond);"></span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Ship Pool Panel (GM Only) -->
     {% if is_gm %}
     <div class="panel" style="border-color: var(--lcars-purple);">
@@ -637,6 +659,50 @@ async function changePassword(event) {
     }
 }
 
+// Combat Settings Functions
+async function updateTurnMultiplier() {
+    const input = document.getElementById('enemy-turn-multiplier');
+    const statusSpan = document.getElementById('turn-multiplier-status');
+    const multiplier = parseFloat(input.value);
+
+    // Client-side validation
+    if (isNaN(multiplier) || multiplier < 0.1 || multiplier > 2.0) {
+        if (statusSpan) {
+            statusSpan.textContent = 'Must be 0.1-2.0';
+            statusSpan.style.color = 'var(--lcars-red)';
+        }
+        return;
+    }
+
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enemy_turn_multiplier: multiplier })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            if (statusSpan) {
+                statusSpan.textContent = 'Saved!';
+                statusSpan.style.color = 'var(--lcars-green)';
+                setTimeout(() => { statusSpan.textContent = ''; }, 2000);
+            }
+        } else {
+            if (statusSpan) {
+                statusSpan.textContent = result.error || 'Error saving';
+                statusSpan.style.color = 'var(--lcars-red)';
+            }
+        }
+    } catch (error) {
+        if (statusSpan) {
+            statusSpan.textContent = 'Error: ' + error.message;
+            statusSpan.style.color = 'var(--lcars-red)';
+        }
+    }
+}
+
 // Player Modal Functions
 function showAddPlayerModal() {
     document.getElementById('add-player-modal').style.display = 'flex';
@@ -656,28 +722,39 @@ async function createPlayer(event) {
         species: document.getElementById('char-species').value,
         role: document.getElementById('char-role').value,
         attributes: {
-            control: parseInt(document.getElementById('attr-control').value),
-            daring: parseInt(document.getElementById('attr-daring').value),
-            fitness: parseInt(document.getElementById('attr-fitness').value),
-            insight: parseInt(document.getElementById('attr-insight').value),
-            presence: parseInt(document.getElementById('attr-presence').value),
-            reason: parseInt(document.getElementById('attr-reason').value),
+            control: parseInt(document.getElementById('attr-control').value) || 9,
+            daring: parseInt(document.getElementById('attr-daring').value) || 9,
+            fitness: parseInt(document.getElementById('attr-fitness').value) || 9,
+            insight: parseInt(document.getElementById('attr-insight').value) || 9,
+            presence: parseInt(document.getElementById('attr-presence').value) || 9,
+            reason: parseInt(document.getElementById('attr-reason').value) || 9,
         },
         disciplines: {
-            command: parseInt(document.getElementById('disc-command').value),
-            conn: parseInt(document.getElementById('disc-conn').value),
-            engineering: parseInt(document.getElementById('disc-engineering').value),
-            medicine: parseInt(document.getElementById('disc-medicine').value),
-            science: parseInt(document.getElementById('disc-science').value),
-            security: parseInt(document.getElementById('disc-security').value),
+            command: parseInt(document.getElementById('disc-command').value) || 2,
+            conn: parseInt(document.getElementById('disc-conn').value) || 2,
+            engineering: parseInt(document.getElementById('disc-engineering').value) || 2,
+            medicine: parseInt(document.getElementById('disc-medicine').value) || 2,
+            science: parseInt(document.getElementById('disc-science').value) || 2,
+            security: parseInt(document.getElementById('disc-security').value) || 2,
         }
     };
 
+    // Construct URL safely
+    const url = '/campaigns/api/campaign/' + encodeURIComponent(campaignId) + '/players';
+
     try {
-        const response = await fetch(`/campaigns/api/campaign/${campaignId}/players`, {
+        const bodyStr = JSON.stringify(characterData);
+        console.log('Sending request to:', url);
+        console.log('Body:', bodyStr);
+
+        const response = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(characterData)
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: bodyStr,
+            credentials: 'same-origin'
         });
         if (response.ok) {
             window.location.reload();
@@ -686,13 +763,17 @@ async function createPlayer(event) {
             alert('Error: ' + (data.error || 'Unknown error'));
         }
     } catch (error) {
+        console.error('Create player error:', error);
+        console.error('URL:', url);
+        console.error('Data:', JSON.stringify(characterData, null, 2));
         alert('Error creating player: ' + error.message);
     }
 }
 
 async function generateRandomPlayer() {
+    const url = '/campaigns/api/campaign/' + encodeURIComponent(campaignId) + '/players';
     try {
-        const response = await fetch(`/campaigns/api/campaign/${campaignId}/players`, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'generate' })
@@ -704,6 +785,7 @@ async function generateRandomPlayer() {
             alert('Error: ' + (data.error || 'Unknown error'));
         }
     } catch (error) {
+        console.error('Generate player error:', error, 'URL:', url);
         alert('Error generating player: ' + error.message);
     }
 }

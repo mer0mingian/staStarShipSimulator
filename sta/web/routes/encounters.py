@@ -413,7 +413,28 @@ def combat(encounter_id: str):
 
         # Player ship position
         player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
-        if player_ship:
+
+        # Check if player is in fog-blocking terrain (Bug #113 fix)
+        # For GM view, hide player position if in fog and not detected by enemies
+        player_terrain = get_terrain_at_position(tactical_map_data, player_pos.get("q", 0), player_pos.get("r", 0))
+        player_in_fog_early = player_terrain in VISIBILITY_BLOCKING_TERRAIN
+
+        # Determine if player should be shown on map
+        # - Players always see their own ship
+        # - GM/viewscreen see player unless they're in fog (and not detected)
+        show_player_on_map = True
+        if role == "gm" and player_in_fog_early:
+            # GM can't see player in fog unless an enemy is in same hex
+            # (Full detection check happens later, but we do basic check here)
+            show_player_on_map = False
+            # Check if any enemy is in same hex - then player is visible
+            for i in range(len(json.loads(encounter.enemy_ship_ids_json or "[]"))):
+                enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 999, "r": 999})
+                if enemy_pos.get("q") == player_pos.get("q") and enemy_pos.get("r") == player_pos.get("r"):
+                    show_player_on_map = True
+                    break
+
+        if player_ship and show_player_on_map:
             ship_positions.append({
                 "id": "player",
                 "name": player_ship.name,
@@ -425,16 +446,32 @@ def combat(encounter_id: str):
         # GM and viewscreen see all ships
         detected_positions = get_detected_positions(active_effects) if role == "player" else []
 
-        # Enemy ship positions (filter by visibility for player role)
-        for i, enemy in enumerate(enemy_ships):
-            enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
+        # Filter enemy_ships list by visibility for player role (Bug #107 fix)
+        # This ensures the sidebar ship list only shows visible enemies
+        # We track original indices to maintain correct position lookups
+        if role == "player":
+            visible_enemy_ships = []
+            visible_enemy_db_ids = []
+            visible_enemy_indices = []  # Track original indices for position lookup
+            for i, enemy in enumerate(enemy_ships):
+                enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
+                if is_enemy_visible(player_pos, enemy_pos, tactical_map_data, detected_positions):
+                    visible_enemy_ships.append(enemy)
+                    visible_enemy_db_ids.append(enemy_ship_db_ids[i])
+                    visible_enemy_indices.append(i)
+            enemy_ships = visible_enemy_ships
+            enemy_ship_db_ids = visible_enemy_db_ids
+        else:
+            # For GM/viewscreen, all enemies are visible
+            visible_enemy_indices = list(range(len(enemy_ships)))
 
-            # For player role, only show visible enemies
-            if role == "player" and not is_enemy_visible(player_pos, enemy_pos, tactical_map_data, detected_positions):
-                continue  # Skip hidden enemy
+        # Enemy ship positions (use original indices for position lookup)
+        for list_idx, enemy in enumerate(enemy_ships):
+            original_idx = visible_enemy_indices[list_idx]
+            enemy_pos = ship_positions_data.get(f"enemy_{original_idx}", {"q": 2, "r": -1 + original_idx})
 
             ship_positions.append({
-                "id": f"enemy_{i}",
+                "id": f"enemy_{original_idx}",
                 "name": enemy.name,
                 "faction": "enemy",
                 "position": enemy_pos

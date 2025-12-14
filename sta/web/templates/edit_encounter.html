@@ -40,17 +40,83 @@
             <h2 style="color: var(--lcars-red);">Enemy Ships ({{ enemy_ships | length }})</h2>
             <div id="enemy-ships-list">
                 {% for enemy in enemy_ships %}
-                <div style="background: #222; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
-                    <strong style="color: var(--lcars-red);">{{ enemy.name }}</strong>
-                    <div style="font-size: 0.85em; color: var(--lcars-tan);">
-                        Scale {{ enemy.scale }} | {{ enemy.crew_quality or 'Standard' }} Crew
+                <div class="ship-card" data-ship-id="{{ enemy.id }}" style="background: #222; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <strong style="color: var(--lcars-red);">{{ enemy.name }}</strong>
+                        <button type="button" class="btn btn-small" onclick="toggleShipEdit({{ enemy.id }})" style="background: #444; font-size: 0.8em;">
+                            Edit
+                        </button>
+                    </div>
+                    <div class="ship-summary" style="font-size: 0.85em; color: var(--lcars-tan);">
+                        Scale {{ enemy.scale }} | Shields {{ enemy.shields }}/{{ enemy.shields_max }} | {{ enemy.crew_quality or 'basic' }} Crew
+                    </div>
+                    <div class="ship-edit-form" id="ship-edit-{{ enemy.id }}" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 0.8em; color: var(--lcars-tan);">Name</label>
+                                <input type="text" class="ship-field" data-field="name" value="{{ enemy.name }}" style="width: 100%; font-size: 0.9em;">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.8em; color: var(--lcars-tan);">Scale</label>
+                                <input type="number" class="ship-field" data-field="scale" value="{{ enemy.scale }}" min="1" max="10" style="width: 100%; font-size: 0.9em;">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.8em; color: var(--lcars-tan);">Shields</label>
+                                <input type="number" class="ship-field" data-field="shields" value="{{ enemy.shields }}" min="0" style="width: 100%; font-size: 0.9em;">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.8em; color: var(--lcars-tan);">Max Shields</label>
+                                <input type="number" class="ship-field" data-field="shields_max" value="{{ enemy.shields_max }}" min="0" style="width: 100%; font-size: 0.9em;">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.8em; color: var(--lcars-tan);">Resistance</label>
+                                <input type="number" class="ship-field" data-field="resistance" value="{{ enemy.resistance }}" min="0" style="width: 100%; font-size: 0.9em;">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.8em; color: var(--lcars-tan);">Crew Quality</label>
+                                <select class="ship-field" data-field="crew_quality" style="width: 100%; font-size: 0.9em;">
+                                    <option value="basic" {% if enemy.crew_quality == 'basic' %}selected{% endif %}>Basic</option>
+                                    <option value="proficient" {% if enemy.crew_quality == 'proficient' %}selected{% endif %}>Proficient</option>
+                                    <option value="talented" {% if enemy.crew_quality == 'talented' %}selected{% endif %}>Talented</option>
+                                    <option value="exceptional" {% if enemy.crew_quality == 'exceptional' %}selected{% endif %}>Exceptional</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <label style="font-size: 0.8em; color: var(--lcars-tan);">Systems</label>
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;">
+                                {% set systems = enemy.to_model().systems %}
+                                <div><span style="font-size: 0.75em;">COM</span><input type="number" class="ship-system" data-system="comms" value="{{ systems.comms }}" min="0" max="15" style="width: 100%;"></div>
+                                <div><span style="font-size: 0.75em;">CPU</span><input type="number" class="ship-system" data-system="computers" value="{{ systems.computers }}" min="0" max="15" style="width: 100%;"></div>
+                                <div><span style="font-size: 0.75em;">ENG</span><input type="number" class="ship-system" data-system="engines" value="{{ systems.engines }}" min="0" max="15" style="width: 100%;"></div>
+                                <div><span style="font-size: 0.75em;">SEN</span><input type="number" class="ship-system" data-system="sensors" value="{{ systems.sensors }}" min="0" max="15" style="width: 100%;"></div>
+                                <div><span style="font-size: 0.75em;">STR</span><input type="number" class="ship-system" data-system="structure" value="{{ systems.structure }}" min="0" max="15" style="width: 100%;"></div>
+                                <div><span style="font-size: 0.75em;">WPN</span><input type="number" class="ship-system" data-system="weapons" value="{{ systems.weapons }}" min="0" max="15" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <label style="font-size: 0.8em; color: var(--lcars-tan);">Departments</label>
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;">
+                                {% set depts = enemy.to_model().departments %}
+                                <div><span style="font-size: 0.75em;">CMD</span><input type="number" class="ship-dept" data-dept="command" value="{{ depts.command }}" min="0" max="6" style="width: 100%;"></div>
+                                <div><span style="font-size: 0.75em;">CON</span><input type="number" class="ship-dept" data-dept="conn" value="{{ depts.conn }}" min="0" max="6" style="width: 100%;"></div>
+                                <div><span style="font-size: 0.75em;">ENG</span><input type="number" class="ship-dept" data-dept="engineering" value="{{ depts.engineering }}" min="0" max="6" style="width: 100%;"></div>
+                                <div><span style="font-size: 0.75em;">MED</span><input type="number" class="ship-dept" data-dept="medicine" value="{{ depts.medicine }}" min="0" max="6" style="width: 100%;"></div>
+                                <div><span style="font-size: 0.75em;">SCI</span><input type="number" class="ship-dept" data-dept="science" value="{{ depts.science }}" min="0" max="6" style="width: 100%;"></div>
+                                <div><span style="font-size: 0.75em;">SEC</span><input type="number" class="ship-dept" data-dept="security" value="{{ depts.security }}" min="0" max="6" style="width: 100%;"></div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; display: flex; gap: 10px;">
+                            <button type="button" class="btn btn-small" onclick="saveShip({{ enemy.id }})" style="background: var(--lcars-green);">Save Ship</button>
+                            <button type="button" class="btn btn-small" onclick="toggleShipEdit({{ enemy.id }})" style="background: #666;">Cancel</button>
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
             </div>
-            <p style="font-size: 0.8em; color: var(--lcars-tan); margin-top: 10px;">
-                Enemy ships can be managed from the GM combat view.
-            </p>
+            {% if not enemy_ships %}
+            <p style="color: var(--lcars-tan);">No enemy ships added yet.</p>
+            {% endif %}
         </div>
     </div>
 
@@ -315,5 +381,78 @@ document.getElementById('ship-to-place').addEventListener('change', function() {
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', initMap);
+
+// Ship editing functions
+function toggleShipEdit(shipId) {
+    const form = document.getElementById(`ship-edit-${shipId}`);
+    if (form) {
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+async function saveShip(shipId) {
+    const card = document.querySelector(`.ship-card[data-ship-id="${shipId}"]`);
+    if (!card) {
+        alert('Ship card not found');
+        return;
+    }
+
+    // Gather form data
+    const data = {};
+
+    // Basic fields
+    card.querySelectorAll('.ship-field').forEach(input => {
+        const field = input.dataset.field;
+        let value = input.value;
+        if (input.type === 'number') {
+            value = parseInt(value) || 0;
+        }
+        data[field] = value;
+    });
+
+    // Systems
+    const systems = {};
+    card.querySelectorAll('.ship-system').forEach(input => {
+        systems[input.dataset.system] = parseInt(input.value) || 0;
+    });
+    data.systems = systems;
+
+    // Departments
+    const departments = {};
+    card.querySelectorAll('.ship-dept').forEach(input => {
+        departments[input.dataset.dept] = parseInt(input.value) || 0;
+    });
+    data.departments = departments;
+
+    try {
+        const response = await fetch(`/campaigns/api/ship/${shipId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            // Update the summary display
+            const summary = card.querySelector('.ship-summary');
+            if (summary) {
+                summary.textContent = `Scale ${data.scale} | Shields ${data.shields}/${data.shields_max} | ${data.crew_quality} Crew`;
+            }
+            const nameEl = card.querySelector('strong');
+            if (nameEl) {
+                nameEl.textContent = data.name;
+            }
+
+            // Close the edit form
+            toggleShipEdit(shipId);
+            alert('Ship saved successfully!');
+        } else {
+            const errorData = await response.json();
+            alert('Failed to save ship: ' + (errorData.error || 'Unknown error'));
+        }
+    } catch (e) {
+        console.error('Error saving ship:', e);
+        alert('Error saving ship: ' + e.message);
+    }
+}
 </script>
 {% endblock %}

@@ -142,6 +142,48 @@ These actions are already configured and ready to use:
 
 See `ADDING_ACTIONS.md` for detailed examples and patterns.
 
+## Testing
+
+**Run tests before pushing to GitHub!**
+
+```bash
+# Install test dependencies (first time only)
+pip install -r requirements-dev.txt
+
+# Run all tests
+pytest
+
+# Run with coverage report
+pytest --cov=sta
+
+# Run specific test file
+pytest tests/test_turn_order.py
+
+# Run specific test class
+pytest tests/test_turn_order.py::TestTurnClaiming
+
+# Run with verbose output
+pytest -v
+```
+
+### Test Structure
+- `tests/conftest.py` - Shared fixtures (test database, sample data, helpers)
+- `tests/test_turn_order.py` - Turn claiming, passing, alternation, round advancement
+- `tests/test_actions_tactical.py` - Tactical station actions
+- `tests/test_actions_science.py` - Science station actions
+- `tests/test_actions_conn.py` - Conn/Helm station actions
+- `tests/test_actions_engineering.py` - Engineering station actions
+- `tests/test_actions_command.py` - Command station actions
+- `tests/test_actions_standard.py` - Standard actions (Pass, etc.)
+- `tests/test_action_logging.py` - Combat log functionality
+
+### Writing New Tests
+When adding new actions, add corresponding tests that verify:
+1. Action executes successfully
+2. Action is correctly categorized as minor/major
+3. Turn order changes appropriately
+4. Action is logged to combat log
+
 ## Development Notes
 
 When implementing features:
@@ -150,7 +192,8 @@ When implementing features:
 3. Prioritize the player turn experience - this is the core loop
 4. The view screen should be visually appealing and readable from a distance
 5. Keep the GM controls powerful but simple
-6. **After completing a feature**, add the `ready-for-testing` label to the GitHub issue: `gh issue edit <number> --add-label "ready-for-testing"`
+6. **Run tests before pushing**: `pytest`
+7. **After completing a feature**, add the `ready-for-testing` label to the GitHub issue: `gh issue edit <number> --add-label "ready-for-testing"`
 
 ## Future Considerations
 - Character sheet integration (full character management, not just combat stats)

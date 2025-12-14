@@ -871,6 +871,7 @@ class ActionCompletionManager:
         task_result: dict = None,
         momentum_spent: int = 0,
         threat_spent: int = 0,
+        player_id: int = None,
     ) -> dict:
         """
         Complete a player minor action: log but don't end turn.
@@ -883,6 +884,7 @@ class ActionCompletionManager:
             task_result: Optional dict with roll results
             momentum_spent: Momentum spent on this action
             threat_spent: Threat spent on this action
+            player_id: ID of the player who acted (for multi-player minor action tracking)
 
         Returns:
             Empty dict (no turn state change)
@@ -902,6 +904,16 @@ class ActionCompletionManager:
             momentum_spent=momentum_spent,
             threat_spent=threat_spent,
         )
+
+        # Track that this player has used their minor action this turn
+        if player_id is not None:
+            from datetime import datetime
+            players_turns_used = json.loads(self.encounter.players_turns_used_json or "{}")
+            player_data = players_turns_used.get(str(player_id), {})
+            player_data["minor_used"] = True
+            player_data["minor_used_at"] = datetime.now().isoformat()
+            players_turns_used[str(player_id)] = player_data
+            self.encounter.players_turns_used_json = json.dumps(players_turns_used)
 
         # No turn change for minor actions
         return {}

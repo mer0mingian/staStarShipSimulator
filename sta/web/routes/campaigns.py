@@ -343,6 +343,11 @@ def join_campaign(campaign_id: str):
                 ).first()
 
                 if player:
+                    # Check if already claimed by another player (unclaimed tokens start with "unclaimed_")
+                    if not player.session_token.startswith("unclaimed_"):
+                        flash("This character has already been claimed by another player")
+                        return redirect(url_for("campaigns.join_campaign", campaign_id=campaign_id))
+
                     # Generate new session token for this player
                     player_token = secrets.token_urlsafe(32)
                     player.session_token = player_token
@@ -356,11 +361,13 @@ def join_campaign(campaign_id: str):
             return redirect(url_for("campaigns.join_campaign", campaign_id=campaign_id))
 
         # GET - show character selection
-        # Get available characters (non-GM players with characters)
-        available_players = session.query(CampaignPlayerRecord).filter_by(
-            campaign_id=campaign.id,
-            is_gm=False,
-            is_active=True
+        # Get available characters (non-GM players that haven't been claimed yet)
+        # Unclaimed players have tokens starting with "unclaimed_"
+        available_players = session.query(CampaignPlayerRecord).filter(
+            CampaignPlayerRecord.campaign_id == campaign.id,
+            CampaignPlayerRecord.is_gm == False,
+            CampaignPlayerRecord.is_active == True,
+            CampaignPlayerRecord.session_token.like("unclaimed_%")
         ).all()
 
         # Load character data for each player
@@ -440,8 +447,21 @@ def player_dashboard(campaign_id: str):
             status="active"
         ).first()
 
-        # Get positions for selection
+        # Get positions for selection with info about which are taken
         positions = [p.value for p in Position]
+
+        # Get which positions are taken by other players
+        taken_positions = {}
+        other_players = session.query(CampaignPlayerRecord).filter(
+            CampaignPlayerRecord.campaign_id == campaign.id,
+            CampaignPlayerRecord.id != current_player.id,
+            CampaignPlayerRecord.is_active == True,
+            CampaignPlayerRecord.is_gm == False,
+            CampaignPlayerRecord.position.isnot(None)
+        ).all()
+        for other_player in other_players:
+            if other_player.position and other_player.position not in ["gm", "unassigned"]:
+                taken_positions[other_player.position] = other_player.player_name
 
         return render_template(
             "player_dashboard.html",
@@ -451,6 +471,7 @@ def player_dashboard(campaign_id: str):
             active_ship=active_ship,
             active_encounter=active_encounter,
             positions=positions,
+            taken_positions=taken_positions,
         )
     finally:
         session.close()
@@ -459,7 +480,28 @@ def player_dashboard(campaign_id: str):
 @campaigns_bp.route("/<campaign_id>/switch-character")
 def switch_character(campaign_id: str):
     """Clear player session to allow switching to a different character."""
-    # Clear the session cookie for this campaign
+    session = get_session()
+    try:
+        # Get current player from session token and release them
+        session_token = request.cookies.get("sta_session_token")
+        if session_token:
+            campaign = session.query(CampaignRecord).filter_by(
+                campaign_id=campaign_id
+            ).first()
+            if campaign:
+                player = session.query(CampaignPlayerRecord).filter_by(
+                    session_token=session_token,
+                    campaign_id=campaign.id,
+                    is_gm=False
+                ).first()
+                if player:
+                    # Release the character by setting back to unclaimed token
+                    player.session_token = f"unclaimed_{uuid.uuid4()}"
+                    session.commit()
+    finally:
+        session.close()
+
+    # Clear the session cookie
     response = redirect(url_for("campaigns.join_campaign", campaign_id=campaign_id))
     response.delete_cookie("sta_session_token")
     return response
@@ -528,6 +570,28 @@ def api_update_campaign(campaign_id: str):
         if "description" in data:
             campaign.description = data["description"]
 
+        # Combat settings (GM-only)
+        if "enemy_turn_multiplier" in data:
+            # Verify GM authentication for combat settings
+            session_token = request.cookies.get("sta_session_token")
+            if not session_token:
+                return jsonify({"error": "Not authenticated"}), 401
+
+            gm = session.query(CampaignPlayerRecord).filter_by(
+                session_token=session_token,
+                campaign_id=campaign.id,
+                is_gm=True
+            ).first()
+
+            if not gm:
+                return jsonify({"error": "Only the GM can change combat settings"}), 403
+
+            multiplier = float(data["enemy_turn_multiplier"])
+            # Validate range (0.1 to 2.0)
+            if multiplier < 0.1 or multiplier > 2.0:
+                return jsonify({"error": "Turn multiplier must be between 0.1 and 2.0"}), 400
+            campaign.enemy_turn_multiplier = multiplier
+
         session.commit()
         return jsonify({"success": True})
     finally:
@@ -536,15 +600,30 @@ def api_update_campaign(campaign_id: str):
 
 @campaigns_bp.route("/api/campaign/<campaign_id>", methods=["DELETE"])
 def api_delete_campaign(campaign_id: str):
-    """API: Delete (deactivate) campaign."""
+    """API: Delete (deactivate) campaign. Requires GM authentication."""
     session = get_session()
     try:
+        # Verify GM authentication
+        session_token = request.cookies.get("sta_session_token")
+        if not session_token:
+            return jsonify({"error": "Not authenticated"}), 401
+
         campaign = session.query(CampaignRecord).filter_by(
             campaign_id=campaign_id
         ).first()
 
         if not campaign:
             return jsonify({"error": "Campaign not found"}), 404
+
+        # Verify the user is the GM of this campaign
+        gm = session.query(CampaignPlayerRecord).filter_by(
+            session_token=session_token,
+            campaign_id=campaign.id,
+            is_gm=True
+        ).first()
+
+        if not gm:
+            return jsonify({"error": "Only the GM can delete campaigns"}), 403
 
         campaign.is_active = False
         session.commit()
@@ -659,6 +738,7 @@ def api_generate_random_campaign():
 @campaigns_bp.route("/api/campaign/<campaign_id>/players", methods=["GET", "POST"])
 def api_list_players(campaign_id: str):
     """API: List players in campaign or create a new player."""
+    import traceback
     session = get_session()
     try:
         campaign = session.query(CampaignRecord).filter_by(
@@ -697,7 +777,14 @@ def api_list_players(campaign_id: str):
         if not gm:
             return jsonify({"error": "Only GM can create players"}), 403
 
-        data = request.get_json()
+        try:
+            data = request.get_json()
+        except Exception as e:
+            return jsonify({"error": f"Invalid JSON: {str(e)}"}), 400
+
+        if data is None:
+            return jsonify({"error": "No JSON data provided"}), 400
+
         action = data.get("action", "generate")
 
         character_id = None
@@ -745,11 +832,14 @@ def api_list_players(campaign_id: str):
             player_name = char.name
 
         # Create new player record (no position - players choose their own)
+        # Use a placeholder token prefixed with "unclaimed_" to mark as unclaimed
+        # When a player claims this character, they get a new real token
+        placeholder_token = f"unclaimed_{uuid.uuid4()}"
         new_player = CampaignPlayerRecord(
             campaign_id=campaign.id,
             character_id=character_id,
             player_name=player_name,
-            session_token=str(uuid.uuid4()),  # Placeholder token until they join
+            session_token=placeholder_token,
             position="unassigned",  # Players will choose their position
             is_gm=False,
             is_active=True,
@@ -765,6 +855,10 @@ def api_list_players(campaign_id: str):
                 "character_id": new_player.character_id,
             }
         })
+    except Exception as e:
+        print(f"ERROR in api_list_players: {e}")
+        traceback.print_exc()
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
     finally:
         session.close()
 
@@ -798,16 +892,7 @@ def api_update_player_position(campaign_id: str, player_id: int):
         if not current_user.is_gm and current_user.id != player_id:
             return jsonify({"error": "Can only update your own position"}), 403
 
-        # Check if there's an active encounter - if so, position is locked
-        active_encounter = session.query(EncounterRecord).filter_by(
-            campaign_id=campaign.id,
-            status="active"
-        ).first()
-
-        if active_encounter and not current_user.is_gm:
-            return jsonify({"error": "Position locked during combat. Use Change Position action in combat."}), 403
-
-        # Update player position
+        # Get player record first
         player = session.query(CampaignPlayerRecord).filter_by(
             id=player_id,
             campaign_id=campaign.id
@@ -816,8 +901,34 @@ def api_update_player_position(campaign_id: str, player_id: int):
         if not player:
             return jsonify({"error": "Player not found"}), 404
 
+        # Check if there's an active encounter - if so, position is locked
+        # BUT only if the player has already selected a position (not "unassigned")
+        active_encounter = session.query(EncounterRecord).filter_by(
+            campaign_id=campaign.id,
+            status="active"
+        ).first()
+
+        if active_encounter and not current_user.is_gm and player.position != "unassigned":
+            return jsonify({"error": "Position locked during combat. Use Change Position action in combat."}), 403
+
         data = request.get_json()
-        player.position = data.get("position", player.position)
+        new_position = data.get("position", player.position)
+
+        # Check if position is already taken by another player
+        if new_position and new_position != "gm" and new_position != "unassigned":
+            existing_player = session.query(CampaignPlayerRecord).filter(
+                CampaignPlayerRecord.campaign_id == campaign.id,
+                CampaignPlayerRecord.id != player_id,
+                CampaignPlayerRecord.is_active == True,
+                CampaignPlayerRecord.is_gm == False,
+                CampaignPlayerRecord.position == new_position
+            ).first()
+            if existing_player:
+                return jsonify({
+                    "error": f"Position '{new_position}' is already taken by {existing_player.player_name}"
+                }), 400
+
+        player.position = new_position
         session.commit()
 
         return jsonify({"success": True})
@@ -1472,6 +1583,16 @@ def api_update_ship(ship_id: int):
             current_depts = json.loads(ship_record.departments_json)
             current_depts.update(data["departments"])
             ship_record.departments_json = json.dumps(current_depts)
+
+        # Update combat stats
+        if "shields" in data:
+            ship_record.shields = data["shields"]
+        if "shields_max" in data:
+            ship_record.shields_max = data["shields_max"]
+        if "resistance" in data:
+            ship_record.resistance = data["resistance"]
+        if "crew_quality" in data:
+            ship_record.crew_quality = data["crew_quality"]
 
         session.commit()
         return jsonify({"success": True})

@@ -1457,7 +1457,7 @@
                     <!-- Enemy Turn Message -->
                     <div id="actions-enemy-turn-msg" style="{% if encounter.current_turn == 'player' %}display: none;{% endif %} padding: 30px; text-align: center;">
                         <h3 style="color: var(--lcars-tomato);">ENEMY TURN</h3>
-                        <p style="color: var(--lcars-almond);">Actions are not available during the enemy turn. Switch to the Main tab to monitor the battle.</p>
+                        <p style="color: var(--lcars-almond);">Actions are not available during the enemy turn. Open the View Screen to monitor the battle.</p>
                     </div>
 
                     <!-- Selected Actions Summary -->
@@ -1866,6 +1866,35 @@
                         </div>
 
                         <div id="override-results" style="margin-top: 15px; display: none;"></div>
+                    </div>
+
+                    <!-- Impulse Movement Panel -->
+                    <div class="action-detail-panel" id="impulse-panel" style="display: none;">
+                        <h3 style="color: var(--lcars-bluey);">IMPULSE MOVEMENT</h3>
+
+                        <div class="info-box info">
+                            <p style="margin: 0;">
+                                Select a destination hex to move your ship. Hexes highlighted in <strong style="color: var(--lcars-success);">green</strong> are valid destinations.
+                            </p>
+                            <p style="margin: 10px 0 0 0; font-size: 0.9em;">
+                                Movement cost in Momentum is shown on each hex. Click a hex to move there.
+                            </p>
+                        </div>
+
+                        <div id="impulse-map-container" style="margin: 15px 0; min-height: 300px; background: #111; border-radius: 8px; padding: 10px;">
+                            <p style="color: #666; text-align: center;">Loading tactical map...</p>
+                        </div>
+
+                        <div class="legend" style="margin-bottom: 15px;">
+                            <strong style="color: var(--lcars-almond);">Legend:</strong>
+                            <span style="color: var(--lcars-success);">● Valid Move</span>
+                            <span style="color: var(--lcars-bluey);">● Your Ship</span>
+                            <span style="color: var(--lcars-tomato);">● Enemy Ship</span>
+                        </div>
+
+                        <button class="btn btn-secondary" onclick="cancelImpulseMovement()">Cancel Movement</button>
+
+                        <div id="impulse-results" style="margin-top: 15px; display: none;"></div>
                     </div>
 
                     <!-- Generic Dice Roller Panel -->
@@ -2622,7 +2651,14 @@
             actionItems.forEach(item => {
                 const actionName = item.getAttribute('data-action-name');
                 const availability = actionAvailability[actionName];
-                if (!availability) return;
+
+                // If no availability data, assume action is available (consistent with isActionAvailable)
+                if (!availability) {
+                    item.classList.remove('action-disabled');
+                    const breachWarning = item.querySelector('.breach-warning');
+                    if (breachWarning) breachWarning.style.display = 'none';
+                    return;
+                }
 
                 const breachWarning = item.querySelector('.breach-warning');
                 if (!availability.available) {
@@ -2706,7 +2742,7 @@
             const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
+                body: JSON.stringify({ action_name: actionName, character_id: playerCharId, player_id: myPlayerId })
             });
             const data = await response.json();
 
@@ -2719,6 +2755,7 @@
 
                 // Log this minor action
                 logTurnAction(actionName, 'minor', data.message, true);
+                updateLastActionResults();
             }
         }
 
@@ -2748,7 +2785,7 @@
             const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
+                body: JSON.stringify({ action_name: actionName, character_id: playerCharId, player_id: myPlayerId })
             });
             const data = await response.json();
 
@@ -2761,6 +2798,7 @@
 
                 // Log this minor action
                 logTurnAction(actionName, 'minor', data.message, true);
+                updateLastActionResults();
             }
         }
 
@@ -2779,7 +2817,7 @@
             const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
+                body: JSON.stringify({ action_name: actionName, character_id: playerCharId, player_id: myPlayerId })
             });
             const data = await response.json();
 
@@ -2797,6 +2835,7 @@
                     effects.length > 0 ? effects.join(', ') : 'Buff activated',
                     true
                 );
+                updateLastActionResults();
             } else {
                 showErrorToast(data.error || 'Action failed');
             }
@@ -2806,7 +2845,7 @@
             const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
+                body: JSON.stringify({ action_name: actionName, character_id: playerCharId, player_id: myPlayerId })
             });
             const data = await response.json();
 
@@ -2824,6 +2863,7 @@
                     data.message || 'Action completed',
                     true
                 );
+                updateLastActionResults();
 
                 if (data.current_turn) {
                     fetchTurnStatus();
@@ -2838,7 +2878,7 @@
             const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ action_name: 'Pass', character_id: playerCharId })
+                body: JSON.stringify({ action_name: 'Pass', character_id: playerCharId, player_id: myPlayerId })
             });
             const data = await response.json();
 
@@ -3073,6 +3113,7 @@
                     focus: focus,
                     bonus_dice: bonusDice,
                     bonusDice: bonusDice,
+                    player_id: myPlayerId,
                 };
 
                 const response = await fetch('/api/fire', {
@@ -3103,6 +3144,23 @@
 
                 lastFireData.previous_rolls = data.rolls;
                 displayFireResults(data, targetIndex, focus, bonusDice, difficulty);
+
+                // Log to turn summary so results persist after turn ends
+                const weaponName = weaponSelect.options[weaponSelect.selectedIndex].text;
+                const targetName = selectedTarget.querySelector('.target-name')?.textContent || `Enemy ${targetIndex + 1}`;
+                let fireMessage = data.hit
+                    ? `<strong>HIT!</strong> Fired ${weaponName} at ${targetName} - ${data.damage_dealt} damage dealt`
+                    : `<strong>MISS!</strong> Fired ${weaponName} at ${targetName}`;
+                if (data.breaches_caused > 0) {
+                    fireMessage += ` (${data.breaches_caused} breach${data.breaches_caused > 1 ? 'es' : ''} caused!)`;
+                }
+                logTurnAction(
+                    'Fire Weapons',
+                    'major',
+                    fireMessage,
+                    data.hit,
+                    { rolls: data.rolls, target: data.target_number }
+                );
 
                 if (data.current_turn) {
                     fetchTurnStatus();
@@ -3269,7 +3327,8 @@
                         action_name: 'Defensive Fire',
                         weapon_index: weaponIndex,
                         role: 'player',
-                        character_id: playerCharId
+                        character_id: playerCharId,
+                        player_id: myPlayerId
                     })
                 });
                 const data = await response.json();
@@ -3317,7 +3376,8 @@
                 body: JSON.stringify({
                     action_name: 'Reroute Power',
                     character_id: playerCharId,
-                    target_system: system
+                    target_system: system,
+                    player_id: myPlayerId
                 })
             });
             const data = await response.json();
@@ -3385,7 +3445,8 @@
                     body: JSON.stringify({
                         action_name: 'Change Position',
                         character_id: playerCharId,
-                        new_position: newPosition
+                        new_position: newPosition,
+                        player_id: myPlayerId
                     })
                 });
                 const data = await response.json();
@@ -3414,12 +3475,15 @@
                     pendingDisplay.textContent = `You will move to ${newPosition.toUpperCase()} at the start of your next turn.`;
 
                     // Log this minor action
+                    selectedMinorAction = 'Change Position';
                     logTurnAction(
                         'Change Position',
                         'minor',
                         `Position change queued to <strong>${newPosition.toUpperCase()}</strong>. You may still take a Major Action from ${currentPos}.`,
                         true
                     );
+                    updateSelectionSummary();
+                    updateLastActionResults();
 
                     fetchTurnStatus();
                 } else {
@@ -3658,7 +3722,8 @@
                             roll_target: rollData.target_number,
                             target_system: damageControlTargetSystem,
                             bonus_dice: bonus,
-                            character_id: playerCharId
+                            character_id: playerCharId,
+                            player_id: myPlayerId
                         })
                     });
                     const repairData = await repairResponse.json();
@@ -3709,7 +3774,8 @@
                             roll_successes: rollData.successes,
                             roll_complications: rollData.complications,
                             target_system: damageControlTargetSystem,
-                            character_id: playerCharId
+                            character_id: playerCharId,
+                            player_id: myPlayerId
                         })
                     });
                     const failData = await failResponse.json();
@@ -3776,7 +3842,8 @@
                         difficulty: 2,
                         focus: focus,
                         bonus_dice: bonusDice,
-                        character_id: playerCharId
+                        character_id: playerCharId,
+                        player_id: myPlayerId
                     })
                 });
                 const data = await response.json();
@@ -3925,6 +3992,12 @@
 
                 showSuccessToast(data.message);
 
+                // Log this minor action
+                selectedMinorAction = 'Thrusters';
+                logTurnAction('Thrusters', 'minor', data.message, true);
+                updateSelectionSummary();
+                updateLastActionResults();
+
                 setTimeout(() => {
                     showThrustersPanel();
                 }, 1500);
@@ -3964,8 +4037,9 @@
                 impulseMovementActive = true;
                 showInfoToast(`Impulse: Select a destination hex (${validMoveDestinations.length} options). Click again to cancel.`);
 
-                renderTacticalMapWithMoves();
-                showTab('map');
+                // Show the inline impulse panel and render map there
+                showPanel('impulse-panel');
+                renderImpulseMap();
 
             } catch (error) {
                 console.error('Error fetching valid moves:', error);
@@ -3976,6 +4050,7 @@
         function cancelImpulseMovement() {
             impulseMovementActive = false;
             validMoveDestinations = [];
+            document.getElementById('impulse-panel').style.display = 'none';
             renderTacticalMap();
             showInfoToast('Movement cancelled');
         }
@@ -4028,10 +4103,13 @@
 
                 impulseMovementActive = false;
                 validMoveDestinations = [];
+                document.getElementById('impulse-panel').style.display = 'none';
                 renderTacticalMap();
 
                 selectedMinorAction = 'Impulse';
+                logTurnAction('Impulse', 'minor', message, true);
                 updateSelectionSummary();
+                updateLastActionResults();
 
             } catch (error) {
                 console.error('Error executing impulse move:', error);
@@ -4042,6 +4120,31 @@
         function renderTacticalMapWithMoves() {
             if (typeof HexMap !== 'undefined') {
                 HexMap.render('tactical-map-container', tacticalMapData, shipPositions, {
+                    editable: false,
+                    showCoords: false,
+                    validMoves: validMoveDestinations,
+                    onShipClick: function(ship, index) {
+                        if (ship.id === 'player' && impulseMovementActive) {
+                            cancelImpulseMovement();
+                        }
+                    },
+                    onHexClick: function(q, r, terrain, moveCost) {
+                        if (!impulseMovementActive) return;
+                        const move = validMoveDestinations.find(m => m.q === q && m.r === r);
+                        if (move) {
+                            executeImpulseMove(q, r, move.cost);
+                        } else {
+                            cancelImpulseMovement();
+                        }
+                    }
+                });
+            }
+        }
+
+        // Render the impulse map in the inline panel
+        function renderImpulseMap() {
+            if (typeof HexMap !== 'undefined') {
+                HexMap.render('impulse-map-container', tacticalMapData, shipPositions, {
                     editable: false,
                     showCoords: false,
                     validMoves: validMoveDestinations,
@@ -4156,7 +4259,8 @@
                         roll_complications: data.complications,
                         roll_dice: data.rolls,
                         roll_target: data.target_number,
-                        character_id: playerCharId
+                        character_id: playerCharId,
+                        player_id: myPlayerId
                     };
 
                     // Add Override-specific data if this is an Override action
