@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ encounter.name }} - Game Master View</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/lcars.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/announcements.css') }}">
     <style>
         /* GM View - Full viewport with custom left nav */
         html, body {
@@ -1475,6 +1476,7 @@
 
     <!-- Scripts -->
     <script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/announcements.js') }}"></script>
     <script>
         // Constants
         const encounterId = '{{ encounter.encounter_id }}';
@@ -2441,6 +2443,12 @@
             refreshCombatLog();
             fetchStatus();
             updatePlayerVisibilityStatus();  // Show initial visibility status
+
+            // Initialize announcements system
+            const announcements = new CombatAnnouncements(encounterId, {
+                pollInterval: 2000,      // Poll every 2 seconds
+                displayDuration: 6000    // Show for 6 seconds
+            });
         });
 
         setInterval(fetchStatus, 3000);
