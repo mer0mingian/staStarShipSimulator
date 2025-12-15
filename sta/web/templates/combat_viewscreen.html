@@ -551,6 +551,83 @@
         .lcars-data-fill.animated .lcars-data-row:nth-child(3n) {
             animation-delay: 1s;
         }
+
+        /* Hailing Overlay Styles */
+        .hailing-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .hailing-overlay.active {
+            display: flex;
+        }
+
+        .hailing-content {
+            text-align: center;
+            padding: 60px;
+            background: linear-gradient(135deg, rgba(153, 102, 255, 0.1), rgba(255, 153, 153, 0.1));
+            border: 5px solid var(--lcars-butterscotch);
+            border-radius: 30px;
+            max-width: 800px;
+            animation: slideIn 0.4s ease-out;
+        }
+
+        .hailing-header {
+            color: var(--lcars-butterscotch);
+            font-size: 3rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+
+        .hailing-from {
+            color: var(--lcars-almond);
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .hailing-message {
+            color: var(--lcars-ice);
+            font-size: 1.4rem;
+            margin-top: 30px;
+            line-height: 1.6;
+        }
+
+        .hailing-channel-open {
+            color: var(--lcars-success);
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 20px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body>
@@ -765,6 +842,15 @@
             <div class="viewscreen-bottom-left"></div>
             <div class="viewscreen-bottom-main"></div>
             <div class="viewscreen-bottom-right"></div>
+        </div>
+    </div>
+
+    <!-- Hailing Overlay -->
+    <div id="hailing-overlay" class="hailing-overlay">
+        <div class="hailing-content">
+            <div id="hailing-header" class="hailing-header">INCOMING HAIL</div>
+            <div id="hailing-from" class="hailing-from"></div>
+            <div id="hailing-message" class="hailing-message">Hailing frequencies open</div>
         </div>
     </div>
 
@@ -1163,6 +1249,59 @@
             HexMap.hexSize = originalHexSize;
         }
 
+        // Hailing state tracking
+        let currentHailingState = null;
+        let hailingSoundPlayed = false;
+
+        function handleHailingState(hailingState) {
+            const overlay = document.getElementById('hailing-overlay');
+            const header = document.getElementById('hailing-header');
+            const from = document.getElementById('hailing-from');
+            const message = document.getElementById('hailing-message');
+
+            // If no hailing state, hide overlay
+            if (!hailingState) {
+                overlay.classList.remove('active');
+                currentHailingState = null;
+                hailingSoundPlayed = false;
+                return;
+            }
+
+            // Check if this is a new hail
+            const isNewHail = !currentHailingState ||
+                             JSON.stringify(currentHailingState) !== JSON.stringify(hailingState);
+
+            if (isNewHail) {
+                currentHailingState = hailingState;
+                hailingSoundPlayed = false;
+            }
+
+            // Handle incoming hail (active = true)
+            if (hailingState.active) {
+                header.textContent = 'INCOMING HAIL';
+                from.textContent = `From: ${hailingState.from_ship}`;
+                message.textContent = 'Hailing frequencies open';
+                overlay.classList.add('active');
+
+                // Play hailing sound once per new hail
+                if (!hailingSoundPlayed) {
+                    SoundManager.playSound('/static/audio/sounds/ui/tng_hail.mp3');
+                    hailingSoundPlayed = true;
+                }
+            }
+            // Handle open channel (channel_open = true, active = false)
+            else if (hailingState.channel_open) {
+                header.textContent = 'CHANNEL OPEN';
+                header.className = 'hailing-channel-open';
+                from.textContent = `${hailingState.from_ship}`;
+                message.textContent = 'Communication established';
+                overlay.classList.add('active');
+            }
+            else {
+                overlay.classList.remove('active');
+            }
+        }
+
         // Fetch and update status
         async function fetchStatus() {
             try {
@@ -1248,6 +1387,9 @@
                 if (data.viewscreen_audio_enabled !== undefined) {
                     SoundManager.setAmbientEnabled(data.viewscreen_audio_enabled);
                 }
+
+                // Handle hailing state
+                handleHailingState(data.hailing_state);
 
             } catch (error) {
                 console.error('Failed to fetch status:', error);

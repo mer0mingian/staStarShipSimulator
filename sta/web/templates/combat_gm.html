@@ -894,6 +894,11 @@
                                 <button class="resource-btn" onclick="updateThreat(1)">+</button>
                             </div>
                         </div>
+                        <div class="resource-box" style="background: linear-gradient(135deg, rgba(255, 153, 102, 0.15), rgba(255, 204, 102, 0.15)); border-color: var(--lcars-butterscotch);">
+                            <span class="resource-label" style="color: var(--lcars-butterscotch);">Communications</span>
+                            <button class="btn btn-small" onclick="hailPlayerShip()" id="hail-btn" style="margin-top: 8px; background: var(--lcars-butterscotch); color: var(--lcars-text-dark);">Hail Player Ship</button>
+                            <button class="btn btn-small" onclick="closeChannel()" id="close-channel-btn" style="display: none; margin-top: 8px; background: var(--lcars-tomato); color: var(--lcars-text-dark);">Close Channel</button>
+                        </div>
                     </div>
 
                     <!-- Ships Overview - All ships with shield status and action buttons -->
@@ -1612,6 +1617,51 @@
                 // Revert on error
                 viewscreenAudioEnabled = !viewscreenAudioEnabled;
                 console.error('Failed to toggle viewscreen audio:', err);
+            }
+        }
+
+        // ===== HAILING FUNCTIONS =====
+
+        async function hailPlayerShip() {
+            try {
+                // Get the first enemy ship's name for "from_ship"
+                const enemyShips = document.querySelectorAll('.ship-card-enemy');
+                const fromShip = enemyShips.length > 0 ? enemyShips[0].querySelector('.ship-name')?.textContent.trim() : 'Unknown Vessel';
+
+                const response = await fetch(`/api/encounter/${encounterId}/initiate-hail`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        initiator: 'gm',
+                        target_ship: '{{ player_ship.name }}',
+                        from_ship: fromShip
+                    })
+                });
+
+                if (response.ok) {
+                    fetchStatus(); // Refresh to update UI
+                } else {
+                    console.error('Failed to initiate hail');
+                }
+            } catch (err) {
+                console.error('Error initiating hail:', err);
+            }
+        }
+
+        async function closeChannel() {
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/close-channel`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+
+                if (response.ok) {
+                    fetchStatus(); // Refresh to update UI
+                } else {
+                    console.error('Failed to close channel');
+                }
+            } catch (err) {
+                console.error('Error closing channel:', err);
             }
         }
 
@@ -2432,8 +2482,30 @@
                         hasReservePower = data.has_reserve_power;
                         updateReservePowerDisplay();
                     }
+
+                    // Update hailing button state
+                    updateHailingButtons(data.hailing_state);
                 }
             } catch (e) {}
+        }
+
+        function updateHailingButtons(hailingState) {
+            const hailBtn = document.getElementById('hail-btn');
+            const closeBtn = document.getElementById('close-channel-btn');
+
+            if (!hailingState) {
+                // No active hail - show hail button
+                hailBtn.style.display = 'block';
+                closeBtn.style.display = 'none';
+            } else if (hailingState.channel_open) {
+                // Channel is open - show close button
+                hailBtn.style.display = 'none';
+                closeBtn.style.display = 'block';
+            } else {
+                // Hail is active (waiting for response) - hide both
+                hailBtn.style.display = 'none';
+                closeBtn.style.display = 'none';
+            }
         }
 
         // Initialize
