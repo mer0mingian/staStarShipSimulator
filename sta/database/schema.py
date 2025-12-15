@@ -292,6 +292,10 @@ class EncounterRecord(Base):
     # Viewscreen audio settings (GM-controlled)
     viewscreen_audio_enabled: Mapped[bool] = mapped_column(default=True)
 
+    # Hailing state (JSON or null)
+    # Structure: {"active": bool, "initiator": "player|gm", "target": str, "from_ship": str, "to_ship": str, "channel_open": bool, "timestamp": str}
+    hailing_state_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 

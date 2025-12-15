@@ -375,6 +375,99 @@ def toggle_viewscreen_audio(encounter_id: str):
         session.close()
 
 
+@api_bp.route("/encounter/<encounter_id>/initiate-hail", methods=["POST"])
+def initiate_hail(encounter_id: str):
+    """Initiate a hail to another ship."""
+    data = request.json
+    initiator = data.get("initiator")  # "player" or "gm"
+    target_ship = data.get("target_ship")  # Ship name or identifier
+    from_ship = data.get("from_ship", "USS Enterprise")  # Initiating ship name
+
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Create hailing state
+        hailing_state = {
+            "active": True,
+            "initiator": initiator,
+            "target": target_ship,
+            "from_ship": from_ship,
+            "to_ship": target_ship,
+            "channel_open": False,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        encounter.hailing_state_json = json.dumps(hailing_state)
+        session.commit()
+
+        return jsonify({"success": True, "hailing_state": hailing_state})
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/respond-hail", methods=["POST"])
+def respond_hail(encounter_id: str):
+    """Respond to an incoming hail (accept or reject)."""
+    data = request.json
+    accepted = data.get("accepted", False)
+
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        if not encounter.hailing_state_json:
+            return jsonify({"error": "No active hail"}), 400
+
+        hailing_state = json.loads(encounter.hailing_state_json)
+
+        if accepted:
+            # Open the channel
+            hailing_state["channel_open"] = True
+            hailing_state["active"] = False  # No longer "incoming", now "open"
+            encounter.hailing_state_json = json.dumps(hailing_state)
+        else:
+            # Reject the hail - clear the state
+            encounter.hailing_state_json = None
+
+        session.commit()
+
+        return jsonify({"success": True, "accepted": accepted, "hailing_state": hailing_state if accepted else None})
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/close-channel", methods=["POST"])
+def close_channel(encounter_id: str):
+    """Close an open communication channel."""
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Clear the hailing state
+        encounter.hailing_state_json = None
+        session.commit()
+
+        return jsonify({"success": True})
+    finally:
+        session.close()
+
+
 @api_bp.route("/encounter/<encounter_id>/spend-momentum-shields", methods=["POST"])
 def spend_momentum_for_shields(encounter_id: str):
     """
@@ -957,6 +1050,8 @@ def get_encounter_status(encounter_id: str):
             "players_info": multiplayer_info["players_info"],
             # Viewscreen audio setting
             "viewscreen_audio_enabled": getattr(encounter, 'viewscreen_audio_enabled', True),
+            # Hailing state
+            "hailing_state": json.loads(encounter.hailing_state_json) if encounter.hailing_state_json else None,
         })
     finally:
         session.close()
