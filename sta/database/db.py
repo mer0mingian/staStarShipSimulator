@@ -70,6 +70,11 @@ def run_migrations():
             conn.commit()
             print("Migration: Added description column to encounters table")
 
+        if 'hailing_state_json' not in encounter_columns:
+            conn.execute(text("ALTER TABLE encounters ADD COLUMN hailing_state_json TEXT"))
+            conn.commit()
+            print("Migration: Added hailing_state_json column to encounters table")
+
         # GM password migration
         result = conn.execute(text("PRAGMA table_info(campaigns)"))
         campaign_columns = [row[1] for row in result.fetchall()]

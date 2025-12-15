@@ -1023,6 +1023,24 @@
                         {% endif %}
                     </div>
 
+                    <!-- Hailing Notification Panel -->
+                    <div id="hailing-notification" style="display: none; padding: 15px; background: linear-gradient(135deg, rgba(255, 153, 102, 0.2), rgba(255, 204, 102, 0.2)); border: 2px solid var(--lcars-butterscotch); border-radius: 8px; margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div style="flex: 1;">
+                                <div id="hailing-status-text" style="color: var(--lcars-butterscotch); font-size: 1.2em; font-weight: bold; margin-bottom: 5px;">INCOMING HAIL</div>
+                                <div id="hailing-from-text" style="color: var(--lcars-almond); font-size: 0.95em;"></div>
+                            </div>
+                            <div id="hailing-actions" style="display: flex; gap: 10px;">
+                                <button onclick="respondToHail(true)" style="padding: 10px 20px; background: var(--lcars-success); border: none; border-radius: 20px; color: var(--lcars-text-dark); font-weight: bold; cursor: pointer;">ACCEPT</button>
+                                <button onclick="respondToHail(false)" style="padding: 10px 20px; background: var(--lcars-tomato); border: none; border-radius: 20px; color: var(--lcars-text-dark); font-weight: bold; cursor: pointer;">REJECT</button>
+                            </div>
+                            <div id="hailing-channel-status" style="display: none;">
+                                <div style="color: var(--lcars-success); font-size: 1em; font-weight: bold; margin-bottom: 5px;">✓ CHANNEL OPEN</div>
+                                <button onclick="closeChannel()" style="padding: 8px 16px; background: var(--lcars-tomato); border: none; border-radius: 15px; color: var(--lcars-text-dark); font-weight: bold; cursor: pointer; font-size: 0.9em;">CLOSE CHANNEL</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Station-Specific Info Panel -->
                     <div class="station-info-panel" style="padding: 12px; background: #1a1a1a; border-radius: 8px; margin-bottom: 15px;">
                         {% if position.value == 'tactical' %}
@@ -4676,6 +4694,9 @@
                     } else if (!data.pending_attack && pendingAttackData) {
                         hidePendingAttackPanel();
                     }
+
+                    // Handle hailing state
+                    updateHailingNotification(data.hailing_state);
                 }
             } catch (e) {
                 console.error('Failed to fetch turn status:', e);
@@ -4932,6 +4953,78 @@
                 }
             } catch (error) {
                 console.error('Error refreshing map:', error);
+            }
+        }
+
+        // ===== HAILING FUNCTIONS =====
+
+        function updateHailingNotification(hailingState) {
+            const notification = document.getElementById('hailing-notification');
+            const statusText = document.getElementById('hailing-status-text');
+            const fromText = document.getElementById('hailing-from-text');
+            const actions = document.getElementById('hailing-actions');
+            const channelStatus = document.getElementById('hailing-channel-status');
+
+            if (!hailingState) {
+                notification.style.display = 'none';
+                return;
+            }
+
+            notification.style.display = 'block';
+
+            if (hailingState.active && hailingState.initiator === 'gm') {
+                // Incoming hail from GM
+                statusText.textContent = 'INCOMING HAIL';
+                fromText.textContent = `From: ${hailingState.from_ship}`;
+                actions.style.display = 'flex';
+                channelStatus.style.display = 'none';
+            } else if (hailingState.channel_open) {
+                // Channel is open
+                statusText.textContent = '✓ CHANNEL OPEN';
+                fromText.textContent = `Communication established with ${hailingState.to_ship}`;
+                actions.style.display = 'none';
+                channelStatus.style.display = 'block';
+            } else {
+                // Hail initiated by player, waiting for response
+                statusText.textContent = 'HAILING...';
+                fromText.textContent = `Hailing ${hailingState.to_ship}`;
+                actions.style.display = 'none';
+                channelStatus.style.display = 'none';
+            }
+        }
+
+        async function respondToHail(accepted) {
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/respond-hail`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ accepted })
+                });
+
+                if (response.ok) {
+                    fetchTurnStatus(); // Refresh to update UI
+                } else {
+                    console.error('Failed to respond to hail');
+                }
+            } catch (e) {
+                console.error('Error responding to hail:', e);
+            }
+        }
+
+        async function closeChannel() {
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/close-channel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    fetchTurnStatus(); // Refresh to update UI
+                } else {
+                    console.error('Failed to close channel');
+                }
+            } catch (e) {
+                console.error('Error closing channel:', e);
             }
         }
     </script>
