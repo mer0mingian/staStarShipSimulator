@@ -4893,10 +4893,10 @@
             fetchTurnStatus();
             fetchActionAvailability();
 
-            // Initialize announcements system
+            // Initialize announcements system with banner mode
             const announcements = new CombatAnnouncements(encounterId, {
-                pollInterval: 2000,      // Poll every 2 seconds
-                displayDuration: 6000    // Show for 6 seconds
+                displayMode: 'banner',   // Use persistent banner at top
+                pollInterval: 2000       // Poll every 2 seconds
             });
 
             // Initialize LCARS data cascade
