@@ -163,6 +163,14 @@ class CombatAnnouncements {
                     <span class="banner-next-actor">—</span>
                 </div>
             </div>
+            <div class="banner-hailing" style="display: none;">
+                <div class="banner-hailing-content">
+                    <span class="banner-hailing-icon">📡</span>
+                    <span class="banner-hailing-status">INCOMING HAIL</span>
+                    <span class="banner-hailing-from">—</span>
+                    <div class="banner-hailing-actions"></div>
+                </div>
+            </div>
         `;
 
         document.body.insertBefore(banner, document.body.firstChild);
@@ -172,7 +180,11 @@ class CombatAnnouncements {
             currentActor: banner.querySelector('.banner-current-actor'),
             currentAction: banner.querySelector('.banner-current-action'),
             roundNum: banner.querySelector('.banner-round-num'),
-            nextActor: banner.querySelector('.banner-next-actor')
+            nextActor: banner.querySelector('.banner-next-actor'),
+            hailingContainer: banner.querySelector('.banner-hailing'),
+            hailingStatus: banner.querySelector('.banner-hailing-status'),
+            hailingFrom: banner.querySelector('.banner-hailing-from'),
+            hailingActions: banner.querySelector('.banner-hailing-actions')
         };
 
         // Add padding to body to account for fixed banner
@@ -423,6 +435,53 @@ class CombatAnnouncements {
             }, 300);
         }
         // Banner mode doesn't hide - it's persistent
+    }
+
+    updateHailingState(hailingState) {
+        // Only update banner mode
+        if (this.displayMode !== 'banner' || !this.bannerElements.hailingContainer) {
+            return;
+        }
+
+        if (!hailingState) {
+            // Hide hailing section
+            this.bannerElements.hailingContainer.style.display = 'none';
+            return;
+        }
+
+        // Show hailing section
+        this.bannerElements.hailingContainer.style.display = 'flex';
+
+        // Update based on hailing state
+        if (hailingState.active && hailingState.initiator === 'gm') {
+            // Incoming hail from GM
+            this.bannerElements.hailingStatus.textContent = '📡 INCOMING HAIL';
+            this.bannerElements.hailingFrom.textContent = `from ${hailingState.from_ship}`;
+
+            // Show accept/reject buttons (if they exist on page)
+            this.bannerElements.hailingActions.innerHTML = `
+                <button onclick="respondToHail(true)" class="banner-hail-btn banner-hail-accept">ACCEPT</button>
+                <button onclick="respondToHail(false)" class="banner-hail-btn banner-hail-reject">REJECT</button>
+            `;
+        } else if (hailingState.channel_open) {
+            // Channel is open
+            this.bannerElements.hailingStatus.textContent = '✓ CHANNEL OPEN';
+            this.bannerElements.hailingFrom.textContent = `with ${hailingState.from_ship}`;
+
+            // Show close button
+            this.bannerElements.hailingActions.innerHTML = `
+                <button onclick="closeChannel()" class="banner-hail-btn banner-hail-close">CLOSE</button>
+            `;
+        } else {
+            // Hail initiated by player, waiting for response
+            this.bannerElements.hailingStatus.textContent = '📡 HAILING...';
+            this.bannerElements.hailingFrom.textContent = hailingState.to_ship;
+            this.bannerElements.hailingActions.innerHTML = '';
+        }
+
+        // Add pulse animation
+        this.banner.classList.add('banner-pulse');
+        setTimeout(() => this.banner.classList.remove('banner-pulse'), 1000);
     }
 
     destroy() {

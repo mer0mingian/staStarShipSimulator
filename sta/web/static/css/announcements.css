@@ -89,6 +89,78 @@
     letter-spacing: 1px;
 }
 
+/* Hailing section in banner */
+.banner-hailing {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, rgba(255, 153, 102, 0.95), rgba(255, 204, 102, 0.95));
+    border-bottom: 3px solid var(--lcars-butterscotch, #ffaa00);
+    padding: 12px 20px;
+    box-shadow: 0 3px 15px rgba(255, 170, 0, 0.3);
+    z-index: 9998;
+}
+
+.banner-hailing-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.banner-hailing-icon {
+    font-size: 1.8rem;
+}
+
+.banner-hailing-status {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--lcars-text-dark, #000);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.banner-hailing-from {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.8);
+}
+
+.banner-hailing-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.banner-hail-btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 20px;
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.banner-hail-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.banner-hail-accept {
+    background: var(--lcars-success, #88cc88);
+    color: var(--lcars-text-dark, #000);
+}
+
+.banner-hail-reject,
+.banner-hail-close {
+    background: var(--lcars-tomato, #ff6666);
+    color: var(--lcars-text-dark, #000);
+}
+
 /* Pulse animation when banner updates */
 @keyframes banner-pulse {
     0%, 100% {
