@@ -613,6 +613,53 @@
             margin-bottom: 20px;
         }
 
+        /* Hailing Channel Display (replaces map when channel is open) */
+        .hailing-channel-display {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .hailing-channel-display.active {
+            display: flex;
+        }
+
+        .hailing-channel-header {
+            color: var(--lcars-success);
+            font-size: 2rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 30px;
+            animation: pulse 2s infinite;
+        }
+
+        .hailing-ship-name {
+            color: var(--lcars-butterscotch);
+            font-size: 5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 6px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(255, 170, 0, 0.5);
+        }
+
+        .hailing-channel-message {
+            color: var(--lcars-ice);
+            font-size: 1.5rem;
+            margin-top: 20px;
+        }
+
+        /* Hide map when hailing channel is active */
+        .map-panel.hailing-active #viewscreen-map-container {
+            display: none;
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
@@ -747,10 +794,15 @@
             </div>
 
             <!-- Center: Tactical Map -->
-            <div class="map-panel">
+            <div class="map-panel" id="map-panel">
                 <h2>TACTICAL DISPLAY</h2>
                 <div id="viewscreen-map-container">
                     <p style="color: var(--lcars-gray);">Loading tactical map...</p>
+                </div>
+                <div class="hailing-channel-display" id="hailing-channel-display">
+                    <div class="hailing-channel-header">✓ CHANNEL OPEN</div>
+                    <div class="hailing-ship-name" id="hailing-ship-name">—</div>
+                    <div class="hailing-channel-message">Communication established</div>
                 </div>
             </div>
 
@@ -1254,14 +1306,14 @@
         let hailingSoundPlayed = false;
 
         function handleHailingState(hailingState) {
-            const overlay = document.getElementById('hailing-overlay');
-            const header = document.getElementById('hailing-header');
-            const from = document.getElementById('hailing-from');
-            const message = document.getElementById('hailing-message');
+            const mapPanel = document.getElementById('map-panel');
+            const channelDisplay = document.getElementById('hailing-channel-display');
+            const shipNameEl = document.getElementById('hailing-ship-name');
 
-            // If no hailing state, hide overlay
+            // If no hailing state, hide channel display and show map
             if (!hailingState) {
-                overlay.classList.remove('active');
+                mapPanel.classList.remove('hailing-active');
+                channelDisplay.classList.remove('active');
                 currentHailingState = null;
                 hailingSoundPlayed = false;
                 return;
@@ -1276,29 +1328,28 @@
                 hailingSoundPlayed = false;
             }
 
-            // Handle incoming hail (active = true)
+            // Handle incoming hail (active = true) - play sound but don't change display
             if (hailingState.active) {
-                header.textContent = 'INCOMING HAIL';
-                from.textContent = `From: ${hailingState.from_ship}`;
-                message.textContent = 'Hailing frequencies open';
-                overlay.classList.add('active');
-
                 // Play hailing sound once per new hail
                 if (!hailingSoundPlayed) {
                     SoundManager.playSound('/static/audio/sounds/ui/tng_hail.mp3');
                     hailingSoundPlayed = true;
                 }
+                // Don't change display - keep showing map
+                mapPanel.classList.remove('hailing-active');
+                channelDisplay.classList.remove('active');
             }
-            // Handle open channel (channel_open = true, active = false)
+            // Handle open channel (channel_open = true) - replace map with ship name
             else if (hailingState.channel_open) {
-                header.textContent = 'CHANNEL OPEN';
-                header.className = 'hailing-channel-open';
-                from.textContent = `${hailingState.from_ship}`;
-                message.textContent = 'Communication established';
-                overlay.classList.add('active');
+                // Show hailing channel display, hide map
+                shipNameEl.textContent = hailingState.from_ship || 'UNKNOWN';
+                mapPanel.classList.add('hailing-active');
+                channelDisplay.classList.add('active');
             }
             else {
-                overlay.classList.remove('active');
+                // No active state - show map
+                mapPanel.classList.remove('hailing-active');
+                channelDisplay.classList.remove('active');
             }
         }
 
@@ -1564,10 +1615,10 @@
             initViewscreen();
             createAudioOverlay();
 
-            // Initialize announcements system with TTS for viewscreen
+            // Initialize announcements system with TTS-only mode for viewscreen
             const announcements = new CombatAnnouncements(encounterId, {
+                displayMode: 'tts-only', // Audio only, no visual overlay
                 pollInterval: 2000,      // Poll every 2 seconds
-                displayDuration: 6000,   // Show for 6 seconds
                 enableTTS: true,         // Enable text-to-speech for viewscreen
                 ttsRate: 1.1,            // Slightly faster speech
                 ttsPitch: 0.9,           // Slightly lower pitch (more "computer-like")
