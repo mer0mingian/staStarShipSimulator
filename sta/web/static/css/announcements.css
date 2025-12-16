@@ -1,7 +1,136 @@
 /**
- * Combat Announcements Overlay Styles
+ * Combat Announcements Styles
  */
 
+/* ===== BANNER MODE (Persistent Top Bar) ===== */
+.announcement-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-bottom: 3px solid var(--lcars-african-violet, #cc99cc);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 9999;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+}
+
+.banner-left,
+.banner-center,
+.banner-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.banner-left {
+    flex: 1;
+    justify-content: flex-start;
+}
+
+.banner-center {
+    flex: 0 0 auto;
+}
+
+.banner-right {
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.banner-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--lcars-ice, #aaddff);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.banner-current-actor {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--lcars-butterscotch, #ffaa00);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+}
+
+.banner-current-action {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--lcars-bluey, #99ccff);
+    font-style: italic;
+}
+
+.banner-round {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--lcars-text, #ffffff);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding: 8px 20px;
+    background: rgba(204, 153, 204, 0.2);
+    border-radius: 20px;
+    border: 2px solid var(--lcars-african-violet, #cc99cc);
+}
+
+.banner-round-num {
+    color: var(--lcars-african-violet, #cc99cc);
+}
+
+.banner-next-actor {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--lcars-violet-creme, #ddbbdd);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Pulse animation when banner updates */
+@keyframes banner-pulse {
+    0%, 100% {
+        border-bottom-color: var(--lcars-african-violet, #cc99cc);
+    }
+    50% {
+        border-bottom-color: var(--lcars-butterscotch, #ffaa00);
+        box-shadow: 0 2px 20px rgba(255, 170, 0, 0.4);
+    }
+}
+
+.announcement-banner.banner-pulse {
+    animation: banner-pulse 1s ease-in-out;
+}
+
+/* Responsive design for banner */
+@media (max-width: 768px) {
+    .announcement-banner {
+        height: auto;
+        flex-direction: column;
+        padding: 10px;
+        gap: 8px;
+    }
+
+    .banner-left,
+    .banner-center,
+    .banner-right {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .banner-current-actor {
+        font-size: 1.1rem;
+    }
+
+    .banner-round {
+        font-size: 1.2rem;
+        padding: 5px 15px;
+    }
+}
+
+/* ===== MODAL MODE (Fullscreen Overlay) ===== */
 .announcement-overlay {
     position: fixed;
     top: 0;
