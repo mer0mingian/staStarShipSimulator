@@ -4893,8 +4893,8 @@
             fetchTurnStatus();
             fetchActionAvailability();
 
-            // Initialize announcements system with banner mode
-            const announcements = new CombatAnnouncements(encounterId, {
+            // Initialize announcements system with banner mode (global so hailing can access it)
+            window.announcements = new CombatAnnouncements(encounterId, {
                 displayMode: 'banner',   // Use persistent banner at top
                 pollInterval: 2000       // Poll every 2 seconds
             });
@@ -4959,37 +4959,15 @@
         // ===== HAILING FUNCTIONS =====
 
         function updateHailingNotification(hailingState) {
-            const notification = document.getElementById('hailing-notification');
-            const statusText = document.getElementById('hailing-status-text');
-            const fromText = document.getElementById('hailing-from-text');
-            const actions = document.getElementById('hailing-actions');
-            const channelStatus = document.getElementById('hailing-channel-status');
-
-            if (!hailingState) {
-                notification.style.display = 'none';
-                return;
+            // Update hailing state in the banner
+            if (window.announcements) {
+                window.announcements.updateHailingState(hailingState);
             }
 
-            notification.style.display = 'block';
-
-            if (hailingState.active && hailingState.initiator === 'gm') {
-                // Incoming hail from GM
-                statusText.textContent = 'INCOMING HAIL';
-                fromText.textContent = `From: ${hailingState.from_ship}`;
-                actions.style.display = 'flex';
-                channelStatus.style.display = 'none';
-            } else if (hailingState.channel_open) {
-                // Channel is open
-                statusText.textContent = '✓ CHANNEL OPEN';
-                fromText.textContent = `Communication established with ${hailingState.to_ship}`;
-                actions.style.display = 'none';
-                channelStatus.style.display = 'block';
-            } else {
-                // Hail initiated by player, waiting for response
-                statusText.textContent = 'HAILING...';
-                fromText.textContent = `Hailing ${hailingState.to_ship}`;
-                actions.style.display = 'none';
-                channelStatus.style.display = 'none';
+            // Hide the old notification panel (now using banner instead)
+            const notification = document.getElementById('hailing-notification');
+            if (notification) {
+                notification.style.display = 'none';
             }
         }
 
