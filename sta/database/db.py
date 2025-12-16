@@ -1,7 +1,7 @@
 """SQLAlchemy database setup and session management."""
 
 import os
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
 
@@ -15,6 +15,50 @@ DATABASE_URL = os.environ.get("STA_DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}"
 
 engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(bind=engine)
+
+
+def validate_schema():
+    """
+    Validate that the database schema matches the SQLAlchemy models.
+
+    Returns a list of discrepancies (empty list if schema is valid).
+    Each discrepancy is a dict with 'type', 'table', and 'message' keys.
+    """
+    from .schema import Base
+
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    discrepancies = []
+
+    # Check each table defined in the models
+    for table_name, table in Base.metadata.tables.items():
+        # Check if table exists
+        if table_name not in existing_tables:
+            discrepancies.append({
+                'type': 'missing_table',
+                'table': table_name,
+                'message': f"Table '{table_name}' is missing from database"
+            })
+            continue
+
+        # Table exists, check columns
+        actual_columns = {col['name']: col for col in inspector.get_columns(table_name)}
+        expected_columns = {col.name: col for col in table.columns}
+
+        for col_name, col in expected_columns.items():
+            if col_name not in actual_columns:
+                # Determine column type for helpful error message
+                col_type = str(col.type)
+                nullable = "NULL" if col.nullable else "NOT NULL"
+
+                discrepancies.append({
+                    'type': 'missing_column',
+                    'table': table_name,
+                    'column': col_name,
+                    'message': f"Column '{table_name}.{col_name}' ({col_type}, {nullable}) is missing from database"
+                })
+
+    return discrepancies
 
 
 def run_migrations():
@@ -94,6 +138,55 @@ def init_db():
 
     # Run migrations for existing databases
     run_migrations()
+
+    # Validate schema after migrations
+    discrepancies = validate_schema()
+
+    if discrepancies:
+        print("\n" + "="*70)
+        print("⚠️  DATABASE SCHEMA MISMATCH DETECTED")
+        print("="*70)
+        print("\nThe database schema doesn't match your SQLAlchemy models.")
+        print("This typically happens when you add new columns to models in")
+        print("sta/database/schema.py without updating the database.\n")
+
+        # Group by table for better readability
+        tables_affected = {}
+        for disc in discrepancies:
+            table = disc['table']
+            if table not in tables_affected:
+                tables_affected[table] = []
+            tables_affected[table].append(disc)
+
+        for table, issues in tables_affected.items():
+            print(f"\n📋 Table: {table}")
+            for issue in issues:
+                if issue['type'] == 'missing_table':
+                    print(f"   ❌ Table is missing entirely")
+                elif issue['type'] == 'missing_column':
+                    print(f"   ❌ Missing column: {issue['column']}")
+
+        print("\n" + "-"*70)
+        print("💡 HOW TO FIX:")
+        print("-"*70)
+        print("\n1. Add migrations to run_migrations() in sta/database/db.py")
+        print("   For each missing column, add an ALTER TABLE statement like:\n")
+
+        for disc in discrepancies:
+            if disc['type'] == 'missing_column':
+                table = disc['table']
+                column = disc['column']
+                print(f"   if '{column}' not in {table}_columns:")
+                print(f"       conn.execute(text(\"ALTER TABLE {table} ADD COLUMN {column} ...\"))")
+                print(f"       conn.commit()\n")
+
+        print("2. Or delete sta_simulator.db to recreate from scratch:")
+        print("   rm sta_simulator.db")
+        print("   (WARNING: This deletes all data!)\n")
+
+        print("="*70)
+        print("\n⚠️  Continuing startup, but you may encounter SQLAlchemy errors!")
+        print("="*70 + "\n")
 
 
 def get_session() -> Session:
