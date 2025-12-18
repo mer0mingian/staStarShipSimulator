@@ -18,6 +18,10 @@ class CombatAnnouncements {
         // Display mode: 'modal' (old fullscreen), 'banner' (persistent top bar), 'tts-only' (no visual)
         this.displayMode = options.displayMode || 'banner';
 
+        // Role for visibility filtering: 'player', 'viewscreen', or 'gm'
+        // Player/viewscreen roles filter out actions from hidden enemies
+        this.role = options.role || 'player';
+
         // Text-to-Speech options
         this.enableTTS = options.enableTTS || false;
         this.ttsVoice = null;
@@ -149,9 +153,8 @@ class CombatAnnouncements {
         banner.innerHTML = `
             <div class="banner-left">
                 <div class="banner-current-turn">
-                    <span class="banner-label">Current Turn:</span>
-                    <span class="banner-current-actor">Waiting...</span>
-                    <span class="banner-current-action">—</span>
+                    <span class="banner-current-actor">Waiting for action...</span>
+                    <span class="banner-current-action"></span>
                 </div>
             </div>
             <div class="banner-center">
@@ -159,7 +162,7 @@ class CombatAnnouncements {
             </div>
             <div class="banner-right">
                 <div class="banner-next-turn">
-                    <span class="banner-label">Next:</span>
+                    <span class="banner-label">Now:</span>
                     <span class="banner-next-actor">—</span>
                 </div>
             </div>
@@ -187,8 +190,8 @@ class CombatAnnouncements {
             hailingActions: banner.querySelector('.banner-hailing-actions')
         };
 
-        // Add padding to body to account for fixed banner
-        document.body.style.paddingTop = '60px';
+        // Add class to body for flexbox layout
+        document.body.classList.add('has-announcement-banner');
     }
 
     createModal() {
@@ -245,7 +248,7 @@ class CombatAnnouncements {
 
     async fetchInitialLog() {
         try {
-            const response = await fetch(`/api/encounter/${this.encounterId}/combat-log?limit=1`);
+            const response = await fetch(`/api/encounter/${this.encounterId}/combat-log?limit=1&role=${this.role}`);
             if (!response.ok) return;
 
             const data = await response.json();
@@ -259,7 +262,7 @@ class CombatAnnouncements {
 
     async pollForNewActions() {
         try {
-            let url = `/api/encounter/${this.encounterId}/combat-log?limit=10`;
+            let url = `/api/encounter/${this.encounterId}/combat-log?limit=10&role=${this.role}`;
             if (this.lastLogId) {
                 url += `&since_id=${this.lastLogId}`;
             }
@@ -341,17 +344,76 @@ class CombatAnnouncements {
     }
 
     updateBanner(logEntry) {
-        // Update current turn info
-        this.bannerElements.currentActor.textContent = logEntry.actor_name || 'Unknown';
-        this.bannerElements.currentAction.textContent = logEntry.action_name;
+        // Build verbose action description
+        const actor = logEntry.actor_name || 'Unknown';
+        const action = logEntry.action_name || 'acts';
+
+        // Format: "Actor Action!" with results
+        let actionText = `${actor} ${this.formatActionVerb(action)}!`;
+
+        // Add result details
+        let resultParts = [];
+
+        if (logEntry.task_result) {
+            const tr = logEntry.task_result;
+            if (tr.succeeded) {
+                if (tr.momentum_generated > 0) {
+                    resultParts.push(`+${tr.momentum_generated} Momentum`);
+                }
+            } else {
+                resultParts.push('Failed');
+            }
+            if (tr.complications > 0) {
+                resultParts.push(`${tr.complications} complication${tr.complications > 1 ? 's' : ''}`);
+            }
+        }
+
+        if (logEntry.damage_dealt > 0) {
+            resultParts.push(`${logEntry.damage_dealt} damage`);
+        }
+
+        // Combine action text with results
+        if (resultParts.length > 0) {
+            actionText += ' ' + resultParts.join(', ') + '.';
+        }
+
+        this.bannerElements.currentActor.textContent = actionText;
+        this.bannerElements.currentAction.textContent = '';
         this.bannerElements.roundNum.textContent = logEntry.round || '1';
 
-        // Fetch and update next player
+        // Fetch and update who's turn it is NOW
         this.updateNextPlayer();
 
         // Add brief highlight animation
         this.banner.classList.add('banner-pulse');
         setTimeout(() => this.banner.classList.remove('banner-pulse'), 1000);
+    }
+
+    formatActionVerb(actionName) {
+        // Convert action names to past tense verbs
+        const verbMap = {
+            'Rally': 'Rallies',
+            'Scan': 'Scans',
+            'Attack': 'Attacks',
+            'Fire Weapons': 'Fires Weapons',
+            'Maneuver': 'Maneuvers',
+            'Evasive Action': 'Takes Evasive Action',
+            'Lock On': 'Locks On',
+            'Damage Control': 'Performs Damage Control',
+            'Regenerate Shields': 'Regenerates Shields',
+            'Calibrate Weapons': 'Calibrates Weapons',
+            'Calibrate Sensors': 'Calibrates Sensors',
+            'Sensor Sweep': 'Performs Sensor Sweep',
+            'Scan For Weakness': 'Scans For Weakness',
+            'Modulate Shields': 'Modulates Shields',
+            'Targeting Solution': 'Calculates Targeting Solution',
+            'Attack Pattern': 'Executes Attack Pattern',
+            'Regain Power': 'Regains Power',
+            'Pass': 'Passes',
+            'Change Position': 'Changes Position',
+        };
+
+        return verbMap[actionName] || actionName;
     }
 
     async updateNextPlayer() {
@@ -498,7 +560,7 @@ class CombatAnnouncements {
 
         if (this.banner) {
             this.banner.remove();
-            document.body.style.paddingTop = ''; // Reset padding
+            document.body.classList.remove('has-announcement-banner');
         }
     }
 }

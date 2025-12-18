@@ -959,6 +959,27 @@ def next_turn(encounter_id: str):
                 ships_turns_used[str(ship_info["ship_id"])] = max_turns
             encounter.ships_turns_used_json = json.dumps(ships_turns_used)
 
+        # Log the "End Turn" action
+        side_that_passed = "player" if encounter.current_turn == "player" else "enemy"
+        if side_that_passed == "player":
+            actor_name = "Players"
+            ship_name = "Player Ship"
+        else:
+            # Get first enemy ship name for the log
+            actor_name = "GM"
+            ship_name = enemy_info["ships_info"][0]["name"] if enemy_info["ships_info"] else "Enemy"
+
+        log_combat_action(
+            session=session,
+            encounter_record=encounter,
+            actor_name=actor_name,
+            actor_type=side_that_passed,
+            ship_name=ship_name,
+            action_name="End Turn",
+            action_type="major",
+            description=f"{side_that_passed.title()} side ended their turn early.",
+        )
+
         # Now alternate to determine next turn owner
         turn_result = alternate_turn_after_action(session, encounter)
 
@@ -1002,11 +1023,12 @@ def get_encounter_status(encounter_id: str):
         if encounter.pending_attack_json:
             pending_attack = json.loads(encounter.pending_attack_json)
 
-        # Get player ship's reserve power status
+        # Get player ship status
         player_ship_record = session.query(StarshipRecord).filter_by(
             id=encounter.player_ship_id
         ).first()
         has_reserve_power = player_ship_record.has_reserve_power if player_ship_record else True
+        weapons_armed = player_ship_record.weapons_armed if player_ship_record else False
 
         # Filter ships_info by visibility for player role
         ships_info = enemy_turn_info["ships_info"]
@@ -1043,6 +1065,7 @@ def get_encounter_status(encounter_id: str):
             "ships_info": ships_info,
             "pending_attack": pending_attack,
             "has_reserve_power": has_reserve_power,
+            "weapons_armed": weapons_armed,
             # Multi-player turn info
             "is_multiplayer": multiplayer_info["is_multiplayer"],
             "current_player_id": multiplayer_info["current_player_id"],
@@ -4103,6 +4126,8 @@ def get_combat_log(encounter_id: str):
         since_id: int - Only return log entries after this ID (for polling)
         round: int - Only return log entries from this round
         limit: int - Maximum number of entries to return (default 50)
+        role: str - "player", "viewscreen", or "gm" (default: "player")
+                   Player/viewscreen roles filter out actions from hidden enemies
 
     Returns:
         JSON with log entries, newest first
@@ -4110,6 +4135,7 @@ def get_combat_log(encounter_id: str):
     since_id = request.args.get("since_id", type=int)
     round_filter = request.args.get("round", type=int)
     limit = request.args.get("limit", default=50, type=int)
+    role = request.args.get("role", default="player", type=str)
 
     session = get_session()
     try:
@@ -4135,9 +4161,36 @@ def get_combat_log(encounter_id: str):
         # Order by ID descending (newest first) and limit
         log_entries = query.order_by(CombatLogRecord.id.desc()).limit(limit).all()
 
+        # For player/viewscreen roles, filter out actions from hidden enemies
+        should_filter_hidden = role in ("player", "viewscreen")
+        hidden_enemy_ships = set()
+
+        if should_filter_hidden and log_entries:
+            # Get visibility data
+            tactical_map = get_tactical_map_from_encounter(encounter)
+            ship_positions = get_ship_positions_from_encounter(encounter)
+            player_pos = ship_positions.get("player", {"q": 0, "r": 0})
+
+            # Get detected positions from active effects
+            active_effects_data = json.loads(encounter.active_effects_json or "[]")
+            detected_positions = get_detected_positions_from_effects(active_effects_data)
+
+            # Get enemy ship names and check visibility
+            enemy_ids = json.loads(encounter.enemy_ship_ids_json or "[]")
+            for i, enemy_id in enumerate(enemy_ids):
+                enemy_ship = session.query(StarshipRecord).get(enemy_id)
+                if enemy_ship:
+                    enemy_pos = ship_positions.get(f"enemy_{i}", {"q": 0, "r": 0})
+                    if not is_ship_visible_to_player(player_pos, enemy_pos, tactical_map, detected_positions):
+                        hidden_enemy_ships.add(enemy_ship.name)
+
         # Convert to JSON-serializable format
         entries = []
         for entry in log_entries:
+            # Skip entries from hidden enemies for player/viewscreen
+            if should_filter_hidden and entry.actor_type == "enemy" and entry.ship_name in hidden_enemy_ships:
+                continue
+
             entries.append({
                 "id": entry.id,
                 "round": entry.round,
@@ -4157,10 +4210,139 @@ def get_combat_log(encounter_id: str):
         # Reverse to get oldest-first order for display
         entries.reverse()
 
+        # Get latest_id from unfiltered entries (so polling still works correctly)
         return jsonify({
             "log": entries,
             "count": len(entries),
             "latest_id": log_entries[0].id if log_entries else None,
+        })
+
+    finally:
+        session.close()
+
+
+@api_bp.route("/encounter/<encounter_id>/round-actions", methods=["GET"])
+def get_round_actions(encounter_id: str):
+    """Get actions taken this round, grouped by actor type and ship.
+
+    Returns actions organized for easy display of who has acted and what they did.
+    """
+    session = get_session()
+    try:
+        encounter = session.query(EncounterRecord).filter_by(
+            encounter_id=encounter_id
+        ).first()
+
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+
+        # Get all actions for the current round
+        log_entries = session.query(CombatLogRecord).filter_by(
+            encounter_id=encounter.id,
+            round=encounter.round
+        ).order_by(CombatLogRecord.id.asc()).all()
+
+        # Group actions by actor
+        player_actions = []  # Actions by player characters
+        enemy_actions = {}   # Actions by enemy ship, keyed by ship_name
+
+        for entry in log_entries:
+            action_data = {
+                "actor_name": entry.actor_name,
+                "action_name": entry.action_name,
+                "action_type": entry.action_type,
+                "description": entry.description,
+                "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
+            }
+
+            if entry.actor_type == "player":
+                player_actions.append(action_data)
+            else:
+                # Group enemy actions by ship
+                ship_name = entry.ship_name or "Unknown Ship"
+                if ship_name not in enemy_actions:
+                    enemy_actions[ship_name] = []
+                enemy_actions[ship_name].append(action_data)
+
+        # Get enemy ship info with turns
+        enemy_ids = json.loads(encounter.enemy_ship_ids_json or "[]")
+        ships_turns_used = json.loads(encounter.ships_turns_used_json or "{}")
+
+        # Get the turn multiplier from the campaign if available
+        import math
+        turn_multiplier = 1.0  # Default: ships get Scale turns
+        if encounter.campaign_id:
+            campaign = session.query(CampaignRecord).filter_by(id=encounter.campaign_id).first()
+            if campaign and campaign.enemy_turn_multiplier is not None:
+                turn_multiplier = campaign.enemy_turn_multiplier
+
+        enemy_ships_info = []
+        for i, enemy_id in enumerate(enemy_ids):
+            enemy_ship = session.query(StarshipRecord).get(enemy_id)
+            if enemy_ship:
+                turns_used = ships_turns_used.get(str(enemy_id), 0)
+                # Apply multiplier and round up (minimum 1 turn)
+                ship_turns = max(1, math.ceil(enemy_ship.scale * turn_multiplier))
+                enemy_ships_info.append({
+                    "index": i,
+                    "name": enemy_ship.name,
+                    "ship_class": enemy_ship.ship_class,
+                    "scale": enemy_ship.scale,
+                    "turns_used": turns_used,
+                    "turns_total": ship_turns,
+                    "turns_remaining": ship_turns - turns_used,
+                    "actions": enemy_actions.get(enemy_ship.name, [])
+                })
+
+        # Get player ship info
+        player_ship = None
+        if encounter.player_ship_id:
+            ps = session.query(StarshipRecord).get(encounter.player_ship_id)
+            if ps:
+                player_ship = {
+                    "name": ps.name,
+                    "ship_class": ps.ship_class,
+                    "scale": ps.scale,
+                    "turns_used": encounter.player_turns_used,
+                    "turns_total": ps.scale,
+                    "turns_remaining": ps.scale - encounter.player_turns_used,
+                }
+
+        # Get campaign players info if available
+        campaign_players_info = []
+        if encounter.campaign_id:
+            from sta.database import CampaignPlayerRecord
+            campaign_players = session.query(CampaignPlayerRecord).filter_by(
+                campaign_id=encounter.campaign_id,
+                is_active=True,
+                is_gm=False
+            ).all()
+
+            players_turns_used = json.loads(encounter.players_turns_used_json or "{}")
+
+            for player in campaign_players:
+                player_data = players_turns_used.get(str(player.id), {})
+                has_acted = player_data.get("acted", False)
+
+                # Find actions by this player
+                player_action_list = [a for a in player_actions if a["actor_name"] == player.player_name]
+
+                campaign_players_info.append({
+                    "player_id": player.id,
+                    "name": player.player_name,
+                    "position": player.position,
+                    "has_acted": has_acted,
+                    "is_current": encounter.current_player_id == player.id,
+                    "actions": player_action_list
+                })
+
+        return jsonify({
+            "round": encounter.round,
+            "current_turn": encounter.current_turn,
+            "player_ship": player_ship,
+            "player_actions": player_actions,
+            "campaign_players": campaign_players_info,
+            "enemy_ships": enemy_ships_info,
         })
 
     finally:

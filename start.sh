@@ -37,11 +37,11 @@ echo -e "${GREEN}Server starting!${NC}"
 echo "========================================"
 echo "Players can connect at:"
 echo ""
-echo "  http://${IP_ADDR}:5000"
+echo "  http://${IP_ADDR}:5001"
 echo ""
 echo "Press Ctrl+C to stop the server"
 echo "========================================"
 echo ""
 
 # Run the Flask app, accessible from other devices on the network
-FLASK_APP=sta.web.app:create_app flask run --host=0.0.0.0 --port=5000
+FLASK_APP=sta.web.app:create_app flask run --host=0.0.0.0 --port=5001

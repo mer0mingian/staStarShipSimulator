@@ -323,6 +323,37 @@
             color: var(--lcars-text-dark);
         }
 
+        .weapon-unarmed {
+            background: var(--lcars-gray);
+            color: var(--lcars-text-dark);
+            opacity: 0.7;
+        }
+
+        .weapons-armed-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            font-size: 1rem;
+        }
+
+        .weapons-armed-indicator .status-badge {
+            padding: 4px 12px;
+            border-radius: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .weapons-armed-indicator .armed {
+            background: var(--lcars-tomato);
+            color: var(--lcars-text-dark);
+        }
+
+        .weapons-armed-indicator .unarmed {
+            background: var(--lcars-gray);
+            color: var(--lcars-text-dark);
+        }
+
         /* Systems display */
         .systems-grid {
             display: grid;
@@ -739,21 +770,14 @@
                 <div class="status-panel">
                     <h3>RESOURCES</h3>
                     <!-- Momentum -->
-                    <div class="resource-display" style="flex-direction: column; align-items: flex-start;">
+                    <div class="resource-display">
                         <span class="resource-label">Momentum</span>
-                        <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
-                            <div class="resource-pips" id="momentum-pips">
-                                {% for i in range(6) %}
-                                <div class="resource-pip momentum-pip {% if i < encounter.momentum %}filled{% endif %}"></div>
-                                {% endfor %}
-                            </div>
-                            <span class="resource-value-large momentum-value" id="momentum-value">{{ encounter.momentum }}</span>
-                        </div>
+                        <span class="resource-value-large momentum-value" id="momentum-value">{{ encounter.momentum }}</span>
                     </div>
                     <!-- Threat -->
-                    <div class="resource-display" style="flex-direction: column; align-items: flex-start;">
+                    <div class="resource-display">
                         <span class="resource-label">Threat</span>
-                        <span class="resource-value-large threat-value" id="threat-value" style="font-size: 2.8rem;">{{ encounter.threat }}</span>
+                        <span class="resource-value-large threat-value" id="threat-value">{{ encounter.threat }}</span>
                     </div>
                 </div>
 
@@ -761,24 +785,24 @@
                 {% if player_ship %}
                 <div class="status-panel">
                     <h3>SYSTEMS</h3>
-                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
                         {% set systems_list = [
-                            ('COMMS', 'comms', player_ship.systems.comms),
-                            ('COMPUTERS', 'computers', player_ship.systems.computers),
-                            ('ENGINES', 'engines', player_ship.systems.engines),
-                            ('SENSORS', 'sensors', player_ship.systems.sensors),
-                            ('STRUCTURE', 'structure', player_ship.systems.structure),
-                            ('WEAPONS', 'weapons', player_ship.systems.weapons)
+                            ('COM', 'comms', player_ship.systems.comms),
+                            ('CPU', 'computers', player_ship.systems.computers),
+                            ('ENG', 'engines', player_ship.systems.engines),
+                            ('SEN', 'sensors', player_ship.systems.sensors),
+                            ('STR', 'structure', player_ship.systems.structure),
+                            ('WPN', 'weapons', player_ship.systems.weapons)
                         ] %}
                         {% for name, key, value in systems_list %}
                         {% set breach_potency = player_ship.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
-                        <div class="system-status-row" data-system="{{ key }}" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: {% if breach_potency > 0 %}rgba(255, 102, 102, 0.2){% else %}#1a1a1a{% endif %}; border-radius: 5px; {% if breach_potency > 0 %}border-left: 3px solid var(--lcars-tomato);{% endif %}">
-                            <span style="color: var(--lcars-almond); font-size: 1rem;">{{ name }}</span>
-                            <span style="font-weight: bold; font-size: 1.1rem; color: {% if breach_potency > 0 %}var(--lcars-tomato){% else %}var(--lcars-success){% endif %};">
+                        <div class="system-status-row" data-system="{{ key }}" style="display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background: {% if breach_potency > 0 %}rgba(255, 102, 102, 0.2){% else %}#1a1a1a{% endif %}; border-radius: 5px; {% if breach_potency > 0 %}border-left: 3px solid var(--lcars-tomato);{% endif %}">
+                            <span style="color: var(--lcars-almond); font-size: 0.9rem;">{{ name }}</span>
+                            <span style="font-weight: bold; font-size: 1rem; color: {% if breach_potency > 0 %}var(--lcars-tomato){% else %}var(--lcars-success){% endif %};">
                                 {% if breach_potency > 0 %}
-                                {{ value }} <span style="color: var(--lcars-tomato);">(-{{ breach_potency }})</span>
+                                {{ value }}<span style="color: var(--lcars-tomato);">-{{ breach_potency }}</span>
                                 {% else %}
-                                {{ value }} ✓
+                                {{ value }}
                                 {% endif %}
                             </span>
                         </div>
@@ -827,26 +851,15 @@
                     </div>
 
                     <!-- Weapons -->
-                    <div class="weapons-status">
-                        {% for weapon in player_ship.weapons %}
-                        <span class="weapon-badge weapon-armed">{{ weapon.name }}</span>
-                        {% endfor %}
+                    <div class="weapons-armed-indicator">
+                        <span style="color: var(--lcars-almond);">Weapons:</span>
+                        <span class="status-badge {% if player_ship.weapons_armed %}armed{% else %}unarmed{% endif %}" id="weapons-armed-badge">
+                            {{ 'ARMED' if player_ship.weapons_armed else 'UNARMED' }}
+                        </span>
                     </div>
-
-                    <!-- Systems -->
-                    <div class="systems-grid">
-                        {% set systems = [('COM', player_ship.systems.comms, 'comms'), ('CPU', player_ship.systems.computers, 'computers'), ('ENG', player_ship.systems.engines, 'engines'), ('SEN', player_ship.systems.sensors, 'sensors'), ('STR', player_ship.systems.structure, 'structure'), ('WPN', player_ship.systems.weapons, 'weapons')] %}
-                        {% for name, value, key in systems %}
-                        {% set breach_potency = player_ship.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
-                        <div class="system-item {% if breach_potency > 0 %}breached{% endif %}" data-system="{{ key }}">
-                            <span class="system-name">{{ name }}</span>
-                            <span class="system-value">
-                                {{ value }}
-                                {% if breach_potency > 0 %}
-                                <span class="breach-indicator">-{{ breach_potency }}</span>
-                                {% endif %}
-                            </span>
-                        </div>
+                    <div class="weapons-status" id="weapons-list">
+                        {% for weapon in player_ship.weapons %}
+                        <span class="weapon-badge {% if player_ship.weapons_armed %}weapon-armed{% else %}weapon-unarmed{% endif %}">{{ weapon.name }}</span>
                         {% endfor %}
                     </div>
 
@@ -1140,9 +1153,10 @@
             if (!SoundManager.audioInitialized) return;
 
             try {
+                // Use role=viewscreen to filter out actions from hidden enemies
                 const url = lastCombatLogId
-                    ? `/api/encounter/${encounterId}/combat-log?since_id=${lastCombatLogId}&limit=10`
-                    : `/api/encounter/${encounterId}/combat-log?limit=1`;
+                    ? `/api/encounter/${encounterId}/combat-log?since_id=${lastCombatLogId}&limit=10&role=viewscreen`
+                    : `/api/encounter/${encounterId}/combat-log?limit=1&role=viewscreen`;
 
                 const response = await fetch(url);
                 const data = await response.json();
@@ -1332,7 +1346,7 @@
             if (hailingState.active) {
                 // Play hailing sound once per new hail
                 if (!hailingSoundPlayed) {
-                    SoundManager.playSound('/static/audio/sounds/ui/tng_hail.mp3');
+                    SoundManager.playSound('/static/audio/sounds/ui/hailbeep3_clean.mp3');
                     hailingSoundPlayed = true;
                 }
                 // Don't change display - keep showing map
@@ -1406,10 +1420,6 @@
 
                 // Update momentum
                 document.getElementById('momentum-value').textContent = data.momentum;
-                const momentumPips = document.querySelectorAll('.momentum-pip');
-                momentumPips.forEach((pip, index) => {
-                    pip.classList.toggle('filled', index < data.momentum);
-                });
 
                 // Update threat
                 document.getElementById('threat-value').textContent = data.threat;
@@ -1432,6 +1442,22 @@
                     });
                     document.getElementById('enemy-turns-used').textContent = enemyTurnsUsed;
                     document.getElementById('enemy-turns-total').textContent = enemyTurnsTotal;
+                }
+
+                // Update weapons armed status
+                if (data.weapons_armed !== undefined) {
+                    const weaponsBadge = document.getElementById('weapons-armed-badge');
+                    const weaponsList = document.getElementById('weapons-list');
+                    if (weaponsBadge) {
+                        weaponsBadge.textContent = data.weapons_armed ? 'ARMED' : 'UNARMED';
+                        weaponsBadge.className = 'status-badge ' + (data.weapons_armed ? 'armed' : 'unarmed');
+                    }
+                    if (weaponsList) {
+                        const badges = weaponsList.querySelectorAll('.weapon-badge');
+                        badges.forEach(badge => {
+                            badge.className = 'weapon-badge ' + (data.weapons_armed ? 'weapon-armed' : 'weapon-unarmed');
+                        });
+                    }
                 }
 
                 // Check viewscreen audio setting from GM
@@ -1622,7 +1648,8 @@
                 enableTTS: true,         // Enable text-to-speech for viewscreen
                 ttsRate: 1.1,            // Slightly faster speech
                 ttsPitch: 0.9,           // Slightly lower pitch (more "computer-like")
-                ttsVolume: 1.0           // Full volume
+                ttsVolume: 1.0,          // Full volume
+                role: 'viewscreen'       // Filter out actions from hidden enemies
             });
         });
     </script>

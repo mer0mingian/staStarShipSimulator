@@ -80,8 +80,10 @@
         }
 
         .gm-nav-tab.tab-main { background: var(--lcars-butterscotch); }
+        .gm-nav-tab.tab-map { background: var(--lcars-bluey); }
+        .gm-nav-tab.tab-log { background: var(--lcars-orange); }
         .gm-nav-tab.tab-players { background: var(--lcars-african-violet); }
-        .gm-nav-tab.tab-ships { background: var(--lcars-bluey); }
+        .gm-nav-tab.tab-ships { background: var(--lcars-ice); }
         .gm-nav-tab.tab-npc { background: var(--lcars-tomato); }
         .gm-nav-tab.tab-override { background: var(--lcars-taupe); }
 
@@ -161,33 +163,60 @@
             display: block;
         }
 
-        /* Turn Banner */
+        /* Turn Banner - VERY prominent */
         .turn-banner {
-            padding: 15px 20px;
-            border-radius: 10px;
+            padding: 20px 30px;
+            border-radius: 15px;
             text-align: center;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             font-size: 1.2em;
             font-weight: bold;
             text-transform: uppercase;
         }
 
         .turn-banner.your-turn {
-            background: linear-gradient(135deg, #2a1a3a, #4a2a5a);
-            border: 3px solid var(--lcars-african-violet);
-            color: var(--lcars-african-violet);
-            animation: pulse-glow 2s ease-in-out infinite;
+            background: linear-gradient(135deg, #3a1a4a 0%, #5a2a7a 50%, #3a1a4a 100%);
+            border: 4px solid var(--lcars-tomato);
+            color: var(--lcars-tomato);
+            animation: gm-pulse 1.5s ease-in-out infinite;
+            box-shadow: 0 0 30px rgba(255, 102, 102, 0.4), inset 0 0 60px rgba(255, 102, 102, 0.1);
         }
 
         .turn-banner.player-turn {
-            background: linear-gradient(135deg, #1a3a1a, #2a5a2a);
-            border: 3px solid var(--lcars-success);
+            background: linear-gradient(135deg, #1a3a1a 0%, #2a5a2a 50%, #1a3a1a 100%);
+            border: 4px solid var(--lcars-success);
             color: var(--lcars-success);
+            box-shadow: 0 0 20px rgba(144, 201, 86, 0.3), inset 0 0 40px rgba(144, 201, 86, 0.05);
         }
 
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 10px var(--lcars-african-violet); }
-            50% { box-shadow: 0 0 25px var(--lcars-african-violet); }
+        @keyframes gm-pulse {
+            0%, 100% {
+                box-shadow: 0 0 30px rgba(255, 102, 102, 0.4), inset 0 0 60px rgba(255, 102, 102, 0.1);
+                border-color: var(--lcars-tomato);
+            }
+            50% {
+                box-shadow: 0 0 50px rgba(255, 102, 102, 0.6), inset 0 0 80px rgba(255, 102, 102, 0.15);
+                border-color: #ff9999;
+            }
+        }
+
+        .turn-indicator-label {
+            font-size: 3.5rem;
+            font-weight: 900;
+            letter-spacing: 8px;
+            text-shadow: 0 0 20px currentColor;
+            margin-bottom: 5px;
+        }
+
+        .turn-indicator-sublabel {
+            font-size: 1rem;
+            letter-spacing: 2px;
+            opacity: 0.8;
+        }
+
+        @keyframes pulse-badge {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
         }
 
         /* Resource Panel */
@@ -815,7 +844,9 @@
                 <span>GM CONTROL</span>
             </div>
             <div class="gm-nav-tabs">
-                <button class="gm-nav-tab tab-main active" onclick="showTab('main')">Main</button>
+                <button class="gm-nav-tab tab-main active" onclick="showTab('main')">Overview</button>
+                <button class="gm-nav-tab tab-map" onclick="showTab('map')">Map</button>
+                <button class="gm-nav-tab tab-log" onclick="showTab('log')">Battle Log</button>
                 <button class="gm-nav-tab tab-players" onclick="showTab('players')">Players</button>
                 <button class="gm-nav-tab tab-ships" onclick="showTab('ships')">Ships</button>
                 <button class="gm-nav-tab tab-npc" onclick="showTab('npc')">NPC Actions</button>
@@ -847,35 +878,50 @@
 
             <!-- Tab Content -->
             <div class="gm-content">
-                <!-- MAIN TAB -->
+                <!-- MAIN TAB (Overview) -->
                 <div id="tab-main" class="tab-panel active">
-                    <!-- Turn Banner with Pass Button -->
+                    <!-- Big Turn Indicator - VERY PROMINENT -->
                     <div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'enemy' %}your-turn{% else %}player-turn{% endif %}">
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;">
-                            <div>
-                                <div class="turn-text">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 30px; flex-wrap: wrap;">
+                            <div style="flex: 1; text-align: left;">
+                                <div id="turn-indicator-text" class="turn-indicator-label">
                                     {% if encounter.current_turn == 'enemy' %}
-                                    YOUR TURN (GM) - Select a ship to take action
+                                    GM
                                     {% else %}
-                                    PLAYER'S TURN - Waiting for crew...
+                                    PLAYERS
                                     {% endif %}
                                 </div>
-                                <div class="turn-counter">
-                                    <span class="turn-count player">
-                                        Crew: <span id="player-turns-used">0</span>/<span id="player-turns-total">0</span>
-                                    </span>
-                                    <span class="turn-count enemy">
-                                        Enemy: <span id="enemy-turns-used">0</span>/<span id="enemy-turns-total">0</span>
-                                    </span>
+                                <div class="turn-indicator-sublabel">
+                                    {% if encounter.current_turn == 'enemy' %}
+                                    Your turn to act
+                                    {% else %}
+                                    Waiting for crew actions
+                                    {% endif %}
                                 </div>
                             </div>
-                            <button class="btn btn-violet" onclick="nextTurn()" id="end-turn-btn" style="min-width: 180px;">
-                                {% if encounter.current_turn == 'enemy' %}Pass (End Enemy Turns){% else %}Pass (End Player Turns){% endif %}
+                            <div style="text-align: center;">
+                                <div style="display: flex; gap: 25px; align-items: center;">
+                                    <div class="turn-stat-box" style="text-align: center;">
+                                        <div style="font-size: 0.75rem; opacity: 0.7; margin-bottom: 2px;">CREW</div>
+                                        <div style="font-size: 1.8rem; font-weight: 700; color: var(--lcars-success);">
+                                            <span id="player-turns-used">0</span><span style="opacity: 0.5;">/</span><span id="player-turns-total">0</span>
+                                        </div>
+                                    </div>
+                                    <div class="turn-stat-box" style="text-align: center;">
+                                        <div style="font-size: 0.75rem; opacity: 0.7; margin-bottom: 2px;">ENEMY</div>
+                                        <div style="font-size: 1.8rem; font-weight: 700; color: var(--lcars-tomato);">
+                                            <span id="enemy-turns-used">0</span><span style="opacity: 0.5;">/</span><span id="enemy-turns-total">0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="btn" onclick="nextTurn()" id="end-turn-btn" style="min-width: 160px; font-size: 1rem; padding: 18px 25px; background: {% if encounter.current_turn == 'enemy' %}var(--lcars-success){% else %}var(--lcars-tomato){% endif %};">
+                                {% if encounter.current_turn == 'enemy' %}→ PLAYERS{% else %}→ GM{% endif %}
                             </button>
                         </div>
                     </div>
 
-                    <!-- Resources -->
+                    <!-- Resources Row -->
                     <div class="resources-row">
                         <div class="resource-box momentum">
                             <span class="resource-label">Momentum</span>
@@ -901,85 +947,108 @@
                         </div>
                     </div>
 
-                    <!-- Ships Overview - All ships with shield status and action buttons -->
-                    <div style="margin-bottom: 15px;">
-                        <h3 style="color: var(--lcars-bluey); margin-bottom: 10px;">ALL SHIPS</h3>
+                    <!-- Two Column Layout: Player Ship & Crew | Enemy Ships -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <!-- Player Ship & Crew Column -->
+                        <div class="ship-panel player-ship" style="border-color: var(--lcars-success);">
+                            <h3 style="color: var(--lcars-success); display: flex; justify-content: space-between; align-items: center;">
+                                <span>👥 PLAYER SHIP & CREW</span>
+                                <span id="player-turn-count" style="font-size: 0.9rem; background: rgba(144, 201, 86, 0.2); padding: 4px 12px; border-radius: 10px;">
+                                    <span id="overview-player-turns-used">0</span>/<span id="overview-player-turns-total">{{ player_ship.scale if player_ship else 1 }}</span> turns
+                                </span>
+                            </h3>
 
-                        <!-- Player Ship -->
-                        {% if player_ship %}
-                        <div class="ship-overview-card player-ship-card" style="display: flex; align-items: center; gap: 15px; padding: 12px; background: #1a2a1a; border: 2px solid var(--lcars-success); border-radius: 8px; margin-bottom: 8px;">
-                            <div style="flex: 1;">
-                                <div style="color: var(--lcars-success); font-weight: 700;">{{ player_ship.name }}</div>
-                                <div style="color: var(--lcars-almond); font-size: 0.85em;">{{ player_ship.ship_class }}-class (Scale {{ player_ship.scale }})</div>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <div style="text-align: center;">
-                                    <div style="font-size: 0.75em; color: var(--lcars-almond);">Shields</div>
-                                    <div style="font-size: 1.1em; color: var(--lcars-success);">
-                                        <span id="overview-player-shields">{{ player_ship.shields }}</span>/{{ player_ship.shields_max }}
+                            {% if player_ship %}
+                            <div style="background: #1a2a1a; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="color: var(--lcars-success); font-weight: 700; font-size: 1.1rem;">{{ player_ship.name }}</div>
+                                        <div style="color: var(--lcars-almond); font-size: 0.85em;">{{ player_ship.ship_class }}-class (Scale {{ player_ship.scale }})</div>
                                     </div>
-                                    <div class="shields-bar" style="width: 80px; height: 6px;">
-                                        <div class="fill" id="overview-player-shields-bar" style="width: {{ (player_ship.shields / player_ship.shields_max * 100) | int }}%; background: var(--lcars-success);"></div>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <div style="text-align: center;">
+                                            <div style="font-size: 0.75em; color: var(--lcars-almond);">Shields</div>
+                                            <div style="font-size: 1.1em; color: var(--lcars-success);">
+                                                <span id="overview-player-shields">{{ player_ship.shields }}</span>/{{ player_ship.shields_max }}
+                                            </div>
+                                        </div>
+                                        <span style="padding: 4px 8px; border-radius: 4px; font-size: 0.75em; background: {% if player_ship.shields_raised %}var(--lcars-success){% else %}#555{% endif %}; color: #000;">
+                                            {{ 'UP' if player_ship.shields_raised else 'DOWN' }}
+                                        </span>
                                     </div>
                                 </div>
-                                <span style="padding: 4px 8px; border-radius: 4px; font-size: 0.75em; background: {% if player_ship.shields_raised %}var(--lcars-success){% else %}#555{% endif %}; color: #000;">
-                                    {{ 'UP' if player_ship.shields_raised else 'DOWN' }}
-                                </span>
+                            </div>
+                            {% endif %}
+
+                            <!-- Crew Members & Their Actions This Round -->
+                            <div style="color: var(--lcars-almond); font-size: 0.85rem; margin-bottom: 8px; text-transform: uppercase;">Crew Actions This Round:</div>
+                            <div id="crew-actions-list">
+                                <!-- Will be populated by JavaScript -->
+                                <div style="color: #666; padding: 10px; background: #111; border-radius: 5px;">Loading...</div>
                             </div>
                         </div>
-                        {% endif %}
 
-                        <!-- Enemy Ships with Action Buttons -->
-                        {% for enemy in enemy_ships %}
-                        <div class="ship-overview-card enemy-ship-card" style="display: flex; align-items: center; gap: 15px; padding: 12px; background: #2a1a1a; border: 2px solid var(--lcars-tomato); border-radius: 8px; margin-bottom: 8px;" data-ship-index="{{ loop.index0 }}">
-                            <div style="flex: 1;">
-                                <div style="color: var(--lcars-tomato); font-weight: 700;">{{ enemy.name }}</div>
-                                <div style="color: var(--lcars-almond); font-size: 0.85em;">{{ enemy.ship_class }}-class (Scale {{ enemy.scale }})</div>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <div style="text-align: center;">
-                                    <div style="font-size: 0.75em; color: var(--lcars-almond);">Shields</div>
-                                    <div style="font-size: 1.1em; color: var(--lcars-tomato);">
-                                        <span class="overview-enemy-shields">{{ enemy.shields }}</span>/{{ enemy.shields_max }}
+                        <!-- Enemy Ships Column -->
+                        <div class="ship-panel enemy-ship" style="border-color: var(--lcars-tomato);">
+                            <h3 style="color: var(--lcars-tomato); display: flex; justify-content: space-between; align-items: center;">
+                                <span>ENEMY SHIPS</span>
+                                <span id="enemy-turn-count" style="font-size: 0.9rem; background: rgba(255, 102, 102, 0.2); padding: 4px 12px; border-radius: 10px;">
+                                    <span id="overview-enemy-turns-used">0</span>/<span id="overview-enemy-turns-total">0</span> turns
+                                </span>
+                            </h3>
+
+                            <div id="enemy-ships-list">
+                                {% if enemy_ships %}
+                                {% for enemy in enemy_ships %}
+                                <div class="enemy-ship-overview" data-ship-index="{{ loop.index0 }}" style="background: #2a1a1a; border-radius: 8px; padding: 14px; margin-bottom: 10px; border-left: 4px solid var(--lcars-tomato); transition: opacity 0.3s;">
+                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                                        <div>
+                                            <div style="color: var(--lcars-tomato); font-weight: 700; font-size: 1.1rem;">{{ enemy.name }}</div>
+                                            <div style="color: var(--lcars-almond); font-size: 0.8em;">{{ enemy.ship_class }}-class (Scale {{ enemy.scale }})</div>
+                                        </div>
+                                        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                                            <span class="enemy-turns-badge" style="font-size: 0.85rem; background: rgba(255, 102, 102, 0.3); padding: 4px 12px; border-radius: 10px; font-weight: 700;">
+                                                0/{{ enemy.scale }} turns
+                                            </span>
+                                            <button class="btn btn-small btn-danger" onclick="selectShipForAction({{ loop.index0 }})" style="padding: 8px 16px; font-size: 0.85rem;">
+                                                Take Action
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div class="shields-bar" style="width: 80px; height: 6px;">
-                                        <div class="fill overview-enemy-shields-bar" style="width: {{ (enemy.shields / enemy.shields_max * 100) | int }}%; background: var(--lcars-tomato);"></div>
+                                    <div class="enemy-actions-this-round" style="padding: 8px 12px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 0.85rem; color: #666; border-left: 2px solid #333;">
+                                        No actions yet
                                     </div>
                                 </div>
-                                <span style="padding: 4px 8px; border-radius: 4px; font-size: 0.75em; background: {% if enemy.shields_raised %}var(--lcars-tomato){% else %}#555{% endif %}; color: #000;">
-                                    {{ 'UP' if enemy.shields_raised else 'DOWN' }}
-                                </span>
-                                <button class="btn btn-small btn-danger" onclick="selectShipForAction({{ loop.index0 }})" style="min-width: 100px;">
-                                    Take Action
-                                </button>
+                                {% endfor %}
+                                {% else %}
+                                <p style="color: #666; padding: 20px; background: #1a1a1a; border-radius: 8px; text-align: center;">No enemy ships. Add one from the Ships tab.</p>
+                                {% endif %}
                             </div>
                         </div>
-                        {% endfor %}
-
-                        {% if not enemy_ships %}
-                        <p style="color: #666; padding: 15px; background: #1a1a1a; border-radius: 8px;">No enemy ships. Add one from the Ships tab.</p>
-                        {% endif %}
                     </div>
+                </div>
 
-                    <!-- Map and Combat Log -->
-                    <div class="main-grid">
-                        <div class="map-panel">
-                            <h3>TACTICAL MAP</h3>
-                            <div id="tactical-map-container">
-                                <p style="color: #666;">Loading map...</p>
-                            </div>
+                <!-- MAP TAB -->
+                <div id="tab-map" class="tab-panel">
+                    <div class="map-panel" style="min-height: calc(100vh - 200px);">
+                        <h3>TACTICAL MAP</h3>
+                        <div id="tactical-map-container" style="min-height: 500px;">
+                            <p style="color: #666;">Loading map...</p>
                         </div>
+                    </div>
+                </div>
 
-                        <div class="combat-log-panel">
-                            <h3>COMBAT LOG <span id="combat-log-count" style="font-size: 0.8em; color: var(--lcars-almond);"></span></h3>
-                            <div style="margin-bottom: 10px;">
-                                <select id="combat-log-round-filter" onchange="filterCombatLog()" class="gm-select" style="margin-top: 0;">
-                                    <option value="">All Rounds</option>
-                                </select>
-                            </div>
-                            <div id="combat-log-container">
-                                <p style="color: #666; text-align: center;">Loading...</p>
-                            </div>
+                <!-- BATTLE LOG TAB -->
+                <div id="tab-log" class="tab-panel">
+                    <div class="combat-log-panel" style="max-height: none; height: calc(100vh - 200px);">
+                        <h3 style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>COMBAT LOG <span id="combat-log-count" style="font-size: 0.8em; color: var(--lcars-almond);"></span></span>
+                            <select id="combat-log-round-filter" onchange="filterCombatLog()" class="gm-select" style="margin: 0; width: auto; min-width: 150px;">
+                                <option value="">All Rounds</option>
+                            </select>
+                        </h3>
+                        <div id="combat-log-container" style="flex: 1; overflow-y: auto;">
+                            <p style="color: #666; text-align: center;">Loading...</p>
                         </div>
                     </div>
                 </div>
@@ -1737,18 +1806,21 @@
             currentTurn = newTurn;
             const banner = document.getElementById('turn-banner');
             const endTurnBtn = document.getElementById('end-turn-btn');
-            const gmMessage = document.getElementById('gm-turn-message');
+            const turnIndicatorText = document.getElementById('turn-indicator-text');
+            const sublabel = banner.querySelector('.turn-indicator-sublabel');
 
             if (newTurn === 'enemy') {
                 banner.className = 'turn-banner your-turn';
-                banner.querySelector('.turn-text').textContent = "YOUR TURN (GM) - Select an enemy action";
-                endTurnBtn.textContent = 'Pass (End Enemy Turns)';
-                if (gmMessage) gmMessage.innerHTML = '<span style="color: var(--lcars-success);">It\'s the enemy\'s turn. Select an action.</span>';
+                turnIndicatorText.innerHTML = 'GM';
+                if (sublabel) sublabel.textContent = 'Your turn to act';
+                endTurnBtn.textContent = '→ PLAYERS';
+                endTurnBtn.style.background = 'var(--lcars-success)';
             } else {
                 banner.className = 'turn-banner player-turn';
-                banner.querySelector('.turn-text').textContent = "PLAYER'S TURN - Waiting for crew...";
-                endTurnBtn.textContent = 'Pass (End Player Turns)';
-                if (gmMessage) gmMessage.innerHTML = '<span style="color: var(--lcars-almond);">Waiting for player turn...</span>';
+                turnIndicatorText.innerHTML = 'PLAYERS';
+                if (sublabel) sublabel.textContent = 'Waiting for crew actions';
+                endTurnBtn.textContent = '→ GM';
+                endTurnBtn.style.background = 'var(--lcars-tomato)';
             }
 
             document.getElementById('round-number').textContent = newRound;
@@ -1756,6 +1828,9 @@
             if (data) {
                 updateTurnCounters(data.player_turns_used, data.player_turns_total, data.enemy_turns_used, data.enemy_turns_total);
             }
+
+            // Refresh round actions when turn changes
+            fetchRoundActions();
         }
 
         function updateTurnCounters(playerUsed, playerTotal, enemyUsed, enemyTotal) {
@@ -1763,6 +1838,194 @@
             document.getElementById('player-turns-total').textContent = playerTotal || 0;
             document.getElementById('enemy-turns-used').textContent = enemyUsed || 0;
             document.getElementById('enemy-turns-total').textContent = enemyTotal || 0;
+
+            // Also update the overview counters
+            const overviewPlayerUsed = document.getElementById('overview-player-turns-used');
+            const overviewPlayerTotal = document.getElementById('overview-player-turns-total');
+            const overviewEnemyUsed = document.getElementById('overview-enemy-turns-used');
+            const overviewEnemyTotal = document.getElementById('overview-enemy-turns-total');
+
+            if (overviewPlayerUsed) overviewPlayerUsed.textContent = playerUsed || 0;
+            if (overviewPlayerTotal) overviewPlayerTotal.textContent = playerTotal || 0;
+            if (overviewEnemyUsed) overviewEnemyUsed.textContent = enemyUsed || 0;
+            if (overviewEnemyTotal) overviewEnemyTotal.textContent = enemyTotal || 0;
+        }
+
+        // Fetch and display round actions
+        async function fetchRoundActions() {
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/round-actions`);
+                if (!response.ok) return;
+
+                const data = await response.json();
+
+                // Update crew actions list
+                const crewActionsList = document.getElementById('crew-actions-list');
+                if (crewActionsList) {
+                    if (data.campaign_players && data.campaign_players.length > 0) {
+                        let html = '';
+                        for (const player of data.campaign_players) {
+                            const hasActed = player.has_acted;
+                            const isCurrent = player.is_current;
+
+                            // Status styling
+                            let borderColor, bgColor, statusBadge;
+                            if (hasActed) {
+                                borderColor = 'var(--lcars-success)';
+                                bgColor = 'rgba(144, 201, 86, 0.1)';
+                                statusBadge = '<span style="background: var(--lcars-success); color: #000; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700;">DONE</span>';
+                            } else if (isCurrent) {
+                                borderColor = 'var(--lcars-african-violet)';
+                                bgColor = 'rgba(204, 153, 255, 0.15)';
+                                statusBadge = '<span style="background: var(--lcars-african-violet); color: #000; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; animation: pulse-badge 1s infinite;">ACTING</span>';
+                            } else {
+                                borderColor = '#444';
+                                bgColor = '#1a1a1a';
+                                statusBadge = '<span style="background: #444; color: #888; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem;">WAITING</span>';
+                            }
+
+                            html += `<div style="padding: 10px 14px; background: ${bgColor}; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid ${borderColor};">`;
+                            html += `<div style="display: flex; justify-content: space-between; align-items: center;">`;
+                            html += `<div>`;
+                            html += `<span style="color: ${hasActed ? 'var(--lcars-success)' : 'var(--lcars-text)'}; font-weight: 700; font-size: 1rem;">${player.name}</span>`;
+                            html += `<span style="font-size: 0.8rem; color: var(--lcars-almond); margin-left: 10px;">${player.position || 'Bridge Crew'}</span>`;
+                            html += `</div>`;
+                            html += statusBadge;
+                            html += `</div>`;
+
+                            if (player.actions && player.actions.length > 0) {
+                                html += `<div style="margin-top: 8px; padding-left: 12px; border-left: 2px solid #333;">`;
+                                for (const action of player.actions) {
+                                    const typeColor = action.action_type === 'major' ? 'var(--lcars-orange)' : 'var(--lcars-ice)';
+                                    const typeLabel = action.action_type === 'major' ? 'MAJOR' : 'MINOR';
+                                    html += `<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">`;
+                                    html += `<span style="background: ${typeColor}; color: #000; padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 700;">${typeLabel}</span>`;
+                                    html += `<span style="color: var(--lcars-text); font-size: 0.9rem;">${action.action_name}</span>`;
+                                    html += `</div>`;
+                                }
+                                html += `</div>`;
+                            }
+                            html += `</div>`;
+                        }
+                        crewActionsList.innerHTML = html;
+                    } else if (data.player_actions && data.player_actions.length > 0) {
+                        // Fallback: show actions without campaign players
+                        let html = '';
+                        for (const action of data.player_actions) {
+                            const typeColor = action.action_type === 'major' ? 'var(--lcars-orange)' : 'var(--lcars-ice)';
+                            const typeLabel = action.action_type === 'major' ? 'MAJOR' : 'MINOR';
+                            html += `<div style="padding: 8px 12px; background: #1a2a1a; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid var(--lcars-success);">`;
+                            html += `<span style="color: var(--lcars-success); font-weight: 700;">${action.actor_name}</span>`;
+                            html += `<div style="margin-top: 4px; display: flex; align-items: center; gap: 8px;">`;
+                            html += `<span style="background: ${typeColor}; color: #000; padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 700;">${typeLabel}</span>`;
+                            html += `<span style="color: var(--lcars-text);">${action.action_name}</span>`;
+                            html += `</div></div>`;
+                        }
+                        crewActionsList.innerHTML = html;
+                    } else {
+                        crewActionsList.innerHTML = '<div style="color: #666; padding: 15px; background: #111; border-radius: 8px; text-align: center;">No crew actions this round yet</div>';
+                    }
+                }
+
+                // Update enemy ships with their actions
+                if (data.enemy_ships) {
+                    let totalEnemyTurnsUsed = 0;
+                    let totalEnemyTurnsTotal = 0;
+
+                    for (const ship of data.enemy_ships) {
+                        totalEnemyTurnsUsed += ship.turns_used;
+                        totalEnemyTurnsTotal += ship.turns_total;
+
+                        const shipEl = document.querySelector(`.enemy-ship-overview[data-ship-index="${ship.index}"]`);
+                        if (shipEl) {
+                            const allTurnsUsed = ship.turns_used >= ship.turns_total;
+
+                            // Update turns badge
+                            const turnsBadge = shipEl.querySelector('.enemy-turns-badge');
+                            if (turnsBadge) {
+                                turnsBadge.textContent = `${ship.turns_used}/${ship.turns_total} turns`;
+                                if (allTurnsUsed) {
+                                    turnsBadge.style.background = 'rgba(100, 100, 100, 0.3)';
+                                    turnsBadge.style.color = '#888';
+                                } else {
+                                    turnsBadge.style.background = 'rgba(255, 102, 102, 0.3)';
+                                    turnsBadge.style.color = 'var(--lcars-tomato)';
+                                }
+                            }
+
+                            // Update actions list with nice formatting
+                            const actionsEl = shipEl.querySelector('.enemy-actions-this-round');
+                            if (actionsEl) {
+                                if (ship.actions && ship.actions.length > 0) {
+                                    let actionsHtml = '';
+                                    for (const action of ship.actions) {
+                                        const typeColor = action.action_type === 'major' ? 'var(--lcars-orange)' : 'var(--lcars-ice)';
+                                        const typeLabel = action.action_type === 'major' ? 'MAJOR' : 'MINOR';
+                                        actionsHtml += `<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">`;
+                                        actionsHtml += `<span style="background: ${typeColor}; color: #000; padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 700;">${typeLabel}</span>`;
+                                        actionsHtml += `<span style="color: var(--lcars-text);">${action.action_name}</span>`;
+                                        actionsHtml += `</div>`;
+                                    }
+                                    actionsEl.innerHTML = actionsHtml;
+                                    actionsEl.style.borderLeftColor = 'var(--lcars-orange)';
+                                } else {
+                                    actionsEl.innerHTML = '<span style="color: #666;">No actions yet</span>';
+                                    actionsEl.style.borderLeftColor = '#333';
+                                }
+                            }
+
+                            // Dim the card and disable button if all turns used OR not enemy's turn
+                            const isEnemyTurn = currentTurn === 'enemy';
+                            if (allTurnsUsed) {
+                                shipEl.style.opacity = '0.5';
+                                shipEl.style.borderLeftColor = '#555';
+                                const btn = shipEl.querySelector('.btn-danger');
+                                if (btn) {
+                                    btn.style.opacity = '0.5';
+                                    btn.style.pointerEvents = 'none';
+                                    btn.textContent = 'Done';
+                                }
+                            } else if (!isEnemyTurn) {
+                                // Not enemy's turn - disable but don't fully dim
+                                shipEl.style.opacity = '0.7';
+                                shipEl.style.borderLeftColor = '#555';
+                                const btn = shipEl.querySelector('.btn-danger');
+                                if (btn) {
+                                    btn.style.opacity = '0.5';
+                                    btn.style.pointerEvents = 'none';
+                                    btn.textContent = 'Waiting...';
+                                }
+                            } else {
+                                shipEl.style.opacity = '1';
+                                shipEl.style.borderLeftColor = 'var(--lcars-tomato)';
+                                const btn = shipEl.querySelector('.btn-danger');
+                                if (btn) {
+                                    btn.style.opacity = '1';
+                                    btn.style.pointerEvents = 'auto';
+                                    btn.textContent = 'Take Action';
+                                }
+                            }
+                        }
+                    }
+
+                    // Update overview enemy totals
+                    const overviewEnemyUsed = document.getElementById('overview-enemy-turns-used');
+                    const overviewEnemyTotal = document.getElementById('overview-enemy-turns-total');
+                    if (overviewEnemyUsed) overviewEnemyUsed.textContent = totalEnemyTurnsUsed;
+                    if (overviewEnemyTotal) overviewEnemyTotal.textContent = totalEnemyTurnsTotal;
+                }
+
+                // Update player ship turns
+                if (data.player_ship) {
+                    const overviewPlayerUsed = document.getElementById('overview-player-turns-used');
+                    const overviewPlayerTotal = document.getElementById('overview-player-turns-total');
+                    if (overviewPlayerUsed) overviewPlayerUsed.textContent = data.player_ship.turns_used;
+                    if (overviewPlayerTotal) overviewPlayerTotal.textContent = data.player_ship.turns_total;
+                }
+
+            } catch (error) {
+                console.error('Error fetching round actions:', error);
+            }
         }
 
         // GM Release Turn
@@ -2514,17 +2777,20 @@
             initTacticalMap();
             refreshCombatLog();
             fetchStatus();
+            fetchRoundActions();  // Fetch initial round actions
             updatePlayerVisibilityStatus();  // Show initial visibility status
 
             // Initialize announcements system with banner mode
             const announcements = new CombatAnnouncements(encounterId, {
                 displayMode: 'banner',   // Use persistent banner at top
-                pollInterval: 2000       // Poll every 2 seconds
+                pollInterval: 2000,      // Poll every 2 seconds
+                role: 'gm'               // GM sees all actions including hidden enemies
             });
         });
 
         setInterval(fetchStatus, 3000);
         setInterval(refreshCombatLog, 5000);
+        setInterval(fetchRoundActions, 4000);  // Poll round actions
     </script>
 </body>
 </html>

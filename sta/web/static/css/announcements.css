@@ -4,10 +4,7 @@
 
 /* ===== BANNER MODE (Persistent Top Bar) ===== */
 .announcement-banner {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
+    position: relative;
     height: 60px;
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
     border-bottom: 3px solid var(--lcars-african-violet, #cc99cc);
@@ -15,9 +12,28 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 20px;
-    z-index: 9999;
+    z-index: 100;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
     font-family: var(--font-primary, 'Antonio', sans-serif);
+    flex-shrink: 0;
+}
+
+/* When banner is present, adjust main content to fill remaining space */
+body.has-announcement-banner {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    padding: 0 !important;
+}
+
+body.has-announcement-banner > .player-wrapper,
+body.has-announcement-banner > .gm-wrapper,
+body.has-announcement-banner > .viewscreen-wrapper,
+body.has-announcement-banner > .lcars-wrapper {
+    flex: 1;
+    height: auto !important;
+    min-height: 0;
 }
 
 .banner-left,
@@ -51,18 +67,23 @@
 }
 
 .banner-current-actor {
-    font-size: 1.3rem;
+    font-size: 1.1rem;
     font-weight: 700;
     color: var(--lcars-butterscotch, #ffaa00);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
+    letter-spacing: 1px;
 }
 
 .banner-current-action {
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     font-weight: 600;
     color: var(--lcars-bluey, #99ccff);
     font-style: italic;
+}
+
+.banner-current-turn {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .banner-round {

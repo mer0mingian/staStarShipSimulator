@@ -628,6 +628,36 @@ a:active {
 /* ============================================
    LCARS FORMS
    ============================================ */
+/* Global form element styling */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+textarea,
+select {
+    background: #222;
+    border: 2px solid var(--lcars-butterscotch);
+    color: var(--lcars-text);
+    padding: 10px 15px;
+    border-radius: 10px;
+    font-family: var(--font-primary);
+    font-size: var(--font-size-base);
+    box-sizing: border-box;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="search"]:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--lcars-ice);
+    box-shadow: 0 0 10px rgba(153, 204, 255, 0.3);
+}
+
 .lcars-input,
 .lcars-select {
     background: #222;

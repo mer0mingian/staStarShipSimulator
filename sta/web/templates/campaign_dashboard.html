@@ -138,13 +138,23 @@
                                         {{ player.character.rank or '' }} {{ player.character.species or '' }}
                                     </span>
                                 {% endif %}
+                                {% if player.is_claimed %}
+                                    <span style="color: var(--lcars-success); font-size: 0.75em; margin-left: 8px;" title="A player has claimed this character">● Online</span>
+                                {% else %}
+                                    <span style="color: var(--lcars-gray); font-size: 0.75em; margin-left: 8px;" title="Available to be claimed">○ Unclaimed</span>
+                                {% endif %}
                             </div>
                             <div style="display: flex; gap: 5px;">
                                 {% if is_gm %}
                                     <button class="btn btn-small" onclick="editPlayer({{ player.id }})" title="Edit player">
                                         Edit
                                     </button>
-                                    <button class="btn btn-small btn-danger" onclick="removePlayer({{ player.id }}, '{{ player.player_name }}')" title="Remove player">
+                                    {% if player.is_claimed %}
+                                        <button class="btn btn-small" style="background: var(--lcars-orange);" onclick="releasePlayer({{ player.id }}, '{{ player.player_name }}')" title="Kick player (character remains available)">
+                                            Kick
+                                        </button>
+                                    {% endif %}
+                                    <button class="btn btn-small btn-danger" onclick="removePlayer({{ player.id }}, '{{ player.player_name }}')" title="Remove character from campaign">
                                         &times;
                                     </button>
                                 {% endif %}
@@ -791,7 +801,7 @@ async function generateRandomPlayer() {
 }
 
 async function removePlayer(playerId, playerName) {
-    if (!confirm(`Remove "${playerName}" from the crew?`)) return;
+    if (!confirm(`Remove "${playerName}" from the crew? This will delete the character from the campaign.`)) return;
 
     try {
         const response = await fetch(`/campaigns/api/campaign/${campaignId}/player/${playerId}`, {
@@ -805,6 +815,24 @@ async function removePlayer(playerId, playerName) {
         }
     } catch (error) {
         alert('Error removing player: ' + error.message);
+    }
+}
+
+async function releasePlayer(playerId, playerName) {
+    if (!confirm(`Kick "${playerName}"? They will be logged out but the character will remain available for someone else to claim.`)) return;
+
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/player/${playerId}/release`, {
+            method: 'POST'
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error releasing player: ' + error.message);
     }
 }
 

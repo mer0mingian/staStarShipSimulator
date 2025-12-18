@@ -192,6 +192,7 @@ def campaign_dashboard(campaign_id: str):
                 "is_gm": p.is_gm,
                 "character_id": p.character_id,
                 "character": None,
+                "is_claimed": not p.session_token.startswith("unclaimed_"),
             }
             if p.character_id:
                 char_record = session.query(CharacterRecord).filter_by(id=p.character_id).first()
@@ -978,6 +979,60 @@ def api_remove_player(campaign_id: str, player_id: int):
         session.commit()
 
         return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/player/<int:player_id>/release", methods=["POST"])
+def api_release_player(campaign_id: str, player_id: int):
+    """API: Release a claimed character back to unclaimed state (GM only).
+
+    This kicks the player who claimed the character but keeps the character
+    available for someone else to claim.
+    """
+    session = get_session()
+    try:
+        # Verify GM
+        session_token = request.cookies.get("sta_session_token")
+        if not session_token:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        campaign = session.query(CampaignRecord).filter_by(
+            campaign_id=campaign_id
+        ).first()
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        gm = session.query(CampaignPlayerRecord).filter_by(
+            session_token=session_token,
+            campaign_id=campaign.id,
+            is_gm=True
+        ).first()
+
+        if not gm:
+            return jsonify({"error": "Only GM can release players"}), 403
+
+        player = session.query(CampaignPlayerRecord).filter_by(
+            id=player_id,
+            campaign_id=campaign.id
+        ).first()
+
+        if not player:
+            return jsonify({"error": "Player not found"}), 404
+
+        if player.is_gm:
+            return jsonify({"error": "Cannot release GM"}), 400
+
+        # Check if already unclaimed
+        if player.session_token.startswith("unclaimed_"):
+            return jsonify({"error": "Character is not claimed by anyone"}), 400
+
+        # Reset to unclaimed state
+        player.session_token = f"unclaimed_{uuid.uuid4()}"
+        session.commit()
+
+        return jsonify({"success": True, "message": f"{player.player_name} has been released"})
     finally:
         session.close()
 
