@@ -14,6 +14,22 @@ This app digitizes the starship combat experience for STA 2e tabletop sessions. 
 
 ---
 
+## Screenshots
+
+**Role Selection** - Choose to join as a Player or Game Master
+![Role Selection Screen](Screenshot%20-%20Star%20Trek%20Adventures%20Role%20Selection%20Screen.png)
+
+**Viewscreen** - Tactical display showing the hex map, ship status, and resources
+![Viewscreen Tactical Display](Screenshot%20-%20Battle%20at%20the%20Neutral%20Zone%20Tactical%20Display%20Round%201.png)
+
+**GM View** - Manage all ships, Momentum/Threat pools, and take actions for enemy vessels
+![GM Control Screen](Screenshot%20-%20Battle%20at%20the%20Neutral%20Zone%20Round%201.png)
+
+**Player View** - See your turn summary and wait during enemy turns
+![Player View During Enemy Turn](Screenshot%20-%20Battle%20at%20the%20Neutral%20Zone%20Enemy%20Turn%20Round%201.png)
+
+---
+
 ## Features
 
 ### What's Ready
