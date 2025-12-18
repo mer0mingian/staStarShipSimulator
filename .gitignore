@@ -22,3 +22,6 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Reference files (large rulebook files)
+referenceFiles/
