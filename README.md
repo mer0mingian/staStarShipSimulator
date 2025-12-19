@@ -84,13 +84,12 @@ This app digitizes the starship combat experience for STA 2e tabletop sessions. 
 
 ### Option 1: Mac App (Easiest)
 
-**[Download the latest release](https://github.com/tommertron/staStarShipSimulator/releases/latest)**
+**[Download STA Starship Simulator for Mac](https://github.com/tommertron/staStarShipSimulator/releases/download/mac/STA-Starship-Simulator-0.1.0.dmg)** (30 MB)
 
-1. Download `STA-Starship-Simulator-X.X.X.dmg` from the releases page
-2. Open the DMG file
-3. Drag "STA Starship Simulator" to your Applications folder
-4. Launch from Applications
-5. Your browser will open automatically to the app
+1. Open the downloaded DMG file
+2. Drag "STA Starship Simulator" to your Applications folder
+3. Launch from Applications (you may need to right-click → Open the first time)
+4. Your browser will open automatically to the app
 
 The app runs a local server - share the Network URL shown in the app window with players on your local network.
 
