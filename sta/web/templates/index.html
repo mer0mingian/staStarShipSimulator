@@ -6,6 +6,28 @@
 
 {% block content %}
 <div style="max-width: 700px; margin: 0 auto;">
+    <!-- Connection Info Banner -->
+    <div id="connection-banner" class="connection-banner" style="display: none;">
+        <div class="banner-header">
+            <div class="banner-title">Players Can Join At</div>
+            <button class="banner-close" onclick="closeBanner()" title="Close">&times;</button>
+        </div>
+        <div class="banner-content">
+            <div class="banner-qr">
+                <img id="qr-code" alt="QR Code" width="120" height="120">
+            </div>
+            <div class="banner-info">
+                <div class="banner-url" id="join-url">Loading...</div>
+                <div class="banner-note">
+                    Players must be on the same WiFi network
+                </div>
+                <button class="banner-copy" onclick="copyUrl()">
+                    <span id="copy-text">Copy Link</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Selection Panel -->
     <div class="lcars-bar-capped">
         <div class="bar-cap"></div>
@@ -151,5 +173,173 @@
             padding: 25px 15px;
         }
     }
+
+    /* Connection Banner Styles */
+    .connection-banner {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        border: 3px solid var(--lcars-sunflower);
+        border-radius: 20px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 20px rgba(255, 204, 0, 0.2);
+    }
+
+    .banner-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .banner-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--lcars-sunflower);
+        letter-spacing: 1px;
+    }
+
+    .banner-close {
+        background: none;
+        border: none;
+        color: var(--lcars-almond);
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 0 5px;
+        line-height: 1;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+    }
+
+    .banner-close:hover {
+        opacity: 1;
+        color: var(--lcars-sunflower);
+    }
+
+    .banner-content {
+        display: flex;
+        gap: 20px;
+        align-items: center;
+    }
+
+    .banner-qr {
+        flex-shrink: 0;
+        background: white;
+        padding: 8px;
+        border-radius: 10px;
+    }
+
+    .banner-qr img {
+        display: block;
+    }
+
+    .banner-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .banner-url {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--lcars-ice);
+        word-break: break-all;
+        margin-bottom: 8px;
+        font-family: monospace;
+    }
+
+    .banner-note {
+        font-size: 0.9rem;
+        color: var(--lcars-almond);
+        opacity: 0.8;
+        margin-bottom: 12px;
+    }
+
+    .banner-copy {
+        background: var(--lcars-sunflower);
+        color: #000;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+    }
+
+    .banner-copy:hover {
+        background: var(--lcars-gold);
+        transform: scale(1.05);
+    }
+
+    .banner-copy.copied {
+        background: var(--lcars-green);
+    }
+
+    @media (max-width: 500px) {
+        .banner-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .banner-qr {
+            margin: 0 auto;
+        }
+
+        .banner-url {
+            font-size: 1.1rem;
+        }
+    }
 </style>
+
+<script>
+    let serverUrl = '';
+
+    // Fetch server info and show banner
+    async function loadServerInfo() {
+        try {
+            const response = await fetch('/api/server-info');
+            const data = await response.json();
+
+            serverUrl = data.url;
+
+            // Update URL display
+            document.getElementById('join-url').textContent = serverUrl;
+
+            // Generate QR code using QR Server API
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(serverUrl)}`;
+            document.getElementById('qr-code').src = qrUrl;
+
+            // Show banner (check if user hasn't dismissed it this session)
+            if (!sessionStorage.getItem('bannerDismissed')) {
+                document.getElementById('connection-banner').style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Failed to load server info:', error);
+        }
+    }
+
+    function closeBanner() {
+        document.getElementById('connection-banner').style.display = 'none';
+        sessionStorage.setItem('bannerDismissed', 'true');
+    }
+
+    async function copyUrl() {
+        try {
+            await navigator.clipboard.writeText(serverUrl);
+            const btn = document.querySelector('.banner-copy');
+            const text = document.getElementById('copy-text');
+            btn.classList.add('copied');
+            text.textContent = 'Copied!';
+            setTimeout(() => {
+                btn.classList.remove('copied');
+                text.textContent = 'Copy Link';
+            }, 2000);
+        } catch (error) {
+            console.error('Failed to copy:', error);
+        }
+    }
+
+    // Load server info when page loads
+    document.addEventListener('DOMContentLoaded', loadServerInfo);
+</script>
 {% endblock %}

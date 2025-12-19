@@ -5058,3 +5058,29 @@ def get_valid_thrusters_actions(encounter_id: str):
 
     finally:
         session.close()
+
+
+@api_bp.route("/server-info", methods=["GET"])
+def get_server_info():
+    """Get server network info for player connection."""
+    import socket
+
+    def get_local_ip():
+        """Get the local IP address for network access."""
+        try:
+            # Create a dummy connection to find our local IP
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
+        except Exception:
+            return "127.0.0.1"
+
+    local_ip = get_local_ip()
+    # Get port from request or default to 5001
+    port = request.host.split(":")[-1] if ":" in request.host else "5001"
+
+    return jsonify({
+        "local_ip": local_ip,
+        "port": port,
+        "url": f"http://{local_ip}:{port}"
+    })
