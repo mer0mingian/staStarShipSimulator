@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}New Campaign - STA Starship Simulator{% endblock %}
+
+{% block header %}Create New Campaign{% endblock %}
+
+{% block sidebar_nav %}
+<a href="{{ url_for('campaigns.gm_home') }}" class="lcars-sidebar-btn color-6">Back</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 0 auto;">
+    <!-- Campaign Form -->
+    <div class="lcars-bar-capped">
+        <div class="bar-cap" style="background: var(--lcars-gold);"></div>
+        <div class="bar-content">Campaign Details</div>
+        <div class="bar-cap" style="background: var(--lcars-orange);"></div>
+    </div>
+    <div class="lcars-panel panel-orange">
+        <form method="POST" action="{{ url_for('campaigns.new_campaign') }}">
+            <div class="mb-2">
+                <label class="lcars-label" for="name">Campaign Name</label>
+                <input type="text" id="name" name="name" class="lcars-input" required
+                       placeholder="e.g., USS Enterprise Adventures">
+            </div>
+
+            <div class="mb-3">
+                <label class="lcars-label" for="description">Description (optional)</label>
+                <textarea id="description" name="description" rows="3" class="lcars-input"
+                          style="resize: vertical;"
+                          placeholder="A brief description of your campaign..."></textarea>
+            </div>
+
+            <div class="lcars-bar" style="background: var(--lcars-african-violet); margin-top: 20px;">Game Master (Q)</div>
+            <div style="padding: 10px 0;">
+                <p class="text-muted mb-2" style="font-size: 0.9em;">
+                    As GM, you'll be "Q" - the omniscient overseer of the campaign.
+                </p>
+                <label class="lcars-label" for="gm_name">Your Name</label>
+                <input type="text" id="gm_name" name="gm_name" class="lcars-input" required
+                       placeholder="e.g., Q, John, etc." value="Q">
+            </div>
+
+            <div style="display: flex; gap: 15px; justify-content: flex-end; margin-top: 20px;">
+                <a href="{{ url_for('campaigns.gm_home') }}" class="lcars-btn btn-sm" style="background: var(--lcars-gray);">
+                    Cancel
+                </a>
+                <button type="submit" class="lcars-btn">Create Campaign</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- What Happens Next -->
+    <div class="lcars-bar" style="background: var(--lcars-ice); margin-top: 20px;">What Happens Next?</div>
+    <div class="lcars-panel panel-blue">
+        <ul style="color: var(--lcars-text); list-style: none; padding: 0;">
+            <li class="lcars-stat-row">
+                <span class="lcars-stat-label">1</span>
+                <span class="lcars-stat-value">You'll be registered as the Game Master</span>
+            </li>
+            <li class="lcars-stat-row">
+                <span class="lcars-stat-label">2</span>
+                <span class="lcars-stat-value">You'll get a campaign code to share</span>
+            </li>
+            <li class="lcars-stat-row">
+                <span class="lcars-stat-label">3</span>
+                <span class="lcars-stat-value">Add ships to your campaign pool</span>
+            </li>
+            <li class="lcars-stat-row">
+                <span class="lcars-stat-label">4</span>
+                <span class="lcars-stat-value">Assign the active ship for your crew</span>
+            </li>
+            <li class="lcars-stat-row" style="border-bottom: none;">
+                <span class="lcars-stat-label">5</span>
+                <span class="lcars-stat-value">Create and run encounters</span>
+            </li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

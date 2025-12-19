@@ -1,0 +1,4071 @@
+{% extends "base.html" %}
+
+{% block title %}{{ encounter.name }} - Player View{% endblock %}
+{% block header %}{{ encounter.name }} - Round {{ encounter.round }}{% endblock %}
+
+{% block content %}
+{% if campaign %}
+<!-- Campaign Breadcrumb -->
+<div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+           style="color: var(--lcars-purple); text-decoration: none;">
+            {{ campaign.name }}
+        </a>
+        <span style="color: #666;"> / </span>
+        <span style="color: var(--lcars-tan);">{{ encounter.name }}</span>
+    </div>
+</div>
+{% endif %}
+
+<!-- Compact Turn & Resources Bar -->
+<div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: stretch; flex-wrap: wrap;">
+    <!-- Resources (compact horizontal) -->
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="resource-pool momentum" style="margin: 0; padding: 6px 12px; display: flex; align-items: center; gap: 5px;">
+            <span style="font-size: 0.8em;">Momentum</span>
+            <span class="value" id="momentum" style="font-size: 1.3em;">{{ encounter.momentum }}</span>
+            <span style="color: #666; font-size: 0.8em;">/6</span>
+        </div>
+        <div class="resource-pool threat" style="margin: 0; padding: 6px 12px; display: flex; align-items: center; gap: 5px;">
+            <span style="font-size: 0.8em;">Threat</span>
+            <span class="value" id="threat" style="font-size: 1.3em;">{{ encounter.threat }}</span>
+        </div>
+        <div id="reserve-power-box" style="padding: 6px 12px; background: {{ '#1a3a1a' if player_ship.has_reserve_power else '#3a1a1a' }}; border: 2px solid {{ 'var(--lcars-green)' if player_ship.has_reserve_power else 'var(--lcars-red)' }}; border-radius: 5px; display: flex; align-items: center; gap: 5px;">
+            <span style="color: {{ 'var(--lcars-green)' if player_ship.has_reserve_power else 'var(--lcars-red)' }}; font-size: 0.8em;">Reserve</span>
+            <span id="reserve-power-status" style="color: {{ 'var(--lcars-green)' if player_ship.has_reserve_power else 'var(--lcars-red)' }}; font-weight: bold;">
+                {{ '✓' if player_ship.has_reserve_power else '✗' }}
+            </span>
+        </div>
+    </div>
+
+    <!-- Turn Indicator (compact) -->
+    <div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'player' %}your-turn{% else %}enemy-turn{% endif %}" style="flex: 1; margin: 0; padding: 8px 15px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+            <div id="turn-text" class="turn-text" style="font-size: 1.1em; margin: 0;">
+                {% if encounter.current_turn != 'player' %}
+                ENEMY TURN - Waiting for GM...
+                {% elif is_multiplayer %}
+                    {% if encounter.current_player_id == my_player_id %}
+                    YOUR TURN
+                    {% elif encounter.current_player_id %}
+                    {{ current_player_name }} acting...
+                    {% else %}
+                    PLAYER TURN
+                    {% endif %}
+                {% else %}
+                YOUR TURN
+                {% endif %}
+            </div>
+            <div id="turn-counter" style="font-size: 0.85em; color: var(--lcars-green);">
+                {% if is_multiplayer %}
+                Players: <span id="player-turns-used">0</span>/<span id="player-turns-total">{{ campaign_players | length }}</span>
+                {% else %}
+                Turns: <span id="player-turns-used">0</span>/<span id="player-turns-total">0</span>
+                {% endif %}
+            </div>
+            <!-- Enemy turns hidden from players -->
+            <span id="enemy-turns-display" style="display: none;">
+                <span id="enemy-turns-used">0</span>/<span id="enemy-turns-total">0</span>
+            </span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px;">
+            {% if is_multiplayer %}
+            <!-- Multi-player turn claiming UI -->
+            <div id="claim-turn-section" style="{% if encounter.current_turn != 'player' or encounter.current_player_id %}display: none;{% endif %}">
+                <button id="claim-turn-btn" class="btn" onclick="claimTurn()" style="background: var(--lcars-green); padding: 6px 15px; font-size: 0.9em;">
+                    CLAIM
+                </button>
+            </div>
+            <div id="release-turn-section" style="{% if encounter.current_player_id != my_player_id %}display: none;{% endif %}">
+                <button class="btn btn-small" onclick="releaseTurn()" style="background: #555; padding: 4px 10px; font-size: 0.8em;">
+                    Release
+                </button>
+            </div>
+            <div id="already-acted-section" style="display: none;">
+                <span style="color: var(--lcars-tan); font-size: 0.85em;">Waiting...</span>
+            </div>
+            {% endif %}
+            <!-- End Turn button removed - players must use the "Pass" major action to end their turn -->
+        </div>
+    </div>
+</div>
+
+{% if is_multiplayer %}
+<!-- Player status badges (separate row for multiplayer) -->
+<div id="players-status" style="margin-bottom: 15px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+    {% for player in campaign_players %}
+    <span class="player-status-badge" data-player-id="{{ player.id }}"
+          style="padding: 3px 8px; border-radius: 3px; font-size: 0.8em;
+                 background: {% if player.has_acted %}var(--lcars-green){% elif player.is_current %}var(--lcars-purple){% else %}#444{% endif %};
+                 color: {% if player.has_acted or player.is_current %}#000{% else %}#ccc{% endif %};">
+        {{ player.name }}{% if player.is_current %} ●{% elif player.has_acted %} ✓{% endif %}
+    </span>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="grid">
+
+    <!-- Player Character -->
+    {% if player_char %}
+    <div class="panel">
+        <h2>{{ player_char.name }}</h2>
+        <div class="stat-row">
+            <span>Rank / Position</span>
+            <span class="stat-value">{{ player_char.rank }} - {{ position.value.title() }}</span>
+        </div>
+        <div class="stat-row">
+            <span>Stress</span>
+            <span class="stat-value">{{ player_char.stress }} / {{ player_char.stress_max }}</span>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">ATTRIBUTES</h3>
+        <div class="stats-grid">
+            <div class="stat-row">
+                <span>Control</span>
+                <span class="stat-value">{{ player_char.attributes.control }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Daring</span>
+                <span class="stat-value">{{ player_char.attributes.daring }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Fitness</span>
+                <span class="stat-value">{{ player_char.attributes.fitness }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Insight</span>
+                <span class="stat-value">{{ player_char.attributes.insight }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Presence</span>
+                <span class="stat-value">{{ player_char.attributes.presence }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Reason</span>
+                <span class="stat-value">{{ player_char.attributes.reason }}</span>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">DISCIPLINES</h3>
+        <div class="stats-grid">
+            <div class="stat-row">
+                <span>Command</span>
+                <span class="stat-value">{{ player_char.disciplines.command }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Conn</span>
+                <span class="stat-value">{{ player_char.disciplines.conn }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Engineering</span>
+                <span class="stat-value">{{ player_char.disciplines.engineering }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Medicine</span>
+                <span class="stat-value">{{ player_char.disciplines.medicine }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Science</span>
+                <span class="stat-value">{{ player_char.disciplines.science }}</span>
+            </div>
+            <div class="stat-row">
+                <span>Security</span>
+                <span class="stat-value">{{ player_char.disciplines.security }}</span>
+            </div>
+        </div>
+
+        <div style="margin-top: 10px; font-size: 0.9em; color: var(--lcars-tan);">
+            <strong>Focuses:</strong> {{ player_char.focuses | join(', ') }}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="grid">
+    <!-- Player Ship -->
+    {% if player_ship %}
+    <div class="panel">
+        <h2>{{ player_ship.name }}</h2>
+        <div class="stat-row">
+            <span>Class</span>
+            <span class="stat-value">{{ player_ship.ship_class }}-class (Scale {{ player_ship.scale }})</span>
+        </div>
+        <div class="stat-row">
+            <span>Shields</span>
+            <span class="stat-value" id="player-shields">
+                {{ player_ship.shields if player_ship.shields_raised else 0 }} / {{ player_ship.shields_max }}
+                <span id="shields-status" style="margin-left: 8px; font-size: 0.8em; {% if player_ship.shields_raised %}color: var(--lcars-green);{% else %}color: var(--lcars-red);{% endif %}">
+                    [{{ 'ONLINE' if player_ship.shields_raised else 'OFFLINE' }}]
+                </span>
+            </span>
+        </div>
+        <div class="shields-bar">
+            <div class="fill" id="player-shields-bar" style="width: {{ ((player_ship.shields / player_ship.shields_max * 100) | int) if player_ship.shields_raised else 0 }}%;{% if not player_ship.shields_raised %} background: var(--lcars-red);{% endif %}"></div>
+        </div>
+        <div class="stat-row">
+            <span>Resistance</span>
+            <span class="stat-value" id="player-resistance">
+                {{ player_ship.resistance }}{% if resistance_bonus > 0 %} <span style="color: var(--lcars-green);">(+{{ resistance_bonus }})</span>{% endif %}
+            </span>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">SYSTEMS</h3>
+        <div class="stats-grid">
+            {% set systems = [('Comms', player_ship.systems.comms, 'comms'), ('Computers', player_ship.systems.computers, 'computers'), ('Engines', player_ship.systems.engines, 'engines'), ('Sensors', player_ship.systems.sensors, 'sensors'), ('Structure', player_ship.systems.structure, 'structure'), ('Weapons', player_ship.systems.weapons, 'weapons')] %}
+            {% for name, value, key in systems %}
+            {% set breach_potency = player_ship.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
+            <div class="stat-row {% if breach_potency > 0 %}breached{% endif %}" data-system="{{ key }}">
+                <span>{{ name }}</span>
+                <span class="stat-value">
+                    {{ value }}
+                    <span class="breach-indicator" style="{% if breach_potency == 0 %}display:none{% endif %}">[Breach <span class="breach-count">{{ breach_potency }}</span>]</span>
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">DEPARTMENTS</h3>
+        <div class="stats-grid">
+            <div class="stat-row"><span>Command</span><span class="stat-value">{{ player_ship.departments.command }}</span></div>
+            <div class="stat-row"><span>Conn</span><span class="stat-value">{{ player_ship.departments.conn }}</span></div>
+            <div class="stat-row"><span>Engineering</span><span class="stat-value">{{ player_ship.departments.engineering }}</span></div>
+            <div class="stat-row"><span>Medicine</span><span class="stat-value">{{ player_ship.departments.medicine }}</span></div>
+            <div class="stat-row"><span>Science</span><span class="stat-value">{{ player_ship.departments.science }}</span></div>
+            <div class="stat-row"><span>Security</span><span class="stat-value">{{ player_ship.departments.security }}</span></div>
+        </div>
+
+        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">
+            WEAPONS
+            <span id="weapons-status" style="margin-left: 10px; {% if player_ship.weapons_armed %}color: var(--lcars-orange);{% else %}color: var(--lcars-red);{% endif %}">
+                [{{ 'ARMED' if player_ship.weapons_armed else 'STANDBY' }}]
+            </span>
+        </h3>
+        {% for weapon in player_ship.weapons %}
+        <div class="stat-row">
+            <span>{{ weapon.name }}</span>
+            <span class="stat-value">Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }} | {{ weapon.range.value.title() }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Enemy Ships (simplified for player view - names only) -->
+    <div class="panel enemy-ship" style="border-color: var(--lcars-red);">
+        <h2 style="color: var(--lcars-red);">ENEMY VESSELS</h2>
+        <p style="color: var(--lcars-tan); font-size: 0.9em; margin-bottom: 10px;">Detected hostiles in sector:</p>
+        {% for enemy in enemy_ships %}
+        <div class="enemy-ship-item" data-ship-id="{{ loop.index0 }}" style="padding: 10px; background: #222; border-radius: 5px; margin: 5px 0; border-left: 3px solid var(--lcars-red);">
+            <strong style="color: var(--lcars-red);">{{ enemy.name }}</strong>
+            <div style="font-size: 0.85em; color: var(--lcars-tan);">
+                {{ enemy.ship_class }}-class
+            </div>
+            <div class="stat-row" style="margin-top: 5px;">
+                <span>Shields</span>
+                <span class="stat-value enemy-shields">{{ enemy.shields }} / {{ enemy.shields_max }}</span>
+            </div>
+            <div class="shields-bar" style="height: 10px;">
+                <div class="fill enemy-shields-bar" style="width: {{ (enemy.shields / enemy.shields_max * 100) | int }}%; background: var(--lcars-red);"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Tactical Map Panel (read-only for player) -->
+<div class="panel" id="tactical-map-panel" style="border-color: var(--lcars-blue);">
+    <h2 style="color: var(--lcars-blue);">TACTICAL MAP</h2>
+    <div id="tactical-map-container" style="text-align: center; min-height: 300px; background: #0a0a0a; border-radius: 10px; padding: 10px;">
+        <p style="color: #666;">Loading tactical map...</p>
+    </div>
+    <div style="display: flex; gap: 15px; margin-top: 10px; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 200px; padding: 10px; background: #111; border-radius: 5px; font-size: 0.85em;">
+            <strong style="color: var(--lcars-tan);">Range:</strong>
+            <span style="color: var(--lcars-green); margin-left: 10px;">Close (same hex)</span>
+            <span style="color: var(--lcars-blue); margin-left: 10px;">Medium (1 hex)</span>
+            <span style="color: var(--lcars-orange); margin-left: 10px;">Long (2 hex)</span>
+            <span style="color: var(--lcars-red); margin-left: 10px;">Extreme (3+ hex)</span>
+        </div>
+        <div id="terrain-legend-container" style="flex: 0 0 auto;"></div>
+    </div>
+</div>
+
+<!-- Actions Panel (only visible on player turn) -->
+<div id="actions-container" style="{% if encounter.current_turn != 'player' %}display: none;{% endif %}">
+    <div class="grid">
+        <div class="panel">
+            <h2>Minor Actions</h2>
+
+            {% if actions.position_minor %}
+            <h3 style="color: var(--lcars-orange); font-size: 0.9em; margin: 10px 0 5px 0;">{{ actions.position_name }} Specific</h3>
+            <ul class="action-list">
+                {% for action in actions.position_minor %}
+                {% if action.name == 'Raise/Lower Shields' %}
+                <li id="shields-action-btn" onclick="toggleShields()" class="" data-action-name="Raise Shields">
+                    <strong>{{ 'Lower Shields' if player_ship.shields_raised else 'Raise Shields' }}</strong>
+                    <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
+                    <div class="action-type">{{ action.description }}</div>
+                </li>
+                {% elif action.name == 'Arm/Disarm Weapons' %}
+                <li id="weapons-action-btn" onclick="toggleWeapons()" class="" data-action-name="Arm Weapons">
+                    <strong>{{ 'Disarm Weapons' if player_ship.weapons_armed else 'Arm Weapons' }}</strong>
+                    <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
+                    <div class="action-type">{{ action.description }}</div>
+                </li>
+                {% else %}
+                <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})"
+                    data-action-name="{{ action.name }}"
+                    class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
+                    <strong>{{ action.name }}</strong>
+                    <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
+                    <div class="action-type">{{ action.description }}</div>
+                </li>
+                {% endif %}
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            <h3 style="color: var(--lcars-tan); font-size: 0.9em; margin: 10px 0 5px 0;">Standard</h3>
+            <ul class="action-list">
+                {% for action in actions.standard_minor %}
+                <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})"
+                    data-action-name="{{ action.name }}"
+                    class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
+                    <strong>{{ action.name }}</strong>
+                    <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
+                    <div class="action-type">{{ action.description }}</div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="panel">
+            <h2>Major Actions</h2>
+
+            {% if actions.position_major %}
+            <h3 style="color: var(--lcars-orange); font-size: 0.9em; margin: 10px 0 5px 0;">{{ actions.position_name }} Specific</h3>
+            <ul class="action-list">
+                {% for action in actions.position_major %}
+                <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})"
+                    data-action-name="{{ action.name }}"
+                    data-base-difficulty="{{ action.difficulty }}"
+                    class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
+                    <strong>{{ action.name }}</strong>
+                    {% if action.difficulty > 0 %}
+                    <span class="difficulty-display" style="color: var(--lcars-tan);">(Diff {{ action.difficulty }})</span>
+                    {% endif %}
+                    <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
+                    <div class="action-type">{{ action.description }}</div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            <h3 style="color: var(--lcars-tan); font-size: 0.9em; margin: 10px 0 5px 0;">Standard</h3>
+            <ul class="action-list">
+                {% for action in actions.standard_major %}
+                <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})"
+                    data-action-name="{{ action.name }}"
+                    data-base-difficulty="{{ action.difficulty }}"
+                    class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
+                    <strong>{{ action.name }}</strong>
+                    {% if action.difficulty > 0 %}
+                    <span class="difficulty-display" style="color: var(--lcars-tan);">(Diff {{ action.difficulty }})</span>
+                    {% endif %}
+                    <span class="breach-warning" style="display: none; color: var(--lcars-red); font-weight: bold;"></span>
+                    <div class="action-type">{{ action.description }}</div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Selected Actions Summary -->
+<div class="panel" id="selection-summary" style="display: none; border-color: var(--lcars-blue);">
+    <h2 style="color: var(--lcars-blue);">SELECTED ACTIONS</h2>
+    <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div>
+            <strong style="color: var(--lcars-tan);">Minor Action:</strong>
+            <div id="summary-minor" style="padding: 8px; background: #222; border-radius: 5px; margin-top: 5px;">
+                <span style="color: #666;">None selected</span>
+            </div>
+        </div>
+        <div>
+            <strong style="color: var(--lcars-tan);">Major Action:</strong>
+            <div id="summary-major" style="padding: 8px; background: #222; border-radius: 5px; margin-top: 5px;">
+                <span style="color: #666;">None selected</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Fire Action Panel (hidden by default) -->
+<div class="panel" id="fire-panel" style="display: none; border-color: var(--lcars-red);">
+    <h2 style="color: var(--lcars-red);">FIRE WEAPONS</h2>
+
+    <!-- Active Minor Action Banner -->
+    <div id="fire-minor-action-banner" style="display: none; margin-bottom: 15px; padding: 10px; background: #1a3a3a; border: 2px solid var(--lcars-blue); border-radius: 5px;">
+        <strong style="color: var(--lcars-blue);">MINOR ACTION ACTIVE:</strong>
+        <span id="fire-minor-action-name" style="color: var(--lcars-green);"></span>
+        <div id="fire-minor-action-effects" style="font-size: 0.9em; margin-top: 5px; color: var(--lcars-tan);"></div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: 1fr 1fr;">
+        <div>
+            <label for="weapon-select">Select Weapon</label>
+            <select id="weapon-select" style="width: 100%;">
+                {% for weapon in player_ship.weapons %}
+                <option value="{{ loop.index0 }}"
+                        data-damage="{{ weapon.damage }}"
+                        data-type="{{ weapon.weapon_type.value }}"
+                        data-range="{{ weapon.range.value }}">
+                    {{ weapon.name }} (Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }}, {{ weapon.range.value.title() }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="target-select">Select Target</label>
+            <select id="target-select" style="width: 100%;">
+                <!-- Populated dynamically from visible ships -->
+            </select>
+            <div id="target-range-info" style="font-size: 0.85em; color: var(--lcars-tan); margin-top: 5px;"></div>
+        </div>
+    </div>
+
+    <!-- Targeting Solution Info (only visible when Targeting Solution is active) -->
+    <div id="targeting-solution-panel" style="display: none; margin-top: 15px; padding: 10px; background: #1a2a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+        <strong style="color: var(--lcars-green);">TARGETING SOLUTION ACTIVE</strong>
+        <div style="margin-top: 8px; font-size: 0.9em; color: var(--lcars-tan);">
+            After rolling, you may choose ONE benefit:
+            <ul style="margin: 5px 0 0 20px;">
+                <li><strong>Re-roll 1d20</strong> - Click on any die to re-roll it</li>
+                <li><strong>Choose System</strong> - If you cause a breach, pick which system is hit</li>
+            </ul>
+            <div style="margin-top: 8px; color: var(--lcars-orange);">
+                Using re-roll consumes Targeting Solution (no system choice)
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+        <strong>Attack Details:</strong>
+        <div id="attack-details">
+            <p><strong>Character Roll (2d20):</strong> Control ({{ player_char.attributes.control if player_char else 9 }}) + Security ({{ player_char.disciplines.security if player_char else 3 }}) = Target {{ (player_char.attributes.control + player_char.disciplines.security) if player_char else 12 }}</p>
+            <p><strong>Ship Assist (1d20):</strong> Weapons ({{ player_ship.systems.weapons if player_ship else 7 }}) + Security ({{ player_ship.departments.security if player_ship else 2 }}) = Target {{ (player_ship.systems.weapons + player_ship.departments.security) if player_ship else 9 }}</p>
+            <p>Difficulty: <span id="fire-difficulty">2</span> <span id="fire-difficulty-breakdown"></span></p>
+            <p>Total Damage: <span id="fire-damage">{{ player_ship.weapons[0].damage + player_ship.weapons_damage_bonus() if player_ship.weapons else 0 }}</span></p>
+        </div>
+        <div id="fire-range-warning" style="display: none; margin-top: 10px; padding: 8px; background: #3a1a1a; border: 1px solid var(--lcars-red); border-radius: 5px; color: var(--lcars-red);"></div>
+    </div>
+
+    <div style="margin-top: 15px;">
+        <label>
+            <input type="checkbox" id="fire-focus"> Focus Applies (Targeting Systems, etc.)
+        </label>
+    </div>
+    <div id="fire-bonus-section" style="display: none;">
+        <label for="fire-bonus">Bonus Dice (Cost: 1st=1, 2nd=2, 3rd=3 Momentum)</label>
+        <input type="number" id="fire-bonus" value="0" min="0" max="0" style="width: 80px;">
+    </div>
+
+    <button class="btn" onclick="executeFireAction()" style="margin-top: 15px;">FIRE!</button>
+    <button class="btn" onclick="cancelAction()" style="margin-top: 15px; background: #666;">Cancel</button>
+
+    <div id="fire-results" style="margin-top: 15px; display: none;"></div>
+</div>
+
+<!-- Incoming Attack Alert Panel (shown when enemy attacks while Defensive Fire is active) -->
+<div class="panel" id="incoming-attack-panel" style="display: none; border-color: var(--lcars-red); background: #2a1a1a;">
+    <h2 style="color: var(--lcars-red);">INCOMING ATTACK!</h2>
+
+    <div style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: var(--lcars-orange); font-size: 1.2em;">
+            <strong id="incoming-attacker">Enemy Ship</strong> is attacking with <strong id="incoming-weapon">Phasers</strong>!
+        </p>
+        <p style="margin: 10px 0 0 0; color: var(--lcars-tan);">
+            Your <strong>Defensive Fire</strong> is active. Make your opposed roll to defend!
+        </p>
+    </div>
+
+    <div style="padding: 10px; background: #222; border-radius: 5px; margin-bottom: 15px;">
+        <strong>Your Defensive Roll:</strong> Daring + Security (Target <span id="incoming-defender-target">12</span>)
+        <br>
+        <strong>Ship Assist:</strong> Weapons + Security (Target <span id="incoming-ship-target">9</span>)
+    </div>
+
+    <div style="margin-bottom: 15px;">
+        <button class="btn" onclick="rollDefensiveDice()" style="background: var(--lcars-purple); font-size: 1.1em; padding: 15px 30px;">
+            ROLL DEFENSIVE DICE
+        </button>
+    </div>
+
+    <div id="incoming-roll-results" style="display: none; padding: 15px; background: #1a2a3a; border: 2px solid var(--lcars-blue); border-radius: 5px;">
+        <h3 style="color: var(--lcars-blue); margin-top: 0;">Roll Results</h3>
+        <div id="incoming-roll-details"></div>
+        <button class="btn" onclick="submitDefensiveRoll()" style="margin-top: 15px; background: var(--lcars-green);">
+            SUBMIT ROLL
+        </button>
+    </div>
+
+    <div id="incoming-attack-resolution" style="display: none; margin-top: 15px;"></div>
+</div>
+
+<!-- Defensive Fire Action Panel (hidden by default) -->
+<div class="panel" id="defensive-fire-panel" style="display: none; border-color: var(--lcars-purple);">
+    <h2 style="color: var(--lcars-purple);">DEFENSIVE FIRE</h2>
+
+    <div style="padding: 10px; background: #2a1a3a; border: 2px solid var(--lcars-purple); border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: var(--lcars-tan);">
+            Choose an <strong>energy weapon</strong> to use defensively. Until your next turn,
+            enemy attacks against this ship become <strong>opposed rolls</strong>.
+        </p>
+        <p style="margin: 10px 0 0 0; color: var(--lcars-orange);">
+            If you win the opposed roll, you may spend <strong>2 Momentum</strong> to counterattack with this weapon.
+        </p>
+    </div>
+
+    <!-- Momentum Warning (shown when momentum is low) -->
+    <div id="defensive-fire-momentum-warning" style="display: none; padding: 10px; background: #3a2a1a; border: 2px solid var(--lcars-orange); border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: var(--lcars-orange);">
+            <strong>WARNING:</strong> You currently have <span id="df-current-momentum">0</span> Momentum.
+            If you activate Defensive Fire now, you won't have enough Momentum (2 required) to counterattack on the next enemy attack.
+        </p>
+    </div>
+
+    <div>
+        <label for="defensive-fire-weapon-select">Select Energy Weapon</label>
+        <select id="defensive-fire-weapon-select" style="width: 100%;">
+            {% for weapon in player_ship.weapons %}
+            {% if weapon.weapon_type.value != 'torpedo' %}
+            <option value="{{ loop.index0 }}" data-damage="{{ weapon.damage }}">
+                {{ weapon.name }} (Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }}, {{ weapon.range.value.title() }})
+            </option>
+            {% endif %}
+            {% endfor %}
+        </select>
+    </div>
+
+    <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+        <strong>Opposed Roll Details:</strong>
+        <p><strong>Your Roll:</strong> Daring ({{ player_char.attributes.daring if player_char else 9 }}) + Security ({{ player_char.disciplines.security if player_char else 3 }}) = Target {{ (player_char.attributes.daring + player_char.disciplines.security) if player_char else 12 }}</p>
+        <p><strong>Ship Assist:</strong> Weapons ({{ player_ship.systems.weapons if player_ship else 7 }}) + Security ({{ player_ship.departments.security if player_ship else 2 }}) = Target {{ (player_ship.systems.weapons + player_ship.departments.security) if player_ship else 9 }}</p>
+    </div>
+
+    <button class="btn" onclick="executeDefensiveFire()" style="margin-top: 15px; background: var(--lcars-purple);">ACTIVATE DEFENSIVE FIRE</button>
+    <button class="btn" onclick="cancelAction()" style="margin-top: 15px; background: #666;">Cancel</button>
+
+    <div id="defensive-fire-results" style="margin-top: 15px; display: none;"></div>
+</div>
+
+<!-- Thrusters Action Panel (hidden by default) -->
+<div class="panel" id="thrusters-panel" style="display: none; border-color: var(--lcars-blue);">
+    <h2 style="color: var(--lcars-blue);">THRUSTERS</h2>
+
+    <div style="padding: 10px; background: #1a2a3a; border: 2px solid var(--lcars-blue); border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: var(--lcars-tan);">
+            Fine maneuvering within your current hex. Use thrusters to <strong>enter</strong> or <strong>exit Contact</strong> with other ships in the same location.
+        </p>
+        <p style="margin: 10px 0 0 0; color: var(--lcars-tan); font-size: 0.9em;">
+            Contact allows boarding actions, point-blank transporter use, and towing.
+        </p>
+    </div>
+
+    <div id="thrusters-actions-container">
+        <p style="color: var(--lcars-tan);">Loading available actions...</p>
+    </div>
+
+    <div id="thrusters-no-actions" style="display: none; padding: 15px; background: #2a2a2a; border-radius: 5px;">
+        <p style="margin: 0; color: var(--lcars-tan);">
+            No ships in your current hex to dock with.
+        </p>
+        <p style="margin: 10px 0 0 0; color: #888; font-size: 0.9em;">
+            Use <strong>Impulse</strong> to move to a hex with another ship first.
+        </p>
+    </div>
+
+    <button class="btn" onclick="cancelThrustersAction()" style="margin-top: 15px; background: #666;">Cancel</button>
+
+    <div id="thrusters-results" style="margin-top: 15px; display: none;"></div>
+</div>
+
+<!-- Reroute Power Action Panel (hidden by default) -->
+<div class="panel" id="reroute-power-panel" style="display: none; border-color: var(--lcars-orange);">
+    <h2 style="color: var(--lcars-orange);">REROUTE POWER</h2>
+
+    <div style="padding: 10px; background: #2a2a1a; border: 2px solid var(--lcars-orange); border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: var(--lcars-tan);">
+            Reroute power to a specific ship system. The <strong>next action</strong> using that system
+            gets <strong>-1 Difficulty</strong>.
+        </p>
+        <p style="margin: 10px 0 0 0; color: var(--lcars-red);">
+            <strong>Consumes Reserve Power!</strong>
+        </p>
+    </div>
+
+    <!-- Reserve Power Warning -->
+    <div id="reroute-no-power-warning" style="display: none; padding: 10px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: var(--lcars-red);">
+            <strong>NO RESERVE POWER!</strong> You must use Regain Power first.
+        </p>
+    </div>
+
+    <div>
+        <label for="reroute-system-select">Select Target System</label>
+        <select id="reroute-system-select" style="width: 100%;">
+            <option value="weapons">WEAPONS - Boost Fire, Defensive Fire</option>
+            <option value="sensors">SENSORS - Boost Scan, Sensor Sweep</option>
+            <option value="engines">ENGINES - Boost Maneuver, Impulse, Warp</option>
+            <option value="structure">STRUCTURE - Boost Regenerate Shields, Tractor Beam</option>
+            <option value="comms">COMMS - Boost Hail, Communications</option>
+            <option value="computers">COMPUTERS - Boost Computer-assisted tasks</option>
+        </select>
+    </div>
+
+    <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+        <strong>Effect:</strong> Next action using <span id="reroute-target-display">WEAPONS</span> gets <span style="color: var(--lcars-green);">-1 Difficulty</span>
+    </div>
+
+    <button class="btn" onclick="executeReroutePower()" style="margin-top: 15px; background: var(--lcars-orange);">REROUTE POWER</button>
+    <button class="btn" onclick="cancelAction()" style="margin-top: 15px; background: #666;">Cancel</button>
+
+    <div id="reroute-power-results" style="margin-top: 15px; display: none;"></div>
+</div>
+
+<!-- Damage Control Panel -->
+<div class="panel" id="damage-control-panel" style="display: none; border-color: var(--lcars-green);">
+    <h2 style="color: var(--lcars-green);">DAMAGE CONTROL</h2>
+
+    <div style="padding: 10px; background: #1a2a1a; border: 2px solid var(--lcars-green); border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: var(--lcars-tan);">
+            Direct repair teams to patch a breach. Select which system to repair, then roll to succeed.
+        </p>
+        <p style="margin: 10px 0 0 0; color: var(--lcars-orange);">
+            <strong>Difficulty:</strong> 2 + Breach Potency on target system
+        </p>
+    </div>
+
+    <!-- No Breaches Warning -->
+    <div id="damage-control-no-breach-warning" style="display: none; padding: 10px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: var(--lcars-red);">
+            <strong>NO BREACHES!</strong> There are no breaches to repair.
+        </p>
+    </div>
+
+    <div id="damage-control-system-section">
+        <label for="damage-control-system-select">Select System to Repair</label>
+        <select id="damage-control-system-select" style="width: 100%;" onchange="updateDamageControlDisplay()">
+            <!-- Options populated dynamically based on breaches -->
+        </select>
+    </div>
+
+    <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+        <strong>Roll Details:</strong>
+        <p><strong>Character Roll (2d20):</strong> Presence ({{ player_char.attributes.presence if player_char else 9 }}) + Engineering ({{ player_char.disciplines.engineering if player_char else 3 }}) = Target {{ (player_char.attributes.presence + player_char.disciplines.engineering) if player_char else 12 }}</p>
+        <p>Base Difficulty: <strong>2</strong> + <span id="damage-control-breach-potency">0</span> (breach potency) = <strong id="damage-control-total-difficulty">2</strong></p>
+    </div>
+
+    <div style="margin-top: 15px;">
+        <label>
+            <input type="checkbox" id="damage-control-focus"> Focus Applies (Damage Control, etc.)
+        </label>
+    </div>
+    <div id="damage-control-bonus-section" style="display: none;">
+        <label for="damage-control-bonus">Bonus Dice (Cost: 1st=1, 2nd=2, 3rd=3 Momentum)</label>
+        <input type="number" id="damage-control-bonus" value="0" min="0" max="0" style="width: 80px;">
+    </div>
+
+    <button class="btn" onclick="executeDamageControlRoll()" style="margin-top: 15px; background: var(--lcars-green);">ROLL DAMAGE CONTROL</button>
+    <button class="btn" onclick="cancelAction()" style="margin-top: 15px; background: #666;">Cancel</button>
+
+    <div id="damage-control-results" style="margin-top: 15px; display: none;"></div>
+</div>
+
+<!-- Ram Action Panel -->
+<div class="panel" id="ram-panel" style="display: none; border-color: var(--lcars-orange);">
+    <h2 style="color: var(--lcars-orange);">RAM TARGET</h2>
+
+    <div style="margin-bottom: 15px; padding: 10px; background: #2a1a0a; border: 2px solid var(--lcars-orange); border-radius: 5px;">
+        <strong style="color: var(--lcars-orange);">WARNING:</strong>
+        <span style="color: var(--lcars-tan);">Ramming deals collision damage to BOTH ships! Your ship will also take damage.</span>
+    </div>
+
+    <div>
+        <label for="ram-target-select">Select Target</label>
+        <select id="ram-target-select" style="width: 100%;">
+            {% for enemy in enemy_ships %}
+            <option value="{{ loop.index0 }}" data-scale="{{ enemy.scale }}">{{ enemy.name }} (Scale {{ enemy.scale }})</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+        <strong>Ram Details:</strong>
+        <div id="ram-details">
+            <p><strong>Character Roll (2d20):</strong> Daring ({{ player_char.attributes.daring if player_char else 9 }}) + Conn ({{ player_char.disciplines.conn if player_char else 3 }}) = Target {{ (player_char.attributes.daring + player_char.disciplines.conn) if player_char else 12 }}</p>
+            <p><strong>Ship Assist (1d20):</strong> Engines ({{ player_ship.systems.engines if player_ship else 7 }}) + Conn ({{ player_ship.departments.conn if player_ship else 2 }}) = Target {{ (player_ship.systems.engines + player_ship.departments.conn) if player_ship else 9 }}</p>
+            <p>Difficulty: <strong>2</strong></p>
+            <p style="margin-top: 10px; color: var(--lcars-orange);">
+                <strong>Your Collision Damage:</strong> <span id="ram-your-damage">{{ player_ship.scale if player_ship else 4 }}</span> (Scale {{ player_ship.scale if player_ship else 4 }})
+            </p>
+            <p style="color: var(--lcars-red);">
+                <strong>Damage You'll Take:</strong> <span id="ram-their-damage">{{ enemy_ships[0].scale if enemy_ships else 3 }}</span> (Target's Scale)
+            </p>
+            <p style="font-size: 0.9em; color: var(--lcars-tan); margin-top: 10px;">
+                * Collision damage has <strong>Piercing</strong> (ignores resistance)
+            </p>
+        </div>
+    </div>
+
+    <div style="margin-top: 15px;">
+        <label>
+            <input type="checkbox" id="ram-focus"> Focus Applies (Precision Flying, etc.)
+        </label>
+    </div>
+    <div id="ram-bonus-section" style="display: none;">
+        <label for="ram-bonus">Bonus Dice (Cost: 1st=1, 2nd=2, 3rd=3 Momentum)</label>
+        <input type="number" id="ram-bonus" value="0" min="0" max="0" style="width: 80px;">
+    </div>
+
+    <button class="btn" onclick="executeRamAction()" style="margin-top: 15px; background: var(--lcars-orange);">RAM!</button>
+    <button class="btn" onclick="cancelAction()" style="margin-top: 15px; background: #666;">Cancel</button>
+
+    <div id="ram-results" style="margin-top: 15px; display: none;"></div>
+</div>
+
+<!-- Generic Dice Roller (for non-Fire actions) - hidden until major action selected -->
+<div class="panel" id="dice-panel" style="display: none;">
+    <h2>Dice Roller</h2>
+    <div id="current-action-display" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px; display: none;">
+        <strong>Current Action:</strong> <span id="current-action-name"></span>
+    </div>
+
+    <!-- Roll details from action config (read-only) -->
+    <div id="roll-details" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px;">
+        <p><strong>Character Roll (2d20):</strong> <span id="roll-attr-name">Control</span> (<span id="roll-attr-value">9</span>) + <span id="roll-disc-name">Engineering</span> (<span id="roll-disc-value">2</span>) = Target <span id="roll-target">11</span></p>
+        <p id="ship-assist-row" style="display: none;"><strong>Ship Assist (1d20):</strong> <span id="ship-assist-system-name">Structure</span> (<span id="ship-assist-system-value">7</span>) + <span id="ship-assist-dept-name">Engineering</span> (<span id="ship-assist-dept-value">2</span>) = Target <span id="ship-assist-target">9</span></p>
+        <p><strong>Difficulty:</strong> <span id="roll-diff-display">1</span></p>
+    </div>
+
+    <!-- Hidden inputs to store actual values -->
+    <input type="hidden" id="roll-attr" value="9">
+    <input type="hidden" id="roll-disc" value="2">
+    <input type="hidden" id="roll-diff" value="1">
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+        <div id="roll-bonus-section" style="display: none;">
+            <label for="roll-bonus">Bonus Dice (Cost: 1st=1, 2nd=2, 3rd=3 Momentum)</label>
+            <input type="number" id="roll-bonus" value="0" min="0" max="0" style="width: 100%;">
+        </div>
+        <div>
+            <label>
+                <input type="checkbox" id="roll-focus"> Focus Applies
+            </label>
+        </div>
+    </div>
+    <button class="btn" onclick="rollDice()" style="margin-top: 15px;">Roll Dice</button>
+
+    <div id="dice-results" style="margin-top: 15px; display: none;">
+        <h3>Results</h3>
+        <div id="dice-display"></div>
+        <div id="dice-summary" style="margin-top: 10px;"></div>
+    </div>
+</div>
+
+<style>
+    .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 15px;
+    }
+    .breached {
+        color: var(--lcars-red) !important;
+    }
+    .breach-indicator {
+        color: var(--lcars-red);
+        font-size: 0.8em;
+        margin-left: 5px;
+    }
+    .fire-action {
+        border-left: 3px solid var(--lcars-red) !important;
+    }
+    .fire-action-highlighted {
+        background: rgba(255, 100, 100, 0.2) !important;
+        border: 2px solid var(--lcars-red) !important;
+        animation: pulse-fire 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-fire {
+        0%, 100% { box-shadow: 0 0 5px var(--lcars-red); }
+        50% { box-shadow: 0 0 15px var(--lcars-red); }
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translateY(0); }
+        to { opacity: 0; transform: translateY(-10px); }
+    }
+    /* Selected action highlighting */
+    .action-selected {
+        background: rgba(153, 204, 255, 0.3) !important;
+        border: 2px solid var(--lcars-blue) !important;
+        box-shadow: 0 0 10px var(--lcars-blue);
+    }
+    .action-selected::before {
+        content: "OK ";
+        color: var(--lcars-green);
+    }
+    /* Action status badges */
+    .status-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.7em;
+        font-weight: bold;
+        margin-left: 8px;
+        vertical-align: middle;
+    }
+    .status-not-impl {
+        background: #666;
+        color: #ccc;
+    }
+    .action-not-impl {
+        opacity: 0.5;
+    }
+    .action-disabled {
+        opacity: 0.4;
+        pointer-events: none;
+        position: relative;
+    }
+    .action-disabled::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: repeating-linear-gradient(
+            45deg,
+            transparent,
+            transparent 10px,
+            rgba(255, 0, 0, 0.1) 10px,
+            rgba(255, 0, 0, 0.1) 20px
+        );
+    }
+    .action-disabled .breach-warning {
+        display: inline !important;
+    }
+    .breach-modifier {
+        color: var(--lcars-orange) !important;
+        font-weight: bold;
+    }
+    .damage-report {
+        padding: 15px;
+        background: #222;
+        border-radius: 5px;
+        margin-top: 10px;
+    }
+    .damage-report h4 {
+        color: var(--lcars-red);
+        margin-bottom: 10px;
+    }
+    /* Turn banner styles */
+    .turn-banner {
+        padding: 15px 20px;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 20px;
+        font-size: 1.2em;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+    .turn-banner.your-turn {
+        background: linear-gradient(135deg, #1a3a1a, #2a5a2a);
+        border: 3px solid var(--lcars-green);
+        color: var(--lcars-green);
+        animation: pulse-green 2s ease-in-out infinite;
+    }
+    .turn-banner.enemy-turn {
+        background: linear-gradient(135deg, #3a1a1a, #5a2a2a);
+        border: 3px solid var(--lcars-red);
+        color: var(--lcars-red);
+    }
+    @keyframes pulse-green {
+        0%, 100% { box-shadow: 0 0 10px var(--lcars-green); }
+        50% { box-shadow: 0 0 25px var(--lcars-green); }
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<!-- Hex Map Visualization -->
+<script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+
+<script>
+    const encounterId = '{{ encounter.encounter_id }}';
+    const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
+    const playerCharId = {{ player_char_db_id if player_char_db_id else 'null' }};
+    const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
+    const weaponsBonus = {{ player_ship.weapons_damage_bonus() if player_ship else 0 }};
+    const role = 'player';
+    let currentTurn = '{{ encounter.current_turn }}';
+
+    // Multi-player support
+    const isMultiplayer = {{ 'true' if is_multiplayer else 'false' }};
+    const myPlayerId = {{ my_player_id if my_player_id else 'null' }};
+    const myPlayerName = '{{ my_player_name | default("Player", true) }}';
+    let currentPlayerId = {{ encounter.current_player_id if encounter.current_player_id else 'null' }};
+    let myHasActed = false;
+
+    // Tactical Map Data
+    let tacticalMapData = {{ tactical_map | tojson if tactical_map else '{"radius": 3, "tiles": []}' | safe }};
+    let shipPositions = {{ ship_positions | tojson if ship_positions else '[]' | safe }};
+
+    // Resistance tracking
+    const baseResistance = {{ player_ship.resistance if player_ship else 4 }};
+    let currentResistanceBonus = {{ resistance_bonus if resistance_bonus else 0 }};
+
+    function updateResistanceDisplay() {
+        const el = document.getElementById('player-resistance');
+        if (currentResistanceBonus > 0) {
+            el.innerHTML = `${baseResistance} <span style="color: var(--lcars-green);">(+${currentResistanceBonus})</span>`;
+        } else {
+            el.innerHTML = `${baseResistance}`;
+        }
+    }
+
+    // Shields tracking
+    let shieldsRaised = {{ 'true' if player_ship.shields_raised else 'false' }};
+    const shieldsMax = {{ player_ship.shields_max if player_ship else 9 }};
+
+    function updateShieldsDisplay(shields, raised) {
+        shieldsRaised = raised;
+
+        // Update shields value
+        const shieldsEl = document.getElementById('player-shields');
+        const barEl = document.getElementById('player-shields-bar');
+
+        // Display 0 when shields are offline
+        const displayValue = raised ? shields : 0;
+
+        // Update text
+        shieldsEl.innerHTML = `${displayValue} / ${shieldsMax} <span id="shields-status" style="margin-left: 8px; font-size: 0.8em; color: var(--lcars-${raised ? 'green' : 'red'});">[${raised ? 'ONLINE' : 'OFFLINE'}]</span>`;
+
+        // Update bar
+        barEl.style.width = `${(displayValue / shieldsMax) * 100}%`;
+        barEl.style.background = raised ? '' : 'var(--lcars-red)';
+
+        // Update action button text
+        updateShieldActionButton();
+    }
+
+    function updateShieldActionButton() {
+        const btn = document.getElementById('shields-action-btn');
+        if (btn) {
+            btn.querySelector('strong').textContent = shieldsRaised ? 'Lower Shields' : 'Raise Shields';
+        }
+    }
+
+    async function toggleShields() {
+        if (currentTurn !== 'player') {
+            showErrorToast("It's not your turn!");
+            return;
+        }
+        const actionName = shieldsRaised ? 'Lower Shields' : 'Raise Shields';
+        const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            updateShieldsDisplay(data.shields, data.shields_raised);
+            selectedMinorAction = actionName;
+            highlightAction(actionName, 'minor');
+            updateSelectionSummary();
+            showMinorActionResult(data.message);
+        }
+    }
+
+    // Weapons tracking
+    let weaponsArmed = {{ 'true' if player_ship.weapons_armed else 'false' }};
+
+    // Reserve Power tracking
+    let hasReservePower = {{ 'true' if player_ship.has_reserve_power else 'false' }};
+
+    function updateWeaponsDisplay(armed) {
+        weaponsArmed = armed;
+        const statusEl = document.getElementById('weapons-status');
+        statusEl.textContent = `[${armed ? 'ARMED' : 'STANDBY'}]`;
+        statusEl.style.color = armed ? 'var(--lcars-orange)' : 'var(--lcars-red)';
+
+        // Update action button text
+        updateWeaponsActionButton();
+    }
+
+    function updateWeaponsActionButton() {
+        const btn = document.getElementById('weapons-action-btn');
+        if (btn) {
+            btn.querySelector('strong').textContent = weaponsArmed ? 'Disarm Weapons' : 'Arm Weapons';
+        }
+    }
+
+    async function toggleWeapons() {
+        if (currentTurn !== 'player') {
+            showErrorToast("It's not your turn!");
+            return;
+        }
+        const actionName = weaponsArmed ? 'Disarm Weapons' : 'Arm Weapons';
+        const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action_name: actionName, character_id: playerCharId })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            updateWeaponsDisplay(data.weapons_armed);
+            selectedMinorAction = actionName;
+            highlightAction(actionName, 'minor');
+            updateSelectionSummary();
+            showMinorActionResult(data.message);
+        }
+    }
+
+    // Player stats for reference
+    const playerAttrs = {
+        control: {{ player_char.attributes.control if player_char else 9 }},
+        daring: {{ player_char.attributes.daring if player_char else 9 }},
+        fitness: {{ player_char.attributes.fitness if player_char else 9 }},
+        insight: {{ player_char.attributes.insight if player_char else 9 }},
+        presence: {{ player_char.attributes.presence if player_char else 9 }},
+        reason: {{ player_char.attributes.reason if player_char else 9 }}
+    };
+    const playerDiscs = {
+        command: {{ player_char.disciplines.command if player_char else 2 }},
+        conn: {{ player_char.disciplines.conn if player_char else 2 }},
+        engineering: {{ player_char.disciplines.engineering if player_char else 2 }},
+        medicine: {{ player_char.disciplines.medicine if player_char else 2 }},
+        science: {{ player_char.disciplines.science if player_char else 2 }},
+        security: {{ player_char.disciplines.security if player_char else 2 }}
+    };
+
+    // Ship stats for assist rolls
+    const shipSystems = {
+        comms: {{ player_ship.systems.comms if player_ship else 7 }},
+        computers: {{ player_ship.systems.computers if player_ship else 7 }},
+        engines: {{ player_ship.systems.engines if player_ship else 7 }},
+        sensors: {{ player_ship.systems.sensors if player_ship else 7 }},
+        structure: {{ player_ship.systems.structure if player_ship else 7 }},
+        weapons: {{ player_ship.systems.weapons if player_ship else 7 }}
+    };
+    const shipDepts = {
+        command: {{ player_ship.departments.command if player_ship else 2 }},
+        conn: {{ player_ship.departments.conn if player_ship else 2 }},
+        engineering: {{ player_ship.departments.engineering if player_ship else 2 }},
+        medicine: {{ player_ship.departments.medicine if player_ship else 2 }},
+        science: {{ player_ship.departments.science if player_ship else 2 }},
+        security: {{ player_ship.departments.security if player_ship else 2 }}
+    };
+
+    // Current action config (for task roll actions)
+    let currentActionConfig = null;
+
+    let currentAction = null;
+    let activeMinorAction = null;
+    let selectedMajorAction = null;
+    let selectedMinorAction = null;
+
+    // Update turn counter display for both sides
+    function updateTurnCounters(playerUsed, playerTotal, enemyUsed, enemyTotal) {
+        document.getElementById('player-turns-used').textContent = playerUsed || 0;
+        document.getElementById('player-turns-total').textContent = playerTotal || 0;
+        document.getElementById('enemy-turns-used').textContent = enemyUsed || 0;
+        document.getElementById('enemy-turns-total').textContent = enemyTotal || 0;
+    }
+
+    // Calculate momentum cost for bonus dice (escalating: 1st=1, 2nd=2, 3rd=3)
+    function getBonusDiceCost(numDice) {
+        // Cost: 1 die = 1, 2 dice = 1+2=3, 3 dice = 1+2+3=6
+        if (numDice <= 0) return 0;
+        if (numDice === 1) return 1;
+        if (numDice === 2) return 3;
+        return 6; // 3 dice
+    }
+
+    // Calculate max bonus dice affordable with given momentum
+    function getMaxBonusDice(momentum) {
+        if (momentum >= 6) return 3;
+        if (momentum >= 3) return 2;
+        if (momentum >= 1) return 1;
+        return 0;
+    }
+
+    // Update bonus dice sections based on available momentum
+    // STA 2e escalating cost: 1st die = 1 momentum, 2nd = 2, 3rd = 3
+    function updateBonusDiceFromMomentum() {
+        const currentMomentum = parseInt(document.getElementById('momentum').textContent) || 0;
+        const maxBonusDice = getMaxBonusDice(currentMomentum);
+
+        // List of all bonus dice sections and their inputs
+        const bonusSections = [
+            { sectionId: 'fire-bonus-section', inputId: 'fire-bonus' },
+            { sectionId: 'ram-bonus-section', inputId: 'ram-bonus' },
+            { sectionId: 'roll-bonus-section', inputId: 'roll-bonus' }
+        ];
+
+        bonusSections.forEach(({ sectionId, inputId }) => {
+            const section = document.getElementById(sectionId);
+            const input = document.getElementById(inputId);
+
+            if (section && input) {
+                if (currentMomentum > 0) {
+                    // Show the section and set appropriate max
+                    section.style.display = 'block';
+                    input.max = maxBonusDice;
+
+                    // If current value exceeds new max, reset it
+                    const currentValue = parseInt(input.value) || 0;
+                    if (currentValue > maxBonusDice) {
+                        input.value = maxBonusDice;
+                    }
+                } else {
+                    // No momentum - hide the section and reset value
+                    section.style.display = 'none';
+                    input.value = 0;
+                    input.max = 0;
+                }
+            }
+        });
+    }
+
+    // Update turn display
+    function updateTurnDisplay(newTurn, newRound, data) {
+        currentTurn = newTurn;
+        const banner = document.getElementById('turn-banner');
+        const actionsContainer = document.getElementById('actions-container');
+        // Note: end-turn-section removed - players must use "Pass" action to end turn
+
+        if (newTurn === 'player') {
+            banner.className = 'turn-banner your-turn';
+            banner.querySelector('.turn-text').textContent = 'YOUR TURN - Take one action';
+            actionsContainer.style.display = 'block';
+        } else {
+            banner.className = 'turn-banner enemy-turn';
+            banner.querySelector('.turn-text').textContent = 'ENEMY TURN - Waiting for Game Master...';
+            actionsContainer.style.display = 'none';
+
+            // Also hide all action panels (they're outside actions-container)
+            document.getElementById('fire-panel').style.display = 'none';
+            document.getElementById('defensive-fire-panel').style.display = 'none';
+            document.getElementById('reroute-power-panel').style.display = 'none';
+            document.getElementById('damage-control-panel').style.display = 'none';
+            document.getElementById('ram-panel').style.display = 'none';
+            document.getElementById('dice-panel').style.display = 'none';
+        }
+
+        // Update round in header
+        document.querySelector('header h1').textContent = `{{ encounter.name }} - Round ${newRound}`;
+
+        // Update turn counters if data is provided
+        if (data) {
+            updateTurnCounters(
+                data.player_turns_used, data.player_turns_total,
+                data.enemy_turns_used, data.enemy_turns_total
+            );
+        }
+    }
+
+    // Add turn-over indicator to a results element
+    function addTurnOverIndicator(elementId, newTurn, turnData = null) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+
+        // Remove any existing turn-over indicator
+        const existing = element.querySelector('.turn-over-indicator');
+        if (existing) existing.remove();
+
+        // Add new indicator
+        const indicator = document.createElement('div');
+        indicator.className = 'turn-over-indicator';
+        indicator.style.cssText = 'margin-top: 15px; padding: 12px; border-radius: 5px; text-align: center; font-weight: bold;';
+
+        if (newTurn === 'enemy') {
+            indicator.style.background = 'linear-gradient(135deg, #2a1a1a 0%, #3a2020 100%)';
+            indicator.style.border = '2px solid var(--lcars-red)';
+            indicator.innerHTML = `
+                <div style="color: var(--lcars-red); font-size: 1.1em;">ACTION COMPLETE</div>
+                <div style="color: var(--lcars-tan); margin-top: 5px;">Enemy Turn - Waiting for GM...</div>
+            `;
+        } else {
+            // Check if player has consecutive turns remaining
+            const playerTurnsRemaining = turnData ? (turnData.player_turns_total - turnData.player_turns_used) : null;
+
+            indicator.style.background = 'linear-gradient(135deg, #1a2a1a 0%, #203a20 100%)';
+            indicator.style.border = '2px solid var(--lcars-green)';
+
+            if (playerTurnsRemaining && playerTurnsRemaining > 0) {
+                indicator.innerHTML = `
+                    <div style="color: var(--lcars-green); font-size: 1.1em;">ACTION COMPLETE - CONTINUE!</div>
+                    <div style="color: var(--lcars-tan); margin-top: 5px;">You have ${playerTurnsRemaining} turn(s) remaining</div>
+                `;
+            } else {
+                indicator.innerHTML = `
+                    <div style="color: var(--lcars-green); font-size: 1.1em;">YOUR TURN</div>
+                    <div style="color: var(--lcars-tan); margin-top: 5px;">Select your next action</div>
+                `;
+            }
+        }
+
+        element.appendChild(indicator);
+    }
+
+    // Fetch initial turn status on page load
+    async function fetchTurnStatus() {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/status?role=player`);
+            if (response.ok) {
+                const data = await response.json();
+                updateTurnCounters(
+                    data.player_turns_used, data.player_turns_total,
+                    data.enemy_turns_used, data.enemy_turns_total
+                );
+
+                // Update multi-player state if applicable
+                if (isMultiplayer) {
+                    updateMultiplayerState(data);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to fetch turn status:', e);
+        }
+    }
+
+    // ========== MULTI-PLAYER FUNCTIONS ==========
+
+    // Update multi-player UI state
+    function updateMultiplayerState(data) {
+        currentPlayerId = data.current_player_id;
+        currentTurn = data.current_turn;
+
+        // Check if this player has acted this round
+        if (data.players_info) {
+            const myInfo = data.players_info.find(p => p.player_id === myPlayerId);
+            myHasActed = myInfo ? myInfo.has_acted : false;
+        }
+
+        // Update UI elements
+        updateMultiplayerUI();
+        updatePlayerStatusBadges(data.players_info || []);
+    }
+
+    // Update multi-player UI elements
+    function updateMultiplayerUI() {
+        if (!isMultiplayer) return;
+
+        const turnText = document.getElementById('turn-text');
+        const claimSection = document.getElementById('claim-turn-section');
+        const releaseSection = document.getElementById('release-turn-section');
+        const actedSection = document.getElementById('already-acted-section');
+        const actionsContainer = document.getElementById('actions-container');
+        // Note: end-turn-section removed - players must use "Pass" action to end turn
+
+        if (currentTurn !== 'player') {
+            // Enemy's turn
+            turnText.textContent = 'ENEMY TURN - Waiting for Game Master...';
+            if (claimSection) claimSection.style.display = 'none';
+            if (releaseSection) releaseSection.style.display = 'none';
+            if (actedSection) actedSection.style.display = 'none';
+            if (actionsContainer) actionsContainer.style.display = 'none';
+        } else if (myHasActed) {
+            // Player already acted this round
+            turnText.textContent = "You've acted this round. Waiting for others...";
+            if (claimSection) claimSection.style.display = 'none';
+            if (releaseSection) releaseSection.style.display = 'none';
+            if (actedSection) actedSection.style.display = 'block';
+            if (actionsContainer) actionsContainer.style.display = 'none';
+        } else if (currentPlayerId === myPlayerId) {
+            // This player has claimed the turn
+            turnText.textContent = 'YOUR TURN - Take one action';
+            if (claimSection) claimSection.style.display = 'none';
+            if (releaseSection) releaseSection.style.display = 'block';
+            if (actedSection) actedSection.style.display = 'none';
+            if (actionsContainer) actionsContainer.style.display = 'block';
+        } else if (currentPlayerId) {
+            // Another player has claimed the turn
+            const currentName = data?.current_player_name || 'Another player';
+            turnText.textContent = `${currentName} is acting...`;
+            if (claimSection) claimSection.style.display = 'none';
+            if (releaseSection) releaseSection.style.display = 'none';
+            if (actedSection) actedSection.style.display = 'none';
+            if (actionsContainer) actionsContainer.style.display = 'none';
+        } else {
+            // No one has claimed - show claim button
+            turnText.textContent = 'PLAYER TURN - Claim your turn to act';
+            if (claimSection) claimSection.style.display = 'block';
+            if (releaseSection) releaseSection.style.display = 'none';
+            if (actedSection) actedSection.style.display = 'none';
+            if (actionsContainer) actionsContainer.style.display = 'none';
+        }
+    }
+
+    // Update player status badges
+    function updatePlayerStatusBadges(playersInfo) {
+        playersInfo.forEach(player => {
+            const badge = document.querySelector(`.player-status-badge[data-player-id="${player.player_id}"]`);
+            if (!badge) return;
+
+            // Update badge appearance
+            if (player.has_acted) {
+                badge.style.background = 'var(--lcars-green)';
+                badge.style.color = '#000';
+                badge.textContent = `${player.name} ✓`;
+            } else if (player.is_current) {
+                badge.style.background = 'var(--lcars-purple)';
+                badge.style.color = '#000';
+                badge.textContent = `${player.name} (acting)`;
+            } else {
+                badge.style.background = '#444';
+                badge.style.color = '#ccc';
+                badge.textContent = player.name;
+            }
+        });
+    }
+
+    // Claim the turn
+    async function claimTurn() {
+        if (!isMultiplayer || !myPlayerId) return;
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/claim-turn`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_id: myPlayerId })
+            });
+
+            const data = await response.json();
+
+            if (data.success && data.confirmed) {
+                currentPlayerId = myPlayerId;
+                updateMultiplayerUI();
+                showToast('Turn claimed! Take your action.', 'success');
+            } else if (data.claimed_by) {
+                showToast(`${data.claimed_by} claimed the turn first`, 'info');
+                // Refresh state
+                fetchTurnStatus();
+            } else if (data.error) {
+                showToast(data.error, 'error');
+            }
+        } catch (e) {
+            console.error('Failed to claim turn:', e);
+            showToast('Error claiming turn', 'error');
+        }
+    }
+
+    // Release the turn
+    async function releaseTurn() {
+        if (!isMultiplayer) return;
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/release-turn`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                currentPlayerId = null;
+                updateMultiplayerUI();
+                showToast('Turn released', 'info');
+            }
+        } catch (e) {
+            console.error('Failed to release turn:', e);
+        }
+    }
+
+    // Check if it's this player's turn (for action validation)
+    function canTakeAction() {
+        if (!isMultiplayer) {
+            return currentTurn === 'player';
+        }
+        return currentTurn === 'player' && currentPlayerId === myPlayerId && !myHasActed;
+    }
+
+    // Store action availability state
+    let actionAvailability = {};
+
+    // Fetch and update action availability based on breach status
+    async function fetchActionAvailability() {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/action-availability`);
+            if (response.ok) {
+                actionAvailability = await response.json();
+                updateActionAvailabilityUI();
+            }
+        } catch (e) {
+            console.error('Failed to fetch action availability:', e);
+        }
+    }
+
+    // Update the UI to show which actions are available/disabled
+    function updateActionAvailabilityUI() {
+        // Find all action list items with data-action-name
+        const actionItems = document.querySelectorAll('[data-action-name]');
+
+        actionItems.forEach(item => {
+            const actionName = item.getAttribute('data-action-name');
+            const availability = actionAvailability[actionName];
+
+            if (!availability) return;
+
+            const breachWarning = item.querySelector('.breach-warning');
+            const difficultyDisplay = item.querySelector('.difficulty-display');
+            const baseDifficulty = parseInt(item.getAttribute('data-base-difficulty')) || 0;
+
+            if (!availability.available) {
+                // System destroyed - disable the action
+                item.classList.add('action-disabled');
+                if (breachWarning) {
+                    breachWarning.textContent = `[${availability.reason}]`;
+                    breachWarning.style.display = 'inline';
+                }
+            } else {
+                // Action available
+                item.classList.remove('action-disabled');
+                if (breachWarning) {
+                    breachWarning.style.display = 'none';
+                }
+
+                // Show breach modifier if any
+                if (availability.breach_modifier > 0 && difficultyDisplay) {
+                    const newDifficulty = baseDifficulty + availability.breach_modifier;
+                    difficultyDisplay.innerHTML = `(Diff <span class="breach-modifier">${newDifficulty}</span> <span style="font-size:0.8em;">+${availability.breach_modifier} breach</span>)`;
+                } else if (difficultyDisplay && baseDifficulty > 0) {
+                    difficultyDisplay.textContent = `(Diff ${baseDifficulty})`;
+                }
+            }
+        });
+    }
+
+    // Check if an action is available (for use in selectAction)
+    function isActionAvailable(actionName) {
+        const availability = actionAvailability[actionName];
+        if (!availability) return { available: true, reason: null };
+        return availability;
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        fetchTurnStatus();
+        fetchActionAvailability();
+        updateBonusDiceFromMomentum();
+
+        // Poll for turn status updates (important for multi-player sync)
+        if (isMultiplayer) {
+            setInterval(fetchTurnStatus, 2000);  // Poll every 2 seconds
+        }
+    });
+
+    // Show a brief result message for minor actions that don't need dice
+    function showMinorActionResult(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #1a3a1a;
+            border: 2px solid var(--lcars-green);
+            border-radius: 5px;
+            color: var(--lcars-green);
+            font-weight: bold;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in;
+        `;
+        toast.textContent = `OK ${message}`;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
+    }
+
+    // Show an error toast notification
+    function showErrorToast(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #3a1a1a;
+            border: 2px solid var(--lcars-red);
+            border-radius: 5px;
+            color: var(--lcars-red);
+            font-weight: bold;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in;
+        `;
+        toast.textContent = `ERROR: ${message}`;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // Show a success toast notification
+    function showSuccessToast(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #1a3a1a;
+            border: 2px solid var(--lcars-green);
+            border-radius: 5px;
+            color: var(--lcars-green);
+            font-weight: bold;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in;
+        `;
+        toast.textContent = `✓ ${message}`;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
+    }
+
+    // Show an info toast notification (blue/neutral)
+    function showInfoToast(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #1a2a3a;
+            border: 2px solid var(--lcars-blue);
+            border-radius: 5px;
+            color: var(--lcars-blue);
+            font-weight: bold;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in;
+        `;
+        toast.textContent = `ℹ ${message}`;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // Minor action effect descriptions for display
+    const MINOR_ACTION_EFFECTS = {
+        'Calibrate Weapons': ['+1 damage on next attack'],
+        'Targeting Solution': ['Re-roll 1d20 OR choose system on breach (pick one!)'],
+        'Calibrate Sensors': ['Re-roll 1d20 on next sensor task'],
+    };
+
+    // Helper to clear all action selections visually
+    function clearActionSelections(type) {
+        const panels = document.querySelectorAll('.panel');
+        panels.forEach(panel => {
+            const h2 = panel.querySelector('h2');
+            if (h2) {
+                if (type === 'minor' && h2.textContent === 'Minor Actions') {
+                    panel.querySelectorAll('.action-list li').forEach(li => {
+                        li.classList.remove('action-selected');
+                    });
+                } else if (type === 'major' && h2.textContent === 'Major Actions') {
+                    panel.querySelectorAll('.action-list li').forEach(li => {
+                        li.classList.remove('action-selected');
+                    });
+                }
+            }
+        });
+    }
+
+    // Highlight selected action
+    function highlightAction(actionName, type) {
+        clearActionSelections(type);
+
+        const panels = document.querySelectorAll('.panel');
+        panels.forEach(panel => {
+            const h2 = panel.querySelector('h2');
+            if (h2) {
+                const panelType = h2.textContent.includes('Minor') ? 'minor' :
+                                  h2.textContent.includes('Major') ? 'major' : null;
+                if (panelType === type) {
+                    panel.querySelectorAll('.action-list li').forEach(li => {
+                        const strongEl = li.querySelector('strong');
+                        if (strongEl && strongEl.textContent === actionName) {
+                            li.classList.add('action-selected');
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    async function nextTurn() {
+        const response = await fetch(`/api/encounter/${encounterId}/next-turn`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        const data = await response.json();
+
+        updateTurnDisplay(data.current_turn, data.round, data);
+
+        // Clear active minor action when turn ends
+        activeMinorAction = null;
+        selectedMajorAction = null;
+        updateFireMinorActionBanner();
+        updateMajorActionHighlights();
+        updateSelectionSummary();
+
+        // Clear all action highlights
+        clearActionSelections('minor');
+        clearActionSelections('major');
+
+        // Hide all panels for new turn
+        document.getElementById('fire-panel').style.display = 'none';
+        document.getElementById('fire-results').style.display = 'none';
+        document.getElementById('dice-panel').style.display = 'none';
+        document.getElementById('dice-results').style.display = 'none';
+        document.getElementById('selection-summary').style.display = 'none';
+    }
+
+    // List of buff actions that execute immediately (no roll required)
+    const BUFF_ACTIONS = ['Calibrate Weapons', 'Calibrate Sensors', 'Targeting Solution'];
+
+    // Major buff actions that execute immediately AND end the turn
+    const MAJOR_BUFF_ACTIONS = ['Attack Pattern', 'Evasive Action'];
+
+    // Minor actions that only work with Fire
+    const FIRE_ONLY_MINOR_ACTIONS = ['Targeting Solution', 'Calibrate Weapons'];
+
+    async function selectAction(name, type, difficulty) {
+        if (currentTurn !== 'player') {
+            showErrorToast("It's not your turn!");
+            return;
+        }
+
+        // Check if action is available (system not destroyed)
+        const availability = isActionAvailable(name);
+        if (!availability.available) {
+            showErrorToast(`Cannot use ${name}: ${availability.reason}`);
+            return;
+        }
+
+        // Apply breach modifier to difficulty if applicable
+        if (availability.breach_modifier > 0) {
+            difficulty = difficulty + availability.breach_modifier;
+        }
+
+        currentAction = {name, type, difficulty};
+
+        if (type === 'minor') {
+            if (BUFF_ACTIONS.includes(name)) {
+                executeBuffAction(name);
+                highlightAction(name, 'minor');
+            } else if (name === 'Impulse') {
+                // Special handling for Impulse movement
+                startImpulseMovement();
+                highlightAction(name, 'minor');
+            } else if (name === 'Thrusters') {
+                // Show Thrusters panel and load available actions
+                showThrustersPanel();
+                highlightAction(name, 'minor');
+            }
+            return;
+        }
+
+        // Major action selected
+        selectedMajorAction = name;
+        highlightAction(name, 'major');
+        updateSelectionSummary();
+
+        if (name === 'Fire') {
+            if (!weaponsArmed) {
+                showErrorToast("Weapons are not armed! Use Arm Weapons first.");
+                return;
+            }
+            document.getElementById('fire-panel').style.display = 'block';
+            document.getElementById('defensive-fire-panel').style.display = 'none';
+            document.getElementById('reroute-power-panel').style.display = 'none';
+            document.getElementById('damage-control-panel').style.display = 'none';
+            document.getElementById('ram-panel').style.display = 'none';
+            document.getElementById('dice-panel').style.display = 'none';
+            document.getElementById('fire-results').style.display = 'none';
+
+            // Update target list with visible enemies and calculate range
+            updateFireTargets();
+            updateFireDetails();
+            updateFireMinorActionBanner();
+            document.getElementById('fire-panel').scrollIntoView({behavior: 'smooth'});
+        } else if (name === 'Defensive Fire') {
+            // Check momentum - need at least 2 for counterattack
+            const currentMomentum = parseInt(document.getElementById('momentum').textContent) || 0;
+            if (currentMomentum < 2) {
+                showErrorToast("Defensive Fire requires at least 2 Momentum for counterattack!");
+                return;
+            }
+            // Check for Evasive Action conflict (handled server-side, but we can warn)
+            document.getElementById('fire-panel').style.display = 'none';
+            document.getElementById('defensive-fire-panel').style.display = 'block';
+            document.getElementById('reroute-power-panel').style.display = 'none';
+            document.getElementById('damage-control-panel').style.display = 'none';
+            document.getElementById('ram-panel').style.display = 'none';
+            document.getElementById('dice-panel').style.display = 'none';
+            document.getElementById('defensive-fire-results').style.display = 'none';
+
+            // Update momentum warning in the panel
+            updateDefensiveFireMomentumWarning();
+
+            document.getElementById('defensive-fire-panel').scrollIntoView({behavior: 'smooth'});
+        } else if (name === 'Reroute Power') {
+            // Check Reserve Power
+            if (!hasReservePower) {
+                showErrorToast("Reroute Power requires Reserve Power!");
+                return;
+            }
+            document.getElementById('fire-panel').style.display = 'none';
+            document.getElementById('defensive-fire-panel').style.display = 'none';
+            document.getElementById('reroute-power-panel').style.display = 'block';
+            document.getElementById('damage-control-panel').style.display = 'none';
+            document.getElementById('ram-panel').style.display = 'none';
+            document.getElementById('dice-panel').style.display = 'none';
+            document.getElementById('reroute-power-results').style.display = 'none';
+
+            // Update the target display based on current selection
+            updateRerouteTargetDisplay();
+
+            document.getElementById('reroute-power-panel').scrollIntoView({behavior: 'smooth'});
+        } else if (name === 'Ram') {
+            document.getElementById('fire-panel').style.display = 'none';
+            document.getElementById('defensive-fire-panel').style.display = 'none';
+            document.getElementById('reroute-power-panel').style.display = 'none';
+            document.getElementById('damage-control-panel').style.display = 'none';
+            document.getElementById('ram-panel').style.display = 'block';
+            document.getElementById('dice-panel').style.display = 'none';
+            document.getElementById('ram-results').style.display = 'none';
+
+            // Update damage display based on selected target
+            updateRamDamageDisplay();
+
+            document.getElementById('ram-panel').scrollIntoView({behavior: 'smooth'});
+        } else if (name === 'Damage Control') {
+            document.getElementById('fire-panel').style.display = 'none';
+            document.getElementById('defensive-fire-panel').style.display = 'none';
+            document.getElementById('reroute-power-panel').style.display = 'none';
+            document.getElementById('ram-panel').style.display = 'none';
+            document.getElementById('dice-panel').style.display = 'none';
+            document.getElementById('damage-control-panel').style.display = 'block';
+            document.getElementById('damage-control-results').style.display = 'none';
+
+            // Populate breach options and update display
+            populateDamageControlOptions();
+
+            document.getElementById('damage-control-panel').scrollIntoView({behavior: 'smooth'});
+        } else if (MAJOR_BUFF_ACTIONS.includes(name)) {
+            // Major buff actions execute immediately and end turn
+            executeMajorBuffAction(name);
+            return;
+        } else if (name === 'Pass') {
+            // Pass action - immediately execute, no roll needed
+            executePassAction();
+            return;
+        } else {
+            try {
+                const configResponse = await fetch(`/api/action-config/${encodeURIComponent(name)}`);
+                const config = await configResponse.json();
+                currentActionConfig = config;
+
+                if (config.roll) {
+                    const attrName = config.roll.attribute;
+                    const discName = config.roll.discipline;
+                    const attrValue = playerAttrs[attrName] || 9;
+                    const discValue = playerDiscs[discName] || 2;
+                    const targetNum = attrValue + discValue;
+
+                    document.getElementById('roll-attr-name').textContent = attrName.charAt(0).toUpperCase() + attrName.slice(1);
+                    document.getElementById('roll-attr-value').textContent = attrValue;
+                    document.getElementById('roll-disc-name').textContent = discName.charAt(0).toUpperCase() + discName.slice(1);
+                    document.getElementById('roll-disc-value').textContent = discValue;
+                    document.getElementById('roll-target').textContent = targetNum;
+                    document.getElementById('roll-diff-display').textContent = config.roll.difficulty;
+
+                    document.getElementById('roll-attr').value = attrValue;
+                    document.getElementById('roll-disc').value = discValue;
+                    document.getElementById('roll-diff').value = config.roll.difficulty;
+
+                    const assistRow = document.getElementById('ship-assist-row');
+                    if (config.roll.ship_assist_system && config.roll.ship_assist_department) {
+                        const sysName = config.roll.ship_assist_system;
+                        const deptName = config.roll.ship_assist_department;
+                        const sysValue = shipSystems[sysName] || 7;
+                        const deptValue = shipDepts[deptName] || 2;
+                        const assistTarget = sysValue + deptValue;
+
+                        document.getElementById('ship-assist-system-name').textContent = sysName.charAt(0).toUpperCase() + sysName.slice(1);
+                        document.getElementById('ship-assist-system-value').textContent = sysValue;
+                        document.getElementById('ship-assist-dept-name').textContent = deptName.charAt(0).toUpperCase() + deptName.slice(1);
+                        document.getElementById('ship-assist-dept-value').textContent = deptValue;
+                        document.getElementById('ship-assist-target').textContent = assistTarget;
+                        assistRow.style.display = 'block';
+                    } else {
+                        assistRow.style.display = 'none';
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch action config:', err);
+                document.getElementById('roll-diff').value = difficulty;
+                document.getElementById('roll-diff-display').textContent = difficulty;
+            }
+
+            document.getElementById('fire-panel').style.display = 'none';
+            document.getElementById('damage-control-panel').style.display = 'none';
+            document.getElementById('dice-panel').style.display = 'block';
+            document.getElementById('current-action-display').style.display = 'block';
+            document.getElementById('current-action-name').textContent = name;
+            // Reset elements that might have been hidden after previous roll
+            document.getElementById('roll-details').style.display = 'block';
+            document.getElementById('dice-results').style.display = 'none';
+            const rollBtn = document.querySelector('#dice-panel > button');
+            if (rollBtn) rollBtn.style.display = 'block';
+            document.getElementById('dice-panel').scrollIntoView({behavior: 'smooth'});
+        }
+    }
+
+    function updateFireMinorActionBanner() {
+        const banner = document.getElementById('fire-minor-action-banner');
+        const nameSpan = document.getElementById('fire-minor-action-name');
+        const effectsDiv = document.getElementById('fire-minor-action-effects');
+        const targetingSolutionPanel = document.getElementById('targeting-solution-panel');
+
+        if (activeMinorAction) {
+            banner.style.display = 'block';
+            nameSpan.textContent = activeMinorAction;
+            const effects = MINOR_ACTION_EFFECTS[activeMinorAction] || [];
+            effectsDiv.innerHTML = effects.map(e => `* ${e}`).join('<br>');
+
+            if (activeMinorAction === 'Targeting Solution') {
+                targetingSolutionPanel.style.display = 'block';
+            } else {
+                targetingSolutionPanel.style.display = 'none';
+            }
+        } else {
+            banner.style.display = 'none';
+            targetingSolutionPanel.style.display = 'none';
+        }
+    }
+
+    function updateMajorActionHighlights() {
+        const fireAction = document.querySelector('.fire-action');
+        if (fireAction) {
+            if (activeMinorAction && FIRE_ONLY_MINOR_ACTIONS.includes(activeMinorAction)) {
+                fireAction.classList.add('fire-action-highlighted');
+            } else {
+                fireAction.classList.remove('fire-action-highlighted');
+            }
+        }
+    }
+
+    function updateDefensiveFireMomentumWarning() {
+        const warningDiv = document.getElementById('defensive-fire-momentum-warning');
+        const momentumSpan = document.getElementById('df-current-momentum');
+        const currentMomentum = parseInt(document.getElementById('momentum').textContent) || 0;
+
+        // Show warning if momentum is exactly 2 (will be 0 after counterattack) or less
+        // Note: We already block selection if < 2, but show warning if exactly 2
+        if (currentMomentum <= 3) {
+            warningDiv.style.display = 'block';
+            momentumSpan.textContent = currentMomentum;
+        } else {
+            warningDiv.style.display = 'none';
+        }
+    }
+
+    function updateSelectionSummary() {
+        const summaryPanel = document.getElementById('selection-summary');
+        const summaryMinor = document.getElementById('summary-minor');
+        const summaryMajor = document.getElementById('summary-major');
+
+        if (activeMinorAction || selectedMajorAction) {
+            summaryPanel.style.display = 'block';
+        } else {
+            summaryPanel.style.display = 'none';
+        }
+
+        if (activeMinorAction) {
+            const effects = MINOR_ACTION_EFFECTS[activeMinorAction] || [];
+            summaryMinor.innerHTML = `
+                <strong style="color: var(--lcars-green);">OK ${activeMinorAction}</strong>
+                <div style="font-size: 0.85em; color: var(--lcars-tan); margin-top: 4px;">
+                    ${effects.map(e => `* ${e}`).join('<br>')}
+                </div>
+            `;
+        } else {
+            summaryMinor.innerHTML = '<span style="color: #666;">None selected (optional)</span>';
+        }
+
+        if (selectedMajorAction) {
+            summaryMajor.innerHTML = `<strong style="color: var(--lcars-green);">OK ${selectedMajorAction}</strong>`;
+        } else {
+            summaryMajor.innerHTML = '<span style="color: #888;">Select a major action to proceed</span>';
+        }
+    }
+
+    function cancelAction() {
+        currentAction = null;
+        selectedMajorAction = null;
+
+        clearActionSelections('major');
+        updateSelectionSummary();
+
+        document.getElementById('fire-panel').style.display = 'none';
+        document.getElementById('defensive-fire-panel').style.display = 'none';
+        document.getElementById('reroute-power-panel').style.display = 'none';
+        document.getElementById('damage-control-panel').style.display = 'none';
+        document.getElementById('ram-panel').style.display = 'none';
+        document.getElementById('dice-panel').style.display = 'none';
+        document.getElementById('current-action-display').style.display = 'none';
+    }
+
+    // Reroute Power functions
+    function updateRerouteTargetDisplay() {
+        const select = document.getElementById('reroute-system-select');
+        const display = document.getElementById('reroute-target-display');
+        display.textContent = select.value.toUpperCase();
+    }
+
+    // Add event listener for the system select dropdown
+    document.addEventListener('DOMContentLoaded', function() {
+        const rerouteSelect = document.getElementById('reroute-system-select');
+        if (rerouteSelect) {
+            rerouteSelect.addEventListener('change', updateRerouteTargetDisplay);
+        }
+    });
+
+    // ===== DAMAGE CONTROL FUNCTIONS =====
+
+    let damageControlTargetSystem = null;
+
+    function populateDamageControlOptions() {
+        const select = document.getElementById('damage-control-system-select');
+        const noBreachWarning = document.getElementById('damage-control-no-breach-warning');
+        const systemSection = document.getElementById('damage-control-system-section');
+
+        // Find all systems with breaches from the DOM
+        const breachedSystems = [];
+        document.querySelectorAll('.stat-row.breached').forEach(row => {
+            const system = row.getAttribute('data-system');
+            const breachCount = row.querySelector('.breach-count');
+            const potency = breachCount ? parseInt(breachCount.textContent) || 1 : 1;
+            if (system) {
+                breachedSystems.push({ system, potency });
+            }
+        });
+
+        // Clear and populate the select
+        select.innerHTML = '';
+
+        if (breachedSystems.length === 0) {
+            noBreachWarning.style.display = 'block';
+            systemSection.style.display = 'none';
+            damageControlTargetSystem = null;
+            return;
+        }
+
+        noBreachWarning.style.display = 'none';
+        systemSection.style.display = 'block';
+
+        breachedSystems.forEach(({ system, potency }) => {
+            const option = document.createElement('option');
+            option.value = system;
+            option.textContent = `${system.toUpperCase()} - Breach Potency ${potency}`;
+            option.dataset.potency = potency;
+            select.appendChild(option);
+        });
+
+        damageControlTargetSystem = breachedSystems[0].system;
+        updateDamageControlDisplay();
+    }
+
+    function updateDamageControlDisplay() {
+        const select = document.getElementById('damage-control-system-select');
+        const selectedOption = select.options[select.selectedIndex];
+        const potency = selectedOption ? parseInt(selectedOption.dataset.potency) || 0 : 0;
+
+        document.getElementById('damage-control-breach-potency').textContent = potency;
+        document.getElementById('damage-control-total-difficulty').textContent = 2 + potency;
+
+        damageControlTargetSystem = select.value;
+
+        // Update bonus dice availability based on momentum
+        const currentMomentum = parseInt(document.getElementById('momentum').textContent) || 0;
+        const bonusSection = document.getElementById('damage-control-bonus-section');
+        const bonusInput = document.getElementById('damage-control-bonus');
+
+        if (currentMomentum > 0) {
+            bonusSection.style.display = 'block';
+            bonusInput.max = Math.min(3, currentMomentum); // Max 3 dice
+            bonusInput.value = Math.min(bonusInput.value, bonusInput.max);
+        } else {
+            bonusSection.style.display = 'none';
+            bonusInput.value = 0;
+        }
+    }
+
+    async function executeDamageControlRoll() {
+        if (!damageControlTargetSystem) {
+            showErrorToast("No breach selected to repair!");
+            return;
+        }
+
+        const select = document.getElementById('damage-control-system-select');
+        const selectedOption = select.options[select.selectedIndex];
+        const breachPotency = selectedOption ? parseInt(selectedOption.dataset.potency) || 0 : 0;
+        const difficulty = 2 + breachPotency;
+        const focus = document.getElementById('damage-control-focus').checked;
+        const bonus = parseInt(document.getElementById('damage-control-bonus').value) || 0;
+        const resultsDiv = document.getElementById('damage-control-results');
+
+        // Use character's Presence + Engineering
+        const attr = playerAttrs.presence || 9;
+        const disc = playerDiscs.engineering || 3;
+
+        try {
+            // First, do the roll
+            const rollResponse = await fetch('/api/roll', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    attribute: attr,
+                    discipline: disc,
+                    difficulty: difficulty,
+                    focus: focus,
+                    bonus_dice: bonus
+                })
+            });
+            const rollData = await rollResponse.json();
+
+            // Show roll results
+            resultsDiv.style.display = 'block';
+            const diceHtml = rollData.rolls.map(roll => {
+                let cls = 'dice-fail';
+                if (roll === 1) cls = 'dice-crit';
+                else if (focus && roll <= disc) cls = 'dice-crit';
+                else if (roll <= attr + disc) cls = 'dice-success';
+                else if (roll === 20) cls = 'dice-complication';
+                return `<span class="dice-result ${cls}">${roll}</span>`;
+            }).join('');
+
+            if (rollData.succeeded) {
+                // Execute the action with target_system
+                const execResponse = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action_name: 'Damage Control',
+                        roll_succeeded: true,
+                        roll_momentum: rollData.momentum_generated,
+                        target_system: damageControlTargetSystem,
+                        bonus_dice: bonus,
+                        character_id: playerCharId
+                    })
+                });
+                const execData = await execResponse.json();
+
+                // Check for API error
+                if (execData.error) {
+                    console.error('Damage Control API error:', execData.error);
+                    showErrorToast(execData.error);
+                    return;
+                }
+
+                // Update momentum
+                if (execData.new_momentum !== undefined) {
+                    document.getElementById('momentum').textContent = execData.new_momentum;
+                }
+
+                // Update the breach display in the UI
+                if (execData.system_patched) {
+                    const systemRow = document.querySelector(`.stat-row[data-system="${execData.system_patched}"]`);
+                    if (systemRow) {
+                        const breachIndicator = systemRow.querySelector('.breach-indicator');
+                        const breachCount = systemRow.querySelector('.breach-count');
+
+                        if (execData.remaining_breach_potency <= 0) {
+                            // Breach fully repaired
+                            systemRow.classList.remove('breached');
+                            if (breachIndicator) breachIndicator.style.display = 'none';
+                        } else if (breachCount) {
+                            // Reduced potency
+                            breachCount.textContent = execData.remaining_breach_potency;
+                        }
+                    }
+                }
+
+                resultsDiv.innerHTML = `
+                    <div style="padding: 15px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                        <strong style="color: var(--lcars-green);">SUCCESS!</strong>
+                        <div style="margin: 10px 0;">${diceHtml}</div>
+                        <p>${rollData.successes} successes vs Difficulty ${difficulty}</p>
+                        <p style="margin-top: 10px; color: var(--lcars-green);">${execData.message}</p>
+                        ${rollData.momentum_generated > 0 ? `<p style="color: var(--lcars-blue);">+${rollData.momentum_generated} Momentum</p>` : ''}
+                    </div>
+                `;
+
+                showSuccessToast(`Repaired ${damageControlTargetSystem.toUpperCase()} breach!`);
+
+                // Update turn display - backend already alternated turn
+                if (execData.current_turn) {
+                    currentTurn = execData.current_turn;
+                    updateTurnDisplay(execData.current_turn, execData.round, execData);
+
+                    // Clear action state
+                    activeMinorAction = null;
+                    selectedMajorAction = null;
+                    updateFireMinorActionBanner();
+                    updateMajorActionHighlights();
+                    clearActionSelections('minor');
+                    clearActionSelections('major');
+
+                    // Add turn indicator to results (keep panel visible)
+                    addTurnOverIndicator('damage-control-results', execData.current_turn, execData);
+                }
+
+                // Update turn counters
+                if (execData.player_turns_used !== undefined) {
+                    updateTurnCounters(
+                        execData.player_turns_used, execData.player_turns_total,
+                        execData.enemy_turns_used, execData.enemy_turns_total
+                    );
+                }
+            } else {
+                resultsDiv.innerHTML = `
+                    <div style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                        <strong style="color: var(--lcars-red);">FAILED!</strong>
+                        <div style="margin: 10px 0;">${diceHtml}</div>
+                        <p>${rollData.successes} successes vs Difficulty ${difficulty}</p>
+                        ${rollData.complications > 0 ? `<p style="color: var(--lcars-red);">${rollData.complications} complication(s)!</p>` : ''}
+                    </div>
+                `;
+
+                showErrorToast("Damage Control failed!");
+
+                // Failed roll still consumes the major action - call execute-action to log and end turn
+                try {
+                    const failResponse = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            action_name: 'Damage Control',
+                            roll_succeeded: false,
+                            roll_successes: rollData.successes,
+                            roll_complications: rollData.complications,
+                            roll_dice: rollData.rolls,
+                            roll_target: attr + disc,
+                            target_system: damageControlTargetSystem,
+                            bonus_dice: bonus,
+                            character_id: playerCharId
+                        })
+                    });
+                    const failData = await failResponse.json();
+
+                    // Update turn display
+                    if (failData.current_turn) {
+                        currentTurn = failData.current_turn;
+                        updateTurnDisplay(failData.current_turn, failData.round, failData);
+
+                        // Clear action state
+                        activeMinorAction = null;
+                        selectedMajorAction = null;
+                        updateFireMinorActionBanner();
+                        updateMajorActionHighlights();
+                        clearActionSelections('minor');
+                        clearActionSelections('major');
+
+                        // Add turn indicator to results (keep panel visible)
+                        addTurnOverIndicator('damage-control-results', failData.current_turn, failData);
+                    }
+
+                    if (failData.player_turns_used !== undefined) {
+                        updateTurnCounters(
+                            failData.player_turns_used, failData.player_turns_total,
+                            failData.enemy_turns_used, failData.enemy_turns_total
+                        );
+                    }
+                } catch (e) {
+                    console.error('Failed to record failed action:', e);
+                }
+            }
+        } catch (err) {
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = `
+                <div style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                    <strong style="color: var(--lcars-red);">ERROR:</strong> ${err.message}
+                </div>
+            `;
+        }
+    }
+
+    // ===== END DAMAGE CONTROL FUNCTIONS =====
+
+    async function executeReroutePower() {
+        const targetSystem = document.getElementById('reroute-system-select').value;
+        const resultsDiv = document.getElementById('reroute-power-results');
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    action_name: 'Reroute Power',
+                    target_system: targetSystem,
+                    character_id: playerCharId
+                })
+            });
+            const data = await response.json();
+
+            resultsDiv.style.display = 'block';
+
+            if (data.error) {
+                resultsDiv.innerHTML = `
+                    <div style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                        <strong style="color: var(--lcars-red);">ERROR:</strong> ${data.error}
+                    </div>
+                `;
+                return;
+            }
+
+            if (data.success) {
+                // Update local reserve power state
+                hasReservePower = false;
+                updateReservePowerDisplay();
+
+                resultsDiv.innerHTML = `
+                    <div style="padding: 15px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                        <strong style="color: var(--lcars-green);">SUCCESS!</strong>
+                        <p style="margin: 10px 0 0 0;">${data.message}</p>
+                        <p style="margin: 10px 0 0 0; color: var(--lcars-orange);">Reserve Power consumed.</p>
+                    </div>
+                `;
+
+                showSuccessToast(`Power rerouted to ${targetSystem.toUpperCase()}!`);
+
+                // Handle turn changes (Reroute Power is a major action)
+                if (data.turn_ended) {
+                    currentTurn = 'enemy';
+                    updateTurnDisplay();
+                    showSuccessToast("Enemy turn!");
+                }
+
+                // Mark action as complete
+                selectedMajorAction = 'Reroute Power';
+                updateSelectionSummary();
+            } else {
+                resultsDiv.innerHTML = `
+                    <div style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                        <strong style="color: var(--lcars-red);">FAILED:</strong> ${data.message}
+                    </div>
+                `;
+            }
+
+        } catch (err) {
+            resultsDiv.innerHTML = `
+                <div style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                    <strong style="color: var(--lcars-red);">ERROR:</strong> ${err.message}
+                </div>
+            `;
+        }
+    }
+
+    function updateReservePowerDisplay() {
+        // Update any reserve power indicators on the page
+        const powerStatus = document.getElementById('reserve-power-status');
+        if (powerStatus) {
+            powerStatus.textContent = hasReservePower ? '✓' : '✗';
+            powerStatus.style.color = hasReservePower ? 'var(--lcars-green)' : 'var(--lcars-red)';
+
+            // Update the container styling too
+            const container = document.getElementById('reserve-power-box');
+            if (container) {
+                container.style.background = hasReservePower ? '#1a3a1a' : '#3a1a1a';
+                container.style.borderColor = hasReservePower ? 'var(--lcars-green)' : 'var(--lcars-red)';
+
+                // Update the label color
+                const label = container.querySelector('span:first-child');
+                if (label) {
+                    label.style.color = hasReservePower ? 'var(--lcars-green)' : 'var(--lcars-red)';
+                }
+            }
+        }
+    }
+
+    // Ram action functions
+    function updateRamDamageDisplay() {
+        const select = document.getElementById('ram-target-select');
+        const selectedOption = select.options[select.selectedIndex];
+        const targetScale = parseInt(selectedOption.dataset.scale) || 3;
+
+        document.getElementById('ram-their-damage').textContent = targetScale;
+    }
+
+    // Add event listener for the ram target select dropdown
+    document.addEventListener('DOMContentLoaded', function() {
+        const ramSelect = document.getElementById('ram-target-select');
+        if (ramSelect) {
+            ramSelect.addEventListener('change', updateRamDamageDisplay);
+        }
+    });
+
+    async function executeRamAction() {
+        const targetIndex = parseInt(document.getElementById('ram-target-select').value);
+        const focus = document.getElementById('ram-focus').checked;
+        const bonusDice = parseInt(document.getElementById('ram-bonus').value) || 0;
+        const resultsDiv = document.getElementById('ram-results');
+
+        // Validate range - Ram requires Close range (same hex)
+        const enemies = getVisibleEnemies();
+        const targetEnemy = enemies[targetIndex];
+        if (targetEnemy) {
+            const playerPos = getPlayerPosition();
+            const targetDistance = hexDistance(playerPos, targetEnemy.position);
+            if (targetDistance > 0) {
+                const rangeCategory = getRangeCategory(targetDistance);
+                alert(`Ram requires Close range (same hex). Target is at ${rangeCategory} range (${targetDistance} hex${targetDistance !== 1 ? 'es' : ''} away).`);
+                resultsDiv.style.display = 'block';
+                resultsDiv.innerHTML = `<div class="info-box danger"><strong>OUT OF RANGE:</strong> Ram requires Close range (same hex). Target is at ${rangeCategory} range (${targetDistance} hex${targetDistance !== 1 ? 'es' : ''} away).</div>`;
+                return;
+            }
+        }
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/ram`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    target_index: targetIndex,
+                    attribute: playerAttrs.daring || 9,
+                    discipline: playerDiscs.conn || 3,
+                    difficulty: 2,
+                    focus: focus,
+                    bonus_dice: bonusDice,
+                    character_id: playerCharId
+                })
+            });
+            const data = await response.json();
+
+            resultsDiv.style.display = 'block';
+
+            if (data.error) {
+                resultsDiv.innerHTML = `
+                    <div style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                        <strong style="color: var(--lcars-red);">ERROR:</strong> ${data.error}
+                    </div>
+                `;
+                return;
+            }
+
+            // Build dice display
+            let diceHtml = '<div style="display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0;">';
+            const charDiceCount = data.rolls.length - 1; // Last die is ship assist
+            for (let i = 0; i < data.rolls.length; i++) {
+                const roll = data.rolls[i];
+                const isShipDie = i === data.rolls.length - 1;
+                let bgColor = '#333';
+                let border = '2px solid #666';
+
+                if (roll === 1) {
+                    bgColor = '#1a4a1a';
+                    border = '2px solid var(--lcars-green)';
+                } else if (roll === 20) {
+                    bgColor = '#4a1a1a';
+                    border = '2px solid var(--lcars-red)';
+                } else if (roll <= data.target_number || (isShipDie && roll <= data.ship_target_number)) {
+                    bgColor = '#1a3a1a';
+                    border = '2px solid var(--lcars-green)';
+                }
+
+                diceHtml += `
+                    <div style="width: 50px; height: 50px; background: ${bgColor}; border: ${border};
+                                border-radius: 5px; display: flex; align-items: center; justify-content: center;
+                                font-size: 1.5em; font-weight: bold; ${isShipDie ? 'border-style: dashed;' : ''}">
+                        ${roll}
+                    </div>
+                `;
+            }
+            diceHtml += '</div>';
+
+            if (data.succeeded) {
+                // Build damage summary for both ships
+                let damageHtml = `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <div style="padding: 10px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                            <strong style="color: var(--lcars-green);">DAMAGE TO TARGET</strong>
+                            <p>Collision Damage: ${data.target_collision_damage}</p>
+                            <p>Shield Damage: ${data.target_shield_damage}</p>
+                            <p>Hull Damage: ${data.target_hull_damage}</p>
+                            ${data.target_breaches_caused > 0 ? `<p style="color: var(--lcars-orange);">Breaches: ${data.target_systems_hit.join(', ')}</p>` : ''}
+                            <p>Shields Remaining: ${data.target_shields_remaining}</p>
+                        </div>
+                        <div style="padding: 10px; background: #3a2a1a; border: 2px solid var(--lcars-orange); border-radius: 5px;">
+                            <strong style="color: var(--lcars-orange);">DAMAGE TO YOUR SHIP</strong>
+                            <p>Collision Damage: ${data.player_collision_damage}</p>
+                            <p>Shield Damage: ${data.player_shield_damage}</p>
+                            <p>Hull Damage: ${data.player_hull_damage}</p>
+                            ${data.player_breaches_caused > 0 ? `<p style="color: var(--lcars-red);">Breaches: ${data.player_systems_hit.join(', ')}</p>` : ''}
+                            <p>Shields Remaining: ${data.player_shields_remaining}</p>
+                        </div>
+                    </div>
+                `;
+
+                resultsDiv.innerHTML = `
+                    <div style="padding: 15px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                        <strong style="color: var(--lcars-green);">COLLISION!</strong>
+                        <p>${data.successes} successes vs difficulty ${data.difficulty}</p>
+                        ${diceHtml}
+                        ${damageHtml}
+                        ${data.momentum_generated > 0 ? `<p style="margin-top: 10px; color: var(--lcars-blue);">+${data.momentum_generated} Momentum generated</p>` : ''}
+                    </div>
+                `;
+
+                showSuccessToast('Ram successful! Both ships took collision damage.');
+
+                // Update ship displays
+                updatePlayerShipDisplay(data);
+                if (typeof updateEnemyShipDisplay === 'function') {
+                    updateEnemyShipDisplay(targetIndex, data);
+                }
+
+                // Refresh action availability after taking damage (breaches may have occurred)
+                if (data.player_breaches_caused > 0) {
+                    fetchActionAvailability();
+                }
+
+                // Update momentum
+                if (data.new_momentum !== undefined) {
+                    document.getElementById('momentum').textContent = data.new_momentum;
+                    updateBonusDiceFromMomentum();
+                }
+
+            } else {
+                resultsDiv.innerHTML = `
+                    <div style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                        <strong style="color: var(--lcars-red);">MISSED!</strong>
+                        <p>${data.successes} successes vs difficulty ${data.difficulty} - failed to connect!</p>
+                        ${diceHtml}
+                    </div>
+                `;
+
+                showErrorToast('Ram failed! Target evaded the collision.');
+            }
+
+            // Handle turn state from response
+            if (data.current_turn) {
+                updateTurnDisplay(data.current_turn, data.round, data);
+
+                // Clear action state
+                activeMinorAction = null;
+                selectedMajorAction = null;
+                updateFireMinorActionBanner();
+                updateMajorActionHighlights();
+                clearActionSelections('minor');
+                clearActionSelections('major');
+
+                // Add turn indicator to ram results
+                addTurnOverIndicator('ram-results', data.current_turn, data);
+            }
+
+            if (data.player_turns_used !== undefined) {
+                updateTurnCounters(
+                    data.player_turns_used, data.player_turns_total,
+                    data.enemy_turns_used, data.enemy_turns_total
+                );
+            }
+
+        } catch (err) {
+            resultsDiv.innerHTML = `
+                <div style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                    <strong style="color: var(--lcars-red);">ERROR:</strong> ${err.message}
+                </div>
+            `;
+        }
+    }
+
+    async function executeBuffAction(actionName) {
+        const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                action_name: actionName,
+                character_id: playerCharId
+            })
+        });
+        const data = await response.json();
+
+        const resultsDiv = document.getElementById('dice-results');
+        const displayDiv = document.getElementById('dice-display');
+        resultsDiv.style.display = 'block';
+
+        if (data.success) {
+            activeMinorAction = actionName;
+            updateMajorActionHighlights();
+            updateSelectionSummary();
+            document.getElementById('selection-summary').scrollIntoView({behavior: 'smooth'});
+        } else {
+            document.getElementById('dice-panel').style.display = 'block';
+            resultsDiv.style.display = 'block';
+            displayDiv.innerHTML = `
+                <div class="alert alert-error" style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                    <strong>ERROR:</strong> ${data.error || 'Action failed'}
+                </div>
+            `;
+        }
+    }
+
+    async function executeMajorBuffAction(actionName) {
+        // Execute the buff action
+        const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                action_name: actionName,
+                character_id: playerCharId
+            })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            // Show results in dice panel
+            const resultsDiv = document.getElementById('dice-results');
+            const displayDiv = document.getElementById('dice-display');
+            document.getElementById('dice-panel').style.display = 'block';
+            resultsDiv.style.display = 'block';
+
+            displayDiv.innerHTML = `
+                <div class="alert alert-success" style="padding: 15px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                    <strong style="color: var(--lcars-green);">${actionName.toUpperCase()} ACTIVATED!</strong>
+                    <p style="margin-top: 10px;">${data.message || 'Effect applied successfully.'}</p>
+                </div>
+            `;
+
+            // Update resistance display if applicable
+            if (data.resistance_bonus) {
+                currentResistanceBonus += data.resistance_bonus;
+                updateResistanceDisplay();
+            }
+
+            // Handle turn state from response
+            if (data.current_turn) {
+                updateTurnDisplay(data.current_turn, data.round, data);
+
+                // Clear action state
+                activeMinorAction = null;
+                selectedMajorAction = null;
+                updateFireMinorActionBanner();
+                updateMajorActionHighlights();
+                clearActionSelections('minor');
+                clearActionSelections('major');
+
+                // Add turn indicator
+                addTurnOverIndicator('dice-display', data.current_turn, data);
+            }
+
+            if (data.player_turns_used !== undefined) {
+                updateTurnCounters(
+                    data.player_turns_used, data.player_turns_total,
+                    data.enemy_turns_used, data.enemy_turns_total
+                );
+            }
+        } else {
+            showErrorToast(data.error || `${actionName} failed!`);
+        }
+    }
+
+    async function executePassAction() {
+        // Pass action - end turn without doing anything
+        const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                action_name: 'Pass',
+                character_id: playerCharId
+            })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            // Show results in dice panel
+            const resultsDiv = document.getElementById('dice-results');
+            const displayDiv = document.getElementById('dice-display');
+            document.getElementById('dice-panel').style.display = 'block';
+            resultsDiv.style.display = 'block';
+
+            displayDiv.innerHTML = `
+                <div class="alert alert-info" style="padding: 15px; background: #1a2a3a; border: 2px solid var(--lcars-blue); border-radius: 5px;">
+                    <h4 style="margin: 0 0 10px 0; color: var(--lcars-blue);">PASS</h4>
+                    <p style="margin: 0; color: var(--lcars-text);">Turn passed without acting.</p>
+                </div>
+            `;
+
+            // Handle turn transition
+            if (data.current_turn) {
+                updateTurnDisplay(data.current_turn, data.round, data);
+                pollForTurnChanges();
+
+                // Clear action state
+                activeMinorAction = null;
+                selectedMajorAction = null;
+                updateMajorActionHighlights();
+                clearActionSelections('minor');
+                clearActionSelections('major');
+
+                // Add turn indicator
+                addTurnOverIndicator('dice-display', data.current_turn, data);
+            }
+
+            if (data.player_turns_used !== undefined) {
+                updateTurnCounters(
+                    data.player_turns_used, data.player_turns_total,
+                    data.enemy_turns_used, data.enemy_turns_total
+                );
+            }
+        } else {
+            showErrorToast(data.error || 'Pass action failed!');
+        }
+    }
+
+    // Calculate hex distance between two positions
+    function hexDistance(pos1, pos2) {
+        const q1 = pos1.q, r1 = pos1.r;
+        const q2 = pos2.q, r2 = pos2.r;
+        return (Math.abs(q1 - q2) + Math.abs(q1 + r1 - q2 - r2) + Math.abs(r1 - r2)) / 2;
+    }
+
+    // Get range category from hex distance
+    function getRangeCategory(distance) {
+        if (distance === 0) return 'close';
+        if (distance === 1) return 'medium';
+        if (distance === 2) return 'long';
+        return 'extreme';
+    }
+
+    // Weapon range values (max hex distance)
+    const WEAPON_RANGE_MAX = {
+        'close': 0,
+        'medium': 1,
+        'long': 2,
+        'extreme': 999
+    };
+
+    // Get player ship position from shipPositions
+    function getPlayerPosition() {
+        const playerShip = shipPositions.find(s => s.faction === 'player');
+        return playerShip ? playerShip.position : { q: 0, r: 0 };
+    }
+
+    // Get enemy ship positions (visible only)
+    function getVisibleEnemies() {
+        return shipPositions.filter(s => s.faction === 'enemy');
+    }
+
+    // Populate target dropdown with visible enemies
+    function updateFireTargets() {
+        const targetSelect = document.getElementById('target-select');
+        const visibleEnemies = getVisibleEnemies();
+        const playerPos = getPlayerPosition();
+
+        targetSelect.innerHTML = '';
+
+        if (visibleEnemies.length === 0) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No visible targets';
+            option.disabled = true;
+            targetSelect.appendChild(option);
+            document.getElementById('target-range-info').textContent = 'No enemies visible';
+            return;
+        }
+
+        visibleEnemies.forEach((enemy, index) => {
+            const distance = hexDistance(playerPos, enemy.position);
+            const rangeCategory = getRangeCategory(distance);
+
+            const option = document.createElement('option');
+            option.value = enemy.id;  // Use ship id like "enemy_0"
+            option.dataset.q = enemy.position.q;
+            option.dataset.r = enemy.position.r;
+            option.dataset.distance = distance;
+            option.dataset.range = rangeCategory;
+            option.textContent = `${enemy.name} (${rangeCategory.charAt(0).toUpperCase() + rangeCategory.slice(1)} - ${distance} hex${distance !== 1 ? 'es' : ''})`;
+            targetSelect.appendChild(option);
+        });
+
+        updateFireDetails();
+    }
+
+    function updateFireDetails() {
+        const weaponSelect = document.getElementById('weapon-select');
+        const targetSelect = document.getElementById('target-select');
+        const rangeWarning = document.getElementById('fire-range-warning');
+        const rangeInfo = document.getElementById('target-range-info');
+
+        if (!weaponSelect.options.length || !targetSelect.options.length || targetSelect.value === '') {
+            document.getElementById('fire-difficulty').textContent = '-';
+            document.getElementById('fire-difficulty-breakdown').textContent = '';
+            rangeWarning.style.display = 'none';
+            return;
+        }
+
+        const weaponOption = weaponSelect.options[weaponSelect.selectedIndex];
+        const targetOption = targetSelect.options[targetSelect.selectedIndex];
+
+        const baseDamage = parseInt(weaponOption.dataset.damage);
+        const weaponType = weaponOption.dataset.type;
+        const weaponRange = weaponOption.dataset.range;  // e.g. 'medium', 'long'
+
+        const targetDistance = parseInt(targetOption.dataset.distance) || 0;
+        const targetRangeCategory = targetOption.dataset.range || 'close';
+
+        const totalDamage = baseDamage + weaponsBonus;
+
+        // Base difficulty: 2 for energy, 3 for torpedo
+        let baseDifficulty = weaponType === 'torpedo' ? 3 : 2;
+
+        // Range difficulty: +1 for each range band beyond Close (per STA 2e rules)
+        // Close = 0, Medium = +1, Long = +2, Extreme = +3
+        let rangeDifficultyMod = 0;
+        if (targetRangeCategory === 'medium') rangeDifficultyMod = 1;
+        else if (targetRangeCategory === 'long') rangeDifficultyMod = 2;
+        else if (targetRangeCategory === 'extreme') rangeDifficultyMod = 3;
+
+        const totalDifficulty = baseDifficulty + rangeDifficultyMod;
+
+        // Check if target is in range of weapon
+        const weaponMaxHex = WEAPON_RANGE_MAX[weaponRange] || 2;
+        const outOfRange = targetDistance > weaponMaxHex;
+
+        // Update display
+        document.getElementById('fire-damage').textContent = totalDamage;
+        document.getElementById('fire-difficulty').textContent = totalDifficulty;
+
+        // Build difficulty breakdown
+        let breakdown = `(${weaponType === 'torpedo' ? 'Torpedo' : 'Energy'}: ${baseDifficulty}`;
+        if (rangeDifficultyMod > 0) {
+            breakdown += ` + ${rangeDifficultyMod} range`;
+        }
+        breakdown += ')';
+        document.getElementById('fire-difficulty-breakdown').textContent = breakdown;
+
+        // Update range info
+        rangeInfo.innerHTML = `Target at <strong>${targetRangeCategory}</strong> range (${targetDistance} hex${targetDistance !== 1 ? 'es' : ''})`;
+
+        // Show/hide range warning
+        if (outOfRange) {
+            rangeWarning.style.display = 'block';
+            rangeWarning.innerHTML = `<strong>OUT OF RANGE!</strong> ${weaponOption.text.split('(')[0].trim()} has ${weaponRange} range (max ${weaponMaxHex} hex${weaponMaxHex !== 1 ? 'es' : ''}), target is ${targetDistance} hex${targetDistance !== 1 ? 'es' : ''} away.`;
+        } else {
+            rangeWarning.style.display = 'none';
+        }
+    }
+
+    // Initialize targets when fire panel is shown and when positions update
+    document.getElementById('weapon-select').addEventListener('change', updateFireDetails);
+    document.getElementById('target-select').addEventListener('change', updateFireDetails);
+
+    const shipWeapons = {{ player_ship.systems.weapons if player_ship else 7 }};
+    const shipSecurity = {{ player_ship.departments.security if player_ship else 2 }};
+    const shipTargetNumber = shipWeapons + shipSecurity;
+
+    let lastFireData = null;
+
+    function getSystemFromRoll(roll) {
+        if (roll === 1) return "comms";
+        if (roll === 2) return "computers";
+        if (roll <= 6) return "engines";
+        if (roll <= 9) return "sensors";
+        if (roll <= 17) return "structure";
+        return "weapons";
+    }
+
+    function rollForBreach(breachIndex) {
+        if (!window.pendingBreaches) return;
+
+        const resultSpan = document.getElementById(`breach-result-${breachIndex}`);
+        const system = window.pendingBreaches.systems[breachIndex];
+
+        let rollCount = 0;
+        const systems = ['COMMS', 'COMPUTERS', 'ENGINES', 'SENSORS', 'STRUCTURE', 'WEAPONS'];
+        const rollInterval = setInterval(() => {
+            const randomSys = systems[Math.floor(Math.random() * systems.length)];
+            resultSpan.innerHTML = `<span style="color: var(--lcars-orange);">ROLLING: ${randomSys}...</span>`;
+            rollCount++;
+
+            if (rollCount >= 10) {
+                clearInterval(rollInterval);
+                const roll = Math.floor(Math.random() * 20) + 1;
+                resultSpan.innerHTML = `
+                    <span style="color: var(--lcars-tan);">Rolled ${roll} -> </span>
+                    <span style="color: var(--lcars-red); font-weight: bold;">${system.toUpperCase()}</span>
+                `;
+                window.pendingBreaches.revealed.push(breachIndex);
+            }
+        }, 80);
+    }
+
+    async function chooseBreachSystem(breachIndex) {
+        if (!window.pendingBreaches) return;
+
+        const select = document.getElementById(`breach-choose-${breachIndex}`);
+        const newSystem = select.value;
+        const resultSpan = document.getElementById(`breach-result-${breachIndex}`);
+        const targetIndex = window.pendingBreaches.targetIndex;
+
+        const response = await fetch(`/api/encounter/${encounterId}/change-breach-system`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                target_index: targetIndex,
+                breach_index: breachIndex,
+                new_system: newSystem
+            })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            resultSpan.innerHTML = `
+                <span style="color: var(--lcars-green); font-weight: bold;">TARGET: ${newSystem.toUpperCase()}</span>
+                <span style="color: var(--lcars-green);"> (TARGETED)</span>
+            `;
+            window.pendingBreaches.revealed.push(breachIndex);
+            window.pendingBreaches.canChooseSystem = false;
+
+            activeMinorAction = null;
+            updateFireMinorActionBanner();
+            updateMajorActionHighlights();
+            updateSelectionSummary();
+        } else {
+            alert('Failed to choose breach system: ' + (data.error || 'Unknown error'));
+        }
+    }
+
+    async function rerollDie(dieIndex) {
+        if (!lastFireData) {
+            alert('No previous roll to re-roll!');
+            return;
+        }
+
+        const response = await fetch('/api/fire', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                ...lastFireData,
+                reroll_die_index: dieIndex,
+                previous_rolls: lastFireData.previous_rolls,
+                character_id: playerCharId
+            })
+        });
+        const data = await response.json();
+
+        displayFireResults(data, lastFireData.targetIndex, lastFireData.focus, lastFireData.bonusDice, lastFireData.difficulty);
+    }
+
+    async function executeFireAction() {
+        if (currentTurn !== 'player') {
+            showErrorToast("It's not your turn!");
+            return;
+        }
+
+        if (!weaponsArmed) {
+            const resultsDiv = document.getElementById('fire-results');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = `
+                <div class="alert alert-danger" style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                    <strong>ERROR: Weapons are not armed!</strong><br>
+                    Use the <em>Arm Weapons</em> minor action first.
+                </div>
+            `;
+            return;
+        }
+
+        const weaponSelect = document.getElementById('weapon-select');
+        const targetSelect = document.getElementById('target-select');
+        const selectedWeapon = weaponSelect.options[weaponSelect.selectedIndex];
+        const selectedTarget = targetSelect.options[targetSelect.selectedIndex];
+
+        // Extract target index from "enemy_0" format
+        const targetId = targetSelect.value;
+        const targetIndex = parseInt(targetId.replace('enemy_', ''));
+
+        // Check if target is valid
+        if (!targetId || isNaN(targetIndex)) {
+            showErrorToast("No valid target selected!");
+            return;
+        }
+
+        // Check if target is in range
+        const targetDistance = parseInt(selectedTarget.dataset.distance) || 0;
+        const weaponRange = selectedWeapon.dataset.range;
+        const weaponMaxHex = WEAPON_RANGE_MAX[weaponRange] || 2;
+
+        if (targetDistance > weaponMaxHex) {
+            showErrorToast(`Target is out of range! ${selectedWeapon.text.split('(')[0].trim()} has ${weaponRange} range (max ${weaponMaxHex} hex${weaponMaxHex !== 1 ? 'es' : ''}), target is ${targetDistance} hex${targetDistance !== 1 ? 'es' : ''} away.`);
+            return;
+        }
+
+        const baseDamage = parseInt(selectedWeapon.dataset.damage);
+        const weaponType = selectedWeapon.dataset.type;
+
+        // Calculate difficulty based on weapon type and range (per STA 2e rules)
+        // +1 difficulty per range band beyond Close
+        const targetRangeCategory = selectedTarget.dataset.range || 'close';
+        let baseDifficulty = weaponType === 'torpedo' ? 3 : 2;
+        let rangeDifficultyMod = 0;
+        if (targetRangeCategory === 'medium') rangeDifficultyMod = 1;
+        else if (targetRangeCategory === 'long') rangeDifficultyMod = 2;
+        else if (targetRangeCategory === 'extreme') rangeDifficultyMod = 3;
+        const difficulty = baseDifficulty + rangeDifficultyMod;
+        const focus = document.getElementById('fire-focus').checked;
+        const bonusDice = parseInt(document.getElementById('fire-bonus').value) || 0;
+
+        lastFireData = {
+            encounter_id: encounterId,
+            weapon_index: parseInt(weaponSelect.value),
+            target_index: targetIndex,
+            targetIndex: targetIndex,
+            attribute: playerAttrs.control,
+            discipline: playerDiscs.security,
+            difficulty: difficulty,
+            focus: focus,
+            bonus_dice: bonusDice,
+            bonusDice: bonusDice,
+        };
+
+        const response = await fetch('/api/fire', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                encounter_id: encounterId,
+                weapon_index: parseInt(weaponSelect.value),
+                target_index: targetIndex,
+                attribute: playerAttrs.control,
+                discipline: playerDiscs.security,
+                difficulty: difficulty,
+                focus: focus,
+                bonus_dice: bonusDice,
+                character_id: playerCharId
+            })
+        });
+        const data = await response.json();
+
+        lastFireData.previous_rolls = data.rolls;
+
+        displayFireResults(data, targetIndex, focus, bonusDice, difficulty);
+
+        // Debug: log turn state from fire response
+        console.log('Fire response turn state:', {
+            current_turn: data.current_turn,
+            round: data.round,
+            player_turns_used: data.player_turns_used,
+            player_turns_total: data.player_turns_total,
+            enemy_turns_used: data.enemy_turns_used,
+            enemy_turns_total: data.enemy_turns_total,
+            turn_ended: data.turn_ended
+        });
+
+        // Handle turn state from response
+        if (data.current_turn) {
+            updateTurnDisplay(data.current_turn, data.round, data);
+
+            // Clear action state
+            activeMinorAction = null;
+            selectedMajorAction = null;
+            updateFireMinorActionBanner();
+            updateMajorActionHighlights();
+            clearActionSelections('minor');
+            clearActionSelections('major');
+
+            // Add turn indicator to fire results
+            addTurnOverIndicator('fire-results', data.current_turn, data);
+        } else {
+            console.warn('Fire response missing current_turn!', data);
+        }
+
+        if (data.player_turns_used !== undefined) {
+            updateTurnCounters(
+                data.player_turns_used, data.player_turns_total,
+                data.enemy_turns_used, data.enemy_turns_total
+            );
+        }
+    }
+
+    async function executeDefensiveFire() {
+        if (currentTurn !== 'player') {
+            showErrorToast("It's not your turn!");
+            return;
+        }
+
+        const weaponSelect = document.getElementById('defensive-fire-weapon-select');
+        const weaponIndex = parseInt(weaponSelect.value);
+        const weaponName = weaponSelect.options[weaponSelect.selectedIndex].text;
+
+        const resultsDiv = document.getElementById('defensive-fire-results');
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    action_name: 'Defensive Fire',
+                    weapon_index: weaponIndex,
+                    role: 'player',
+                    character_id: playerCharId
+                })
+            });
+            const data = await response.json();
+
+            resultsDiv.style.display = 'block';
+
+            if (data.success) {
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-success" style="padding: 15px; background: #1a2a3a; border: 2px solid var(--lcars-purple); border-radius: 5px;">
+                        <strong style="color: var(--lcars-purple);">DEFENSIVE FIRE ACTIVATED!</strong><br><br>
+                        <div style="color: var(--lcars-tan);">
+                            ${data.message}<br><br>
+                            <strong>Weapon:</strong> ${data.weapon_name || weaponName}<br>
+                            <strong>Duration:</strong> Until your next turn
+                        </div>
+                        <div style="margin-top: 10px; padding: 10px; background: #222; border-radius: 5px;">
+                            <em style="color: var(--lcars-orange);">
+                                When enemies attack, you will make an opposed roll.<br>
+                                If you win, you may spend 2 Momentum to counterattack.
+                            </em>
+                        </div>
+                    </div>
+                `;
+                showSuccessToast('Defensive Fire activated!');
+
+                // Handle turn changes (Defensive Fire is a major action)
+                if (data.turn_ended) {
+                    currentTurn = 'enemy';
+                    updateTurnDisplay();
+                    showSuccessToast("Enemy turn!");
+                }
+
+                // Mark action as complete
+                selectedMajorAction = 'Defensive Fire';
+                updateSelectionSummary();
+            } else {
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-error" style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                        <strong style="color: var(--lcars-red);">ERROR:</strong> ${data.error}
+                    </div>
+                `;
+                showErrorToast(data.error);
+            }
+        } catch (err) {
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = `
+                <div class="alert alert-error" style="padding: 15px; background: #3a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">
+                    <strong style="color: var(--lcars-red);">ERROR:</strong> ${err.message}
+                </div>
+            `;
+            showErrorToast('Failed to activate Defensive Fire');
+        }
+    }
+
+    function displayFireResults(data, targetIndex, focus, bonusDice, difficulty) {
+        const resultsDiv = document.getElementById('fire-results');
+        resultsDiv.style.display = 'block';
+
+        if (!data.can_reroll) {
+            activeMinorAction = null;
+            updateFireMinorActionBanner();
+            updateMajorActionHighlights();
+            updateSelectionSummary();
+        }
+
+        const charDiceCount = 2 + bonusDice;
+        const charRolls = data.rolls.slice(0, charDiceCount);
+        const shipRoll = data.ship_roll;
+
+        const charDiceHtml = charRolls.map((roll, index) => {
+            let cls = 'dice-fail';
+            if (roll === 1 || (focus && roll <= playerDiscs.security)) {
+                cls = 'dice-crit';
+            } else if (roll <= data.target_number) {
+                cls = 'dice-success';
+            } else if (roll === 20) {
+                cls = 'dice-complication';
+            }
+
+            let rerollBtn = '';
+            if (data.can_reroll && !data.rerolled) {
+                rerollBtn = ` <button class="btn btn-small" onclick="rerollDie(${index})" style="font-size: 0.7em; padding: 2px 6px;">REROLL</button>`;
+            }
+
+            return `<span class="dice-result ${cls}">${roll}${rerollBtn}</span>`;
+        }).join('');
+
+        let shipDiceHtml = '';
+        if (shipRoll !== null && shipRoll !== undefined) {
+            let cls = 'dice-fail';
+            if (shipRoll === 1) {
+                cls = 'dice-crit';
+            } else if (shipRoll <= data.ship_target_number) {
+                cls = 'dice-success';
+            } else if (shipRoll === 20) {
+                cls = 'dice-complication';
+            }
+            shipDiceHtml = `<span class="dice-result ${cls}" style="border: 2px solid var(--lcars-tan);" title="Ship Assist (target ${data.ship_target_number})">${shipRoll}</span>`;
+        }
+
+        let html = `<h3>Attack Roll</h3>`;
+
+        if (data.can_reroll && !data.rerolled) {
+            html += `<div class="alert" style="background: #1a3a3a; border: 2px solid var(--lcars-blue); color: var(--lcars-blue); padding: 8px; margin-bottom: 10px;">
+                <strong>TARGETING SOLUTION ACTIVE:</strong> Click REROLL to re-roll any die
+            </div>`;
+        }
+        if (data.rerolled) {
+            html += `<div class="alert" style="background: #1a3a1a; border: 2px solid var(--lcars-green); color: var(--lcars-green); padding: 8px; margin-bottom: 10px;">
+                <strong>DIE RE-ROLLED</strong> (Targeting Solution consumed)
+            </div>`;
+        }
+
+        html += `<div style="margin-bottom: 5px;"><strong>Character:</strong> ${charDiceHtml} (target <=${data.target_number})</div>`;
+        html += `<div style="margin-bottom: 10px;"><strong>Ship Assist:</strong> ${shipDiceHtml} (target <=${data.ship_target_number})</div>`;
+        html += `<p>${data.successes} total successes vs Difficulty ${difficulty}</p>`;
+
+        if (data.complications > 0) {
+            html += `<p style="color: var(--lcars-red);">${data.complications} complication(s)!</p>`;
+        }
+
+        if (data.succeeded) {
+            html += `<div class="alert alert-success"><strong>HIT!</strong></div>`;
+            html += `<div class="damage-report">`;
+            html += `<h4>Damage Report</h4>`;
+            html += `<p>Base Damage: ${data.base_damage}`;
+            if (data.damage_bonus > 0) {
+                html += ` <span style="color: var(--lcars-green);">(+${data.damage_bonus} bonus)</span>`;
+            }
+            if (data.effects_applied && data.effects_applied.length > 0) {
+                html += `<br><small style="color: var(--lcars-green);">${data.effects_applied.join(', ')}</small>`;
+            }
+            html += `</p>`;
+            if (data.resistance_reduction > 0) {
+                html += `<p style="color: var(--lcars-tan);">Resistance (${data.target_resistance}): -${data.resistance_reduction}</p>`;
+            }
+            if (data.complication_reduction > 0) {
+                html += `<p style="color: var(--lcars-tan);">Complications: -${data.complication_reduction}</p>`;
+            }
+            html += `<p><strong>Final Damage: ${data.total_damage}</strong></p>`;
+            html += `<hr style="border-color: #444; margin: 8px 0;">`;
+            html += `<p>Shield Damage: ${data.shield_damage}</p>`;
+            if (data.hull_damage > 0) {
+                html += `<p style="color: var(--lcars-red);">Hull Damage: ${data.hull_damage}</p>`;
+            }
+            html += `<p>Target Shields: ${data.target_shields_remaining}</p>`;
+            if (data.breaches_caused > 0) {
+                window.pendingBreaches = {
+                    systems: data.systems_hit,
+                    targetIndex: targetIndex,
+                    canChooseSystem: data.can_choose_system,
+                    revealed: []
+                };
+
+                html += `<div id="breach-resolution" style="margin-top: 10px; padding: 10px; background: #2a1a1a; border: 2px solid var(--lcars-red); border-radius: 5px;">`;
+                html += `<p style="color: var(--lcars-red); font-weight: bold; margin-bottom: 10px;">WARNING: ${data.breaches_caused} BREACH(ES) CAUSED!</p>`;
+                html += `<p style="margin-bottom: 10px; color: var(--lcars-tan);">Roll to determine which systems are hit:</p>`;
+
+                data.systems_hit.forEach((system, index) => {
+                    html += `<div id="breach-${index}" style="padding: 8px; background: #333; border-radius: 4px; margin-bottom: 5px;">`;
+                    html += `<strong>Breach ${index + 1}:</strong> `;
+                    html += `<span id="breach-result-${index}">`;
+
+                    if (data.can_choose_system && index === 0) {
+                        html += `<button class="btn" onclick="rollForBreach(${index})" style="padding: 5px 15px; margin-right: 10px;">ROLL FOR SYSTEM</button>`;
+                        html += `<span style="color: var(--lcars-green);">or TARGET: </span>`;
+                        html += `<select id="breach-choose-${index}" style="margin-right: 5px;">`;
+                        ['comms', 'computers', 'engines', 'sensors', 'structure', 'weapons'].forEach(s => {
+                            html += `<option value="${s}">${s.toUpperCase()}</option>`;
+                        });
+                        html += `</select>`;
+                        html += `<button class="btn" onclick="chooseBreachSystem(${index})" style="padding: 5px 10px;">Choose</button>`;
+                    } else {
+                        html += `<button class="btn" onclick="rollForBreach(${index})" style="padding: 5px 15px;">ROLL FOR SYSTEM</button>`;
+                    }
+
+                    html += `</span>`;
+                    html += `</div>`;
+                });
+                html += `</div>`;
+            }
+
+            if (data.target_status) {
+                const status = data.target_status;
+
+                if (status.destroyed_systems && status.destroyed_systems.length > 0) {
+                    html += `<p style="color: var(--lcars-red); font-weight: bold;">WARNING: SYSTEMS DESTROYED: ${status.destroyed_systems.map(s => s.toUpperCase()).join(', ')}</p>`;
+                }
+
+                if (status.is_destroyed) {
+                    html += `<div class="alert" style="background: var(--lcars-red); color: white; padding: 10px; margin-top: 10px; text-align: center;">`;
+                    html += `<strong>TARGET DESTROYED!</strong>`;
+                    html += `</div>`;
+                } else if (status.warp_core_breach_risk) {
+                    html += `<div class="alert" style="background: orange; color: black; padding: 10px; margin-top: 10px; text-align: center;">`;
+                    html += `<strong>WARNING: WARP CORE BREACH IMMINENT!</strong><br>`;
+                    html += `<small>Roll d20 at end of round. If > Engineering rating, reactor explodes!</small>`;
+                    html += `</div>`;
+                } else if (status.has_critical_damage) {
+                    html += `<div class="alert" style="background: darkorange; color: white; padding: 10px; margin-top: 10px;">`;
+                    html += `<strong>CRITICAL DAMAGE!</strong> Ship disabled (${status.total_breaches}/${status.scale} breaches). Next breach = destruction.`;
+                    html += `</div>`;
+                }
+            }
+
+            html += `</div>`;
+
+            if (data.momentum_generated > 0) {
+                html += `<p style="color: var(--lcars-blue);">+${data.momentum_generated} Momentum generated</p>`;
+                document.getElementById('momentum').textContent = data.new_momentum;
+                updateBonusDiceFromMomentum();
+            }
+
+            updateEnemyShipDisplay(targetIndex, data);
+        } else {
+            html += `<div class="alert alert-danger"><strong>MISS!</strong></div>`;
+        }
+
+        resultsDiv.innerHTML = html;
+    }
+
+    function updateEnemyShipDisplay(targetIndex, data) {
+        const enemyItems = document.querySelectorAll('.enemy-ship-item');
+        if (enemyItems[targetIndex]) {
+            const item = enemyItems[targetIndex];
+
+            const shieldsSpan = item.querySelector('.enemy-shields');
+            const shieldsBar = item.querySelector('.enemy-shields-bar');
+            if (shieldsSpan && data.target_shields_remaining !== undefined) {
+                const maxShields = parseInt(shieldsSpan.textContent.split('/')[1]);
+                shieldsSpan.textContent = `${data.target_shields_remaining} / ${maxShields}`;
+                shieldsBar.style.width = `${(data.target_shields_remaining / maxShields) * 100}%`;
+            }
+        }
+    }
+
+    async function rollDice() {
+        if (currentTurn !== 'player') {
+            showErrorToast("It's not your turn!");
+            return;
+        }
+
+        const attr = parseInt(document.getElementById('roll-attr').value);
+        const disc = parseInt(document.getElementById('roll-disc').value);
+        const diff = parseInt(document.getElementById('roll-diff').value);
+        const bonus = parseInt(document.getElementById('roll-bonus').value);
+        const focus = document.getElementById('roll-focus').checked;
+
+        const hasShipAssist = currentActionConfig?.roll?.ship_assist_system && currentActionConfig?.roll?.ship_assist_department;
+
+        let response;
+        if (hasShipAssist) {
+            const sysName = currentActionConfig.roll.ship_assist_system;
+            const deptName = currentActionConfig.roll.ship_assist_department;
+            const sysValue = shipSystems[sysName] || 7;
+            const deptValue = shipDepts[deptName] || 2;
+
+            response = await fetch('/api/roll-assisted', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    attribute: attr,
+                    discipline: disc,
+                    system: sysValue,
+                    department: deptValue,
+                    difficulty: diff,
+                    bonus_dice: bonus,
+                    focus: focus
+                })
+            });
+        } else {
+            response = await fetch('/api/roll', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    attribute: attr,
+                    discipline: disc,
+                    difficulty: diff,
+                    bonus_dice: bonus,
+                    focus: focus
+                })
+            });
+        }
+        const data = await response.json();
+
+        document.getElementById('dice-results').style.display = 'block';
+
+        const charDiceCount = hasShipAssist ? data.rolls.length - 1 : data.rolls.length;
+        const shipAssistTarget = hasShipAssist ?
+            (shipSystems[currentActionConfig.roll.ship_assist_system] || 7) + (shipDepts[currentActionConfig.roll.ship_assist_department] || 2) : 0;
+
+        const diceDisplay = document.getElementById('dice-display');
+        diceDisplay.innerHTML = data.rolls.map((roll, index) => {
+            const isShipDie = hasShipAssist && index === data.rolls.length - 1;
+            const targetNum = isShipDie ? shipAssistTarget : data.target_number;
+
+            let cls = 'dice-fail';
+            if (roll === 1) {
+                cls = 'dice-crit';
+            } else if (!isShipDie && focus && roll <= disc) {
+                cls = 'dice-crit';
+            } else if (roll <= targetNum) {
+                cls = 'dice-success';
+            } else if (roll === 20) {
+                cls = 'dice-complication';
+            }
+
+            const label = isShipDie ? '<span style="font-size: 0.7em; display: block; color: var(--lcars-tan);">Ship</span>' : '';
+            return `<span class="dice-result ${cls}">${roll}${label}</span>`;
+        }).join('');
+
+        const summary = document.getElementById('dice-summary');
+        const resultClass = data.succeeded ? 'alert-success' : 'alert-danger';
+
+        let effectMessage = '';
+
+        if (currentAction?.name) {
+            try {
+                const execResponse = await fetch(`/api/encounter/${encounterId}/execute-action`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action_name: currentAction.name,
+                        attribute: attr,
+                        discipline: disc,
+                        difficulty: diff,
+                        focus: focus,
+                        bonus_dice: bonus,
+                        roll_succeeded: data.succeeded,
+                        roll_successes: data.successes,
+                        roll_momentum: data.succeeded ? data.momentum_generated : 0,
+                        roll_complications: data.complications,
+                        roll_dice: data.rolls,
+                        roll_target: data.target_number,
+                        character_id: playerCharId
+                    })
+                });
+                const execData = await execResponse.json();
+
+                // Update momentum display (bonus dice may have been spent)
+                if (execData.new_momentum !== undefined) {
+                    document.getElementById('momentum').textContent = execData.new_momentum;
+                    updateBonusDiceFromMomentum();
+                }
+
+                if (data.succeeded && execData.success) {
+                    // Show the action result message from the server (includes momentum info)
+                    if (execData.message && execData.message !== `${currentAction.name} succeeded!`) {
+                        effectMessage = `<br><span style="color: var(--lcars-tan);">${execData.message}</span>`;
+                    }
+
+                    if (execData.effect_applied) {
+                        effectMessage += `<br><span style="color: var(--lcars-green);">Effect applied: ${execData.effect_applied}</span>`;
+                    }
+
+                    if (execData.resistance_bonus) {
+                        currentResistanceBonus += execData.resistance_bonus;
+                        updateResistanceDisplay();
+                    }
+                }
+
+                // Update turn display from execute-action response (handles turn advancement)
+                if (currentAction && currentAction.type === 'major') {
+                    if (execData.current_turn) {
+                        // Update turn display immediately
+                        updateTurnDisplay(execData.current_turn, execData.round, execData);
+
+                        // Clear action state
+                        activeMinorAction = null;
+                        selectedMajorAction = null;
+                        updateFireMinorActionBanner();
+                        updateMajorActionHighlights();
+                        updateSelectionSummary();
+                        clearActionSelections('minor');
+                        clearActionSelections('major');
+
+                        // Hide action inputs but keep results visible in the panel
+                        document.getElementById('selection-summary').style.display = 'none';
+                        document.getElementById('roll-details').style.display = 'none';
+                        document.getElementById('current-action-display').style.display = 'none';
+                        // Hide the roll button
+                        const rollBtn = document.querySelector('#dice-panel > button');
+                        if (rollBtn) rollBtn.style.display = 'none';
+
+                        // Add turn-over indicator to results (will be added after summary.innerHTML is set)
+                        setTimeout(() => {
+                            addTurnOverIndicator('dice-summary', execData.current_turn, execData);
+                        }, 100);
+                    }
+
+                    if (execData.player_turns_used !== undefined) {
+                        updateTurnCounters(
+                            execData.player_turns_used, execData.player_turns_total,
+                            execData.enemy_turns_used, execData.enemy_turns_total
+                        );
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to execute action:', err);
+            }
+        }
+
+        // Build momentum display - always show for successful rolls
+        let momentumDisplay = '';
+        if (data.succeeded) {
+            if (data.momentum_generated > 0) {
+                momentumDisplay = `<span style="color: var(--lcars-blue);">+${data.momentum_generated} Momentum generated</span>`;
+            } else {
+                momentumDisplay = `<span style="color: #888;">(No extra momentum - just met difficulty)</span>`;
+            }
+        }
+
+        summary.innerHTML = `
+            <div class="alert ${resultClass}">
+                <strong>${data.succeeded ? 'SUCCESS!' : 'FAILURE'}</strong><br>
+                ${data.successes} successes vs Difficulty ${data.difficulty}<br>
+                ${data.complications > 0 ? `<span style="color: darkred;">${data.complications} complication(s)!</span><br>` : ''}
+                ${momentumDisplay}
+                ${effectMessage}
+            </div>
+        `;
+    }
+
+    // Track pending attack state
+    let pendingAttackData = null;
+    let defensiveRollData = null;
+
+    // Poll for turn changes (simple approach)
+    setInterval(async () => {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/status?role=player`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.current_turn !== currentTurn) {
+                    updateTurnDisplay(data.current_turn, data.round, data);
+                }
+                document.getElementById('momentum').textContent = data.momentum;
+                document.getElementById('threat').textContent = data.threat;
+                updateBonusDiceFromMomentum();
+
+                // Update Reserve Power status if changed
+                if (data.has_reserve_power !== hasReservePower) {
+                    hasReservePower = data.has_reserve_power;
+                    updateReservePowerDisplay();
+                }
+
+                // Update turn counters
+                updateTurnCounters(
+                    data.player_turns_used, data.player_turns_total,
+                    data.enemy_turns_used, data.enemy_turns_total
+                );
+
+                // Check for pending attack that needs defensive roll
+                if (data.pending_attack && !pendingAttackData) {
+                    showPendingAttackPanel(data.pending_attack);
+                } else if (!data.pending_attack && pendingAttackData) {
+                    // Attack was resolved elsewhere (shouldn't happen normally)
+                    hidePendingAttackPanel();
+                }
+            }
+        } catch (e) {
+            // Ignore errors during polling
+        }
+    }, 3000);
+
+    function showPendingAttackPanel(attack) {
+        pendingAttackData = attack;
+        defensiveRollData = null;
+
+        // Update panel with attack info
+        document.getElementById('incoming-attacker').textContent = attack.attacker_name;
+        document.getElementById('incoming-weapon').textContent = attack.weapon_name;
+
+        // Set target numbers from player stats
+        const defenderTarget = playerAttrs.daring + playerDiscs.security;
+        const shipTarget = shipSystems.weapons + shipDepts.security;
+        document.getElementById('incoming-defender-target').textContent = defenderTarget;
+        document.getElementById('incoming-ship-target').textContent = shipTarget;
+
+        // Reset roll state
+        document.getElementById('incoming-roll-results').style.display = 'none';
+        document.getElementById('incoming-attack-resolution').style.display = 'none';
+        document.getElementById('incoming-attack-resolution').innerHTML = '';
+
+        // Show panel
+        const panel = document.getElementById('incoming-attack-panel');
+        panel.style.display = 'block';
+        panel.scrollIntoView({behavior: 'smooth'});
+
+        // Play alert sound or show toast
+        showErrorToast('INCOMING ATTACK! Roll your defensive dice!');
+    }
+
+    function hidePendingAttackPanel() {
+        pendingAttackData = null;
+        defensiveRollData = null;
+        document.getElementById('incoming-attack-panel').style.display = 'none';
+    }
+
+    function rollDefensiveDice() {
+        if (!pendingAttackData) return;
+
+        // Roll 2d20 for character + 1d20 for ship
+        const roll1 = Math.floor(Math.random() * 20) + 1;
+        const roll2 = Math.floor(Math.random() * 20) + 1;
+        const shipRoll = Math.floor(Math.random() * 20) + 1;
+
+        const defenderTarget = playerAttrs.daring + playerDiscs.security;
+        const shipTarget = shipSystems.weapons + shipDepts.security;
+
+        // Calculate preliminary successes (server will recalculate)
+        let successes = 0;
+        let complications = 0;
+
+        [roll1, roll2].forEach(roll => {
+            if (roll === 1) successes += 2;
+            else if (roll <= defenderTarget) successes += 1;
+            if (roll === 20) complications += 1;
+        });
+
+        if (shipRoll === 1) successes += 2;
+        else if (shipRoll <= shipTarget) successes += 1;
+        if (shipRoll === 20) complications += 1;
+
+        defensiveRollData = {
+            defender_rolls: [roll1, roll2],
+            ship_assist_roll: shipRoll,
+        };
+
+        // Format roll display
+        const formatRoll = (roll, target) => {
+            if (roll === 1) return `<span style="color: var(--lcars-green); font-weight: bold;">1 (CRIT!)</span>`;
+            if (roll === 20) return `<span style="color: var(--lcars-red); font-weight: bold;">20 (COMP!)</span>`;
+            if (roll <= target) return `<span style="color: var(--lcars-green);">${roll}</span>`;
+            return `<span style="color: #888;">${roll}</span>`;
+        };
+
+        const detailsDiv = document.getElementById('incoming-roll-details');
+        detailsDiv.innerHTML = `
+            <div style="margin-bottom: 10px;">
+                <strong>Character Rolls (Daring ${playerAttrs.daring} + Security ${playerDiscs.security} = Target ${defenderTarget}):</strong><br>
+                Die 1: ${formatRoll(roll1, defenderTarget)} | Die 2: ${formatRoll(roll2, defenderTarget)}
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>Ship Assist (Weapons ${shipSystems.weapons} + Security ${shipDepts.security} = Target ${shipTarget}):</strong><br>
+                Die: ${formatRoll(shipRoll, shipTarget)}
+            </div>
+            <div style="padding: 10px; background: #222; border-radius: 5px;">
+                <strong>Your Successes:</strong> <span style="color: var(--lcars-green); font-size: 1.2em;">${successes}</span>
+                ${complications > 0 ? `<br><span style="color: var(--lcars-red);">Complications: ${complications}</span>` : ''}
+            </div>
+        `;
+
+        document.getElementById('incoming-roll-results').style.display = 'block';
+    }
+
+    async function submitDefensiveRoll() {
+        if (!pendingAttackData || !defensiveRollData) {
+            showErrorToast('Please roll your defensive dice first!');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/resolve-defensive-roll`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(defensiveRollData)
+            });
+            const data = await response.json();
+
+            if (data.error) {
+                showErrorToast(data.error);
+                return;
+            }
+
+            // Display resolution results
+            const resolutionDiv = document.getElementById('incoming-attack-resolution');
+            resolutionDiv.style.display = 'block';
+
+            let html = `
+                <div style="padding: 15px; border-radius: 5px; ${data.defender_wins ? 'background: #1a3a1a; border: 2px solid var(--lcars-green);' : 'background: #3a1a1a; border: 2px solid var(--lcars-red);'}">
+                    <h3 style="margin-top: 0; color: ${data.defender_wins ? 'var(--lcars-green)' : 'var(--lcars-red)'};">
+                        ${data.defender_wins ? 'DEFENSE SUCCESSFUL!' : 'ATTACK HITS!'}
+                    </h3>
+                    <div style="display: flex; gap: 30px; margin-bottom: 15px;">
+                        <div>
+                            <strong>Your Successes:</strong> ${data.defender_successes}
+                        </div>
+                        <div>
+                            <strong>Attacker Successes:</strong> ${data.attacker_successes}
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <strong>Attacker Rolls:</strong> ${data.attacker_rolls.join(', ')} (Target ${data.attacker_target})
+                        + Ship ${data.attacker_ship_roll} (Target ${data.attacker_ship_target})
+                    </div>
+            `;
+
+            if (data.defender_wins) {
+                html += `<p style="color: var(--lcars-green);">${data.message}</p>`;
+
+                if (data.can_counterattack && data.current_momentum >= 2) {
+                    html += `
+                        <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
+                            <p style="color: var(--lcars-orange);">
+                                <strong>COUNTERATTACK AVAILABLE!</strong><br>
+                                Spend 2 Momentum to counterattack with ${data.counterattack_weapon}?
+                            </p>
+                            <button class="btn" onclick="executeCounterattack(${data.counterattack_weapon_index}, ${data.counterattack_target_index})" style="background: var(--lcars-orange);">
+                                COUNTERATTACK (2 Momentum)
+                            </button>
+                            <button class="btn" onclick="declineCounterattack()" style="background: #666;">
+                                Decline
+                            </button>
+                        </div>
+                    `;
+                }
+            } else {
+                html += `
+                    <p style="color: var(--lcars-red);">${data.message}</p>
+                    <div style="margin-top: 10px;">
+                        <strong>Damage Breakdown:</strong><br>
+                        Base: ${data.base_damage} - Resistance: ${data.effective_resistance} = ${data.total_damage} damage<br>
+                        Shield Damage: ${data.shield_damage} | Hull Damage: ${data.hull_damage}
+                    </div>
+                `;
+                if (data.breaches_caused > 0) {
+                    html += `<p style="color: var(--lcars-red);"><strong>BREACHES:</strong> ${data.systems_hit.join(', ').toUpperCase()}</p>`;
+                }
+            }
+
+            html += '</div>';
+            resolutionDiv.innerHTML = html;
+
+            // Refresh action availability after taking damage (breaches may have occurred)
+            if (data.breaches_caused > 0) {
+                fetchActionAvailability();
+            }
+
+            // If no counterattack option or declined, hide panel after delay
+            if (!data.can_counterattack || data.current_momentum < 2) {
+                setTimeout(() => {
+                    hidePendingAttackPanel();
+                }, 5000);
+            }
+
+            // Clear pending attack data since it's resolved
+            pendingAttackData = null;
+
+        } catch (err) {
+            showErrorToast('Failed to submit defensive roll: ' + err.message);
+        }
+    }
+
+    async function executeCounterattack(weaponIndex, targetIndex) {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/counterattack`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    weapon_index: weaponIndex,
+                    target_index: targetIndex,
+                    character_id: playerCharId
+                })
+            });
+            const data = await response.json();
+
+            const resolutionDiv = document.getElementById('incoming-attack-resolution');
+
+            if (data.error) {
+                resolutionDiv.innerHTML += `<p style="color: var(--lcars-red);">Counterattack failed: ${data.error}</p>`;
+                return;
+            }
+
+            resolutionDiv.innerHTML += `
+                <div style="margin-top: 15px; padding: 15px; background: #1a2a3a; border: 2px solid var(--lcars-blue); border-radius: 5px;">
+                    <h3 style="margin-top: 0; color: var(--lcars-orange);">COUNTERATTACK!</h3>
+                    <p>${data.message}</p>
+                    ${data.total_damage > 0 ? `<p style="color: var(--lcars-green);">Dealt ${data.total_damage} damage!</p>` : ''}
+                </div>
+            `;
+
+            document.getElementById('momentum').textContent = data.new_momentum;
+            updateBonusDiceFromMomentum();
+            showSuccessToast('Counterattack executed!');
+
+            setTimeout(() => {
+                hidePendingAttackPanel();
+            }, 3000);
+
+        } catch (err) {
+            showErrorToast('Counterattack failed: ' + err.message);
+        }
+    }
+
+    function declineCounterattack() {
+        showSuccessToast('Counterattack declined');
+        hidePendingAttackPanel();
+    }
+
+    // ========== THRUSTERS FUNCTIONS ==========
+
+    // Show the Thrusters panel and load available actions
+    async function showThrustersPanel() {
+        // Hide other panels
+        document.getElementById('fire-panel').style.display = 'none';
+        document.getElementById('defensive-fire-panel').style.display = 'none';
+        document.getElementById('reroute-power-panel').style.display = 'none';
+        document.getElementById('damage-control-panel').style.display = 'none';
+        document.getElementById('ram-panel').style.display = 'none';
+        document.getElementById('dice-panel').style.display = 'none';
+
+        // Show thrusters panel
+        document.getElementById('thrusters-panel').style.display = 'block';
+        document.getElementById('thrusters-results').style.display = 'none';
+        document.getElementById('thrusters-panel').scrollIntoView({behavior: 'smooth'});
+
+        // Load available actions
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/move/thrusters/valid-actions?ship_id=player`);
+            if (!response.ok) {
+                showErrorToast('Failed to load thrusters actions');
+                return;
+            }
+
+            const data = await response.json();
+            const container = document.getElementById('thrusters-actions-container');
+            const noActionsDiv = document.getElementById('thrusters-no-actions');
+
+            if (data.valid_actions.length === 0) {
+                container.style.display = 'none';
+                noActionsDiv.style.display = 'block';
+            } else {
+                container.style.display = 'block';
+                noActionsDiv.style.display = 'none';
+
+                // Build action buttons
+                let html = '';
+                if (data.currently_in_contact) {
+                    html += `<div style="margin-bottom: 15px; padding: 10px; background: #2a3a2a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                        <p style="margin: 0; color: var(--lcars-green);"><strong>CURRENTLY IN CONTACT</strong> with ${data.currently_in_contact}</p>
+                    </div>`;
+                }
+
+                html += '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                for (const action of data.valid_actions) {
+                    const btnColor = action.type === 'enter_contact' ? 'var(--lcars-blue)' : 'var(--lcars-orange)';
+                    const icon = action.type === 'enter_contact' ? '🔗' : '↔️';
+                    // Use friendlier wording: "Dock with" / "Undock from"
+                    const actionLabel = action.type === 'enter_contact'
+                        ? `Dock with ${action.target}`
+                        : `Undock from ${action.target}`;
+                    // Escape special characters in target name for onclick
+                    const escapedTarget = action.target.replace(/'/g, "\\'").replace(/"/g, '\\"');
+                    html += `
+                        <button class="btn" onclick="executeThrustersAction('${action.type}', '${escapedTarget}')"
+                                style="background: ${btnColor}; text-align: left; padding: 15px;">
+                            <strong>${icon} ${actionLabel}</strong>
+                        </button>
+                    `;
+                }
+                html += '</div>';
+
+                container.innerHTML = html;
+            }
+
+        } catch (error) {
+            console.error('Error loading thrusters actions:', error);
+            showErrorToast('Failed to load thrusters actions');
+        }
+    }
+
+    // Execute a thrusters action (enter or exit contact)
+    async function executeThrustersAction(actionType, targetShip) {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/move/thrusters`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    action_type: actionType,
+                    target_ship: targetShip,
+                    ship_id: 'player'
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                showErrorToast(data.error || 'Thrusters action failed');
+                return;
+            }
+
+            // Show success message
+            const resultsDiv = document.getElementById('thrusters-results');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = `
+                <div style="padding: 15px; background: #1a3a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
+                    <p style="margin: 0; color: var(--lcars-green);"><strong>SUCCESS!</strong></p>
+                    <p style="margin: 10px 0 0 0; color: var(--lcars-tan);">${data.message}</p>
+                </div>
+            `;
+
+            showSuccessToast(data.message);
+
+            // Refresh the panel to show updated state
+            setTimeout(() => {
+                showThrustersPanel();
+            }, 1500);
+
+        } catch (error) {
+            console.error('Error executing thrusters action:', error);
+            showErrorToast('Failed to execute thrusters action');
+        }
+    }
+
+    // Cancel thrusters action
+    function cancelThrustersAction() {
+        document.getElementById('thrusters-panel').style.display = 'none';
+        clearActionSelections('minor');
+    }
+
+    // ========== IMPULSE MOVEMENT FUNCTIONS ==========
+
+    let impulseMovementActive = false;
+    let validMoveDestinations = [];
+
+    // Start impulse movement mode - fetch valid destinations and highlight them
+    async function startImpulseMovement() {
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/move/valid-destinations?action=impulse&ship_id=player`);
+            if (!response.ok) {
+                showErrorToast('Failed to get movement destinations');
+                return;
+            }
+
+            const data = await response.json();
+            validMoveDestinations = data.valid_moves;
+
+            if (validMoveDestinations.length === 0) {
+                showInfoToast('No valid movement destinations available');
+                return;
+            }
+
+            impulseMovementActive = true;
+            showInfoToast(`Impulse: Select a destination hex (${validMoveDestinations.length} options). Click again to cancel.`);
+
+            // Re-render map with valid moves highlighted
+            renderTacticalMapWithMoves();
+
+            // Scroll to map
+            document.getElementById('tactical-map-panel').scrollIntoView({behavior: 'smooth'});
+        } catch (error) {
+            console.error('Error fetching valid moves:', error);
+            showErrorToast('Error fetching movement options');
+        }
+    }
+
+    // Cancel impulse movement mode
+    function cancelImpulseMovement() {
+        impulseMovementActive = false;
+        validMoveDestinations = [];
+        renderTacticalMap();
+        showInfoToast('Movement cancelled');
+    }
+
+    // Execute impulse movement to a destination
+    async function executeImpulseMove(q, r, cost) {
+        try {
+            // Check if player has enough momentum (or offer to use Threat)
+            const currentMomentum = parseInt(document.getElementById('momentum').textContent) || 0;
+
+            let useThreat = false;
+            if (cost > currentMomentum) {
+                if (cost > 0) {
+                    // Offer to use Threat instead
+                    useThreat = confirm(`Not enough Momentum (need ${cost}, have ${currentMomentum}). Add ${cost} Threat instead?`);
+                    if (!useThreat) {
+                        showErrorToast('Movement cancelled - insufficient Momentum');
+                        return;
+                    }
+                }
+            }
+
+            const response = await fetch(`/api/encounter/${encounterId}/move/impulse`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    q: q,
+                    r: r,
+                    use_threat: useThreat,
+                    ship_id: 'player'
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                showErrorToast(data.error || 'Movement failed');
+                return;
+            }
+
+            // Update local state
+            shipPositions = data.ship_positions;
+            document.getElementById('momentum').textContent = data.momentum;
+            document.getElementById('threat').textContent = data.threat;
+
+            // Show success message
+            let message = `Moved to (${q}, ${r})`;
+            if (data.momentum_spent > 0) {
+                message += ` - spent ${data.momentum_spent} Momentum`;
+            }
+            if (data.threat_added > 0) {
+                message += ` - added ${data.threat_added} Threat`;
+            }
+            if (data.hazard_damage > 0) {
+                message += ` - ${data.hazard_damage}CD hazard damage!`;
+                showErrorToast(`Hazardous terrain! Roll ${data.hazard_damage} Challenge Dice for damage.`);
+            }
+            showSuccessToast(message);
+
+            // End movement mode
+            impulseMovementActive = false;
+            validMoveDestinations = [];
+
+            // Re-render map with new positions
+            renderTacticalMap();
+
+            // Note: Minor action doesn't end the turn - player can still take major action
+            usedMinorAction = true;
+            selectedMinorAction = 'Impulse';
+            updateSelectionSummary();
+
+        } catch (error) {
+            console.error('Error executing impulse move:', error);
+            showErrorToast('Error executing movement');
+        }
+    }
+
+    // ========== TACTICAL MAP FUNCTIONS ==========
+
+    // Initialize the tactical map
+    function initTacticalMap() {
+        if (typeof HexMap === 'undefined') {
+            console.error('HexMap not loaded');
+            document.getElementById('tactical-map-container').innerHTML =
+                '<p style="color: var(--lcars-red);">Error: Map visualization not loaded</p>';
+            return;
+        }
+
+        renderTacticalMap();
+
+        // Render terrain legend
+        HexMap.renderLegend('terrain-legend-container');
+    }
+
+    // Render the tactical map (normal mode)
+    function renderTacticalMap() {
+        HexMap.render('tactical-map-container', tacticalMapData, shipPositions, {
+            editable: false,
+            showCoords: false,
+            onShipClick: function(ship, index) {
+                console.log('Ship clicked:', ship.name);
+            },
+            onHexClick: function(q, r, terrain, moveCost) {
+                // In normal mode, clicking a hex does nothing (or shows info)
+                if (impulseMovementActive) {
+                    // Check if this is a valid destination
+                    const move = validMoveDestinations.find(m => m.q === q && m.r === r);
+                    if (move) {
+                        executeImpulseMove(q, r, move.cost);
+                    } else {
+                        showErrorToast('Invalid destination - select a highlighted hex');
+                    }
+                }
+            }
+        });
+    }
+
+    // Render the tactical map with valid movement destinations highlighted
+    function renderTacticalMapWithMoves() {
+        HexMap.render('tactical-map-container', tacticalMapData, shipPositions, {
+            editable: false,
+            showCoords: false,
+            validMoves: validMoveDestinations,  // Pass valid moves for highlighting
+            onShipClick: function(ship, index) {
+                // Clicking player ship cancels movement
+                if (ship.id === 'player' && impulseMovementActive) {
+                    cancelImpulseMovement();
+                }
+            },
+            onHexClick: function(q, r, terrain, moveCost) {
+                if (!impulseMovementActive) return;
+
+                // Check if this is a valid destination
+                const move = validMoveDestinations.find(m => m.q === q && m.r === r);
+                if (move) {
+                    executeImpulseMove(q, r, move.cost);
+                } else {
+                    // Clicking invalid hex cancels movement
+                    cancelImpulseMovement();
+                }
+            }
+        });
+    }
+
+    // Refresh map data from server
+    async function refreshMapData() {
+        // Skip refresh while player is selecting a movement destination
+        if (impulseMovementActive) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/encounter/${encounterId}/map?role=player`);
+            if (response.ok) {
+                const data = await response.json();
+                tacticalMapData = data.tactical_map;
+                shipPositions = data.ship_positions;
+                renderTacticalMap();
+                // Update fire targets if fire panel is visible
+                if (typeof updateFireTargets === 'function') {
+                    updateFireTargets();
+                }
+            }
+        } catch (error) {
+            console.error('Error refreshing map:', error);
+        }
+    }
+
+    // Initialize tactical map on page load
+    document.addEventListener('DOMContentLoaded', initTacticalMap);
+
+    // Periodically refresh map (every 5 seconds) to sync with GM changes
+    setInterval(refreshMapData, 5000);
+</script>
+{% endblock %}

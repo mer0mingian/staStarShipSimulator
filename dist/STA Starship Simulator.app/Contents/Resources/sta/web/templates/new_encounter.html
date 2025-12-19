@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+
+{% block title %}New Encounter - {{ campaign.name }}{% endblock %}
+{% block header %}New Encounter{% endblock %}
+
+{% block content %}
+<!-- Campaign Context Banner -->
+<div class="panel" style="border-color: var(--lcars-purple); margin-bottom: 15px;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <span style="color: var(--lcars-tan);">Campaign:</span>
+            <strong style="color: var(--lcars-purple);">{{ campaign.name }}</strong>
+        </div>
+        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+           class="btn btn-small" style="background: #666;">
+            Back to Campaign
+        </a>
+    </div>
+</div>
+
+<form method="POST" id="encounter-form">
+    <input type="hidden" name="campaign_id" value="{{ campaign.campaign_id }}">
+    <input type="hidden" name="tactical_map_json" id="tactical_map_json" value="{}">
+    <input type="hidden" name="ship_positions_json" id="ship_positions_json" value="{}">
+    <input type="hidden" name="enemy_count" id="enemy_count_input" value="1">
+
+    <div class="grid">
+        <div class="panel">
+            <h2>Encounter Details</h2>
+            <label for="name">Encounter Name</label>
+            <input type="text" name="name" id="name" value="Battle at the Neutral Zone" style="width: 100%;">
+            <label for="description" style="margin-top: 10px;">Description (optional)</label>
+            <textarea name="description" id="description" rows="3" style="width: 100%;" placeholder="Brief description of this encounter..."></textarea>
+        </div>
+
+        <div class="panel">
+            <h2>Bridge Position</h2>
+            <label for="position">Default Player Position</label>
+            <select name="position" id="position" style="width: 100%;">
+                {% for pos in positions %}
+                    <option value="{{ pos }}" {% if pos == 'captain' %}selected{% endif %}>
+                        {{ pos.title() }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="panel">
+            <h2>Character</h2>
+            <label>
+                <input type="radio" name="character_action" value="generate" checked>
+                Generate Random Character
+            </label>
+            {% if characters %}
+                <label>
+                    <input type="radio" name="character_action" value="existing">
+                    Use Existing:
+                </label>
+                <select name="character_id" style="width: 100%;">
+                    {% for char in characters %}
+                        <option value="{{ char.id }}">{{ char.name }} ({{ char.rank }})</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+        </div>
+
+        <!-- Campaign Ship Info -->
+        <div class="panel" style="border-color: var(--lcars-blue);">
+            <h2>Campaign Ship</h2>
+            <p style="color: var(--lcars-tan);">This encounter will use the campaign's active ship.</p>
+            {% if campaign.active_ship_id %}
+                <p style="color: var(--lcars-green); margin-top: 10px;">Ship assigned and ready.</p>
+            {% else %}
+                <p style="color: var(--lcars-red); margin-top: 10px;">
+                    No ship assigned! Go to the campaign dashboard to assign a ship first.
+                </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Enemy Ships Panel -->
+    <div class="panel" style="border-color: var(--lcars-red);">
+        <h2 style="color: var(--lcars-red);">Enemy Ships</h2>
+        <div class="grid" style="gap: 15px;">
+            <div>
+                <label for="enemy_count">Number of Enemy Ships</label>
+                <select id="enemy_count" style="width: 100%;" onchange="updateEnemyCount()">
+                    <option value="1" selected>1 Ship</option>
+                    <option value="2">2 Ships</option>
+                    <option value="3">3 Ships</option>
+                    <option value="4">4 Ships</option>
+                </select>
+            </div>
+            <div>
+                <label for="crew_quality">Crew Quality</label>
+                <select name="crew_quality" id="crew_quality" style="width: 100%;">
+                    <option value="basic">Basic (Attribute 8, Dept 1)</option>
+                    <option value="proficient">Proficient (Attribute 9, Dept 2)</option>
+                    <option value="talented" selected>Talented (Attribute 10, Dept 3)</option>
+                    <option value="exceptional">Exceptional (Attribute 11, Dept 4)</option>
+                </select>
+            </div>
+        </div>
+        <p style="font-size: 0.85em; color: var(--lcars-tan); margin-top: 10px;">
+            Random enemy ships will be generated. You can edit them after creating the encounter.
+        </p>
+    </div>
+
+    <!-- Tactical Map Setup -->
+    <div class="panel" style="border-color: var(--lcars-orange);">
+        <h2 style="color: var(--lcars-orange);">Tactical Map</h2>
+        <p style="color: var(--lcars-tan); margin-bottom: 15px;">
+            Configure the battlefield terrain and starting positions. Click hexes to paint terrain, then place ships.
+        </p>
+
+        <div class="grid" style="gap: 15px;">
+            <!-- Map Display -->
+            <div>
+                <div id="tactical-map-container" style="min-height: 350px; background: #0a0a0a; border-radius: 5px;">
+                    <p style="color: #666; text-align: center; padding-top: 150px;">Loading map...</p>
+                </div>
+            </div>
+
+            <!-- Map Controls -->
+            <div>
+                <div style="margin-bottom: 15px;">
+                    <label style="color: var(--lcars-orange);">Edit Mode</label>
+                    <div style="display: flex; gap: 10px; margin-top: 5px;">
+                        <button type="button" class="btn btn-small mode-btn active" id="mode-terrain" onclick="setEditMode('terrain')">
+                            Paint Terrain
+                        </button>
+                        <button type="button" class="btn btn-small mode-btn" id="mode-ships" onclick="setEditMode('ships')">
+                            Place Ships
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Terrain Palette -->
+                <div id="terrain-controls">
+                    <label for="terrain-palette">Select Terrain</label>
+                    <select id="terrain-palette" style="width: 100%;" onchange="selectedTerrain = this.value">
+                        <option value="open">Open Space</option>
+                        <option value="dust_cloud">Dust Cloud (hides ships)</option>
+                        <option value="debris_field">Debris Field (hazardous)</option>
+                        <option value="asteroid_field">Asteroid Field (hazardous)</option>
+                        <option value="dense_nebula">Dense Nebula (hides ships, 2M cost)</option>
+                    </select>
+                    <p style="font-size: 0.8em; color: var(--lcars-tan); margin-top: 5px;">
+                        Click hexes on the map to paint terrain.
+                    </p>
+                </div>
+
+                <!-- Ship Placement -->
+                <div id="ship-controls" style="display: none;">
+                    <label for="ship-to-place">Select Ship to Place</label>
+                    <select id="ship-to-place" style="width: 100%;">
+                        <option value="player">Player Ship</option>
+                    </select>
+                    <p style="font-size: 0.8em; color: var(--lcars-tan); margin-top: 5px;">
+                        Click a hex on the map to place the selected ship.
+                    </p>
+                    <div id="ship-positions-list" style="margin-top: 10px; font-size: 0.85em;">
+                        <!-- Ship positions will be shown here -->
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #333;">
+                    <label style="color: var(--lcars-tan);">Quick Setup</label>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px;">
+                        <button type="button" class="btn btn-small" onclick="clearMap()">Clear Map</button>
+                        <button type="button" class="btn btn-small" style="background: var(--lcars-blue);" onclick="randomizeMap()">Random Terrain</button>
+                        <button type="button" class="btn btn-small" style="background: var(--lcars-green);" onclick="resetPositions()">Reset Positions</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Encounter Options -->
+    <div class="panel" style="border-color: var(--lcars-purple);">
+        <h2 style="color: var(--lcars-purple);">Encounter Options</h2>
+        <p style="color: var(--lcars-tan); margin-bottom: 15px;">Choose how to create this encounter:</p>
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: #222; border-radius: 5px; flex: 1; min-width: 150px;">
+                <input type="radio" name="status" value="active" checked>
+                <div>
+                    <strong style="color: var(--lcars-green);">Start Now</strong>
+                    <div style="font-size: 0.85em; color: var(--lcars-tan);">Create and activate immediately</div>
+                </div>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: #222; border-radius: 5px; flex: 1; min-width: 150px;">
+                <input type="radio" name="status" value="draft">
+                <div>
+                    <strong style="color: var(--lcars-tan);">Save as Draft</strong>
+                    <div style="font-size: 0.85em; color: var(--lcars-tan);">Prepare for later activation</div>
+                </div>
+            </label>
+        </div>
+    </div>
+
+    <button type="submit" class="btn" {% if not campaign.active_ship_id %}disabled style="opacity: 0.5;"{% endif %}>
+        Create Encounter
+    </button>
+    <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}" class="btn" style="background: #666;">
+        Cancel
+    </a>
+</form>
+
+<style>
+.mode-btn {
+    background: #333;
+}
+.mode-btn.active {
+    background: var(--lcars-orange);
+}
+</style>
+
+<script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+<script>
+// Map state
+let tacticalMapData = { radius: 3, tiles: [] };
+let shipPositions = {
+    player: { q: -2, r: 1 }
+};
+let enemyCount = 1;
+let editMode = 'terrain';
+let selectedTerrain = 'open';
+let selectedShip = 'player';
+
+// Default enemy positions
+const defaultEnemyPositions = [
+    { q: 2, r: -1 },
+    { q: 2, r: 0 },
+    { q: 2, r: 1 },
+    { q: 3, r: -1 }
+];
+
+function initMap() {
+    // Initialize enemy positions
+    updateEnemyCount();
+    renderMap();
+}
+
+function renderMap() {
+    const ships = [];
+
+    // Player ship
+    ships.push({
+        id: 'player',
+        name: 'Player Ship',
+        faction: 'player',
+        position: shipPositions.player
+    });
+
+    // Enemy ships
+    for (let i = 0; i < enemyCount; i++) {
+        const key = `enemy_${i}`;
+        if (!shipPositions[key]) {
+            shipPositions[key] = { ...defaultEnemyPositions[i] };
+        }
+        ships.push({
+            id: key,
+            name: `Enemy ${i + 1}`,
+            faction: 'enemy',
+            position: shipPositions[key]
+        });
+    }
+
+    HexMap.render('tactical-map-container', tacticalMapData, ships, {
+        onHexClick: handleHexClick
+    });
+
+    updateHiddenFields();
+    updateShipPositionsList();
+}
+
+function handleHexClick(q, r, terrain) {
+    if (editMode === 'terrain') {
+        // Update terrain
+        const key = `${q},${r}`;
+        let tile = tacticalMapData.tiles.find(t => t.coord.q === q && t.coord.r === r);
+
+        if (tile) {
+            tile.terrain = selectedTerrain;
+        } else {
+            tacticalMapData.tiles.push({
+                coord: { q, r },
+                terrain: selectedTerrain
+            });
+        }
+        renderMap();
+    } else if (editMode === 'ships') {
+        // Place selected ship
+        shipPositions[selectedShip] = { q, r };
+        renderMap();
+    }
+}
+
+function setEditMode(mode) {
+    editMode = mode;
+
+    document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`mode-${mode}`).classList.add('active');
+
+    document.getElementById('terrain-controls').style.display = mode === 'terrain' ? 'block' : 'none';
+    document.getElementById('ship-controls').style.display = mode === 'ships' ? 'block' : 'none';
+}
+
+function updateEnemyCount() {
+    const select = document.getElementById('enemy_count');
+    enemyCount = parseInt(select.value);
+    document.getElementById('enemy_count_input').value = enemyCount;
+
+    // Update ship selector
+    const shipSelect = document.getElementById('ship-to-place');
+    shipSelect.innerHTML = '<option value="player">Player Ship</option>';
+    for (let i = 0; i < enemyCount; i++) {
+        const opt = document.createElement('option');
+        opt.value = `enemy_${i}`;
+        opt.textContent = `Enemy Ship ${i + 1}`;
+        shipSelect.appendChild(opt);
+    }
+
+    // Initialize positions for new enemies
+    for (let i = 0; i < enemyCount; i++) {
+        const key = `enemy_${i}`;
+        if (!shipPositions[key]) {
+            shipPositions[key] = { ...defaultEnemyPositions[i] };
+        }
+    }
+
+    // Remove extra enemies
+    Object.keys(shipPositions).forEach(key => {
+        if (key.startsWith('enemy_')) {
+            const idx = parseInt(key.split('_')[1]);
+            if (idx >= enemyCount) {
+                delete shipPositions[key];
+            }
+        }
+    });
+
+    renderMap();
+}
+
+function updateShipPositionsList() {
+    const container = document.getElementById('ship-positions-list');
+    let html = '<div style="color: var(--lcars-tan);">Current positions:</div>';
+
+    html += `<div style="color: var(--lcars-green);">Player: (${shipPositions.player.q}, ${shipPositions.player.r})</div>`;
+
+    for (let i = 0; i < enemyCount; i++) {
+        const pos = shipPositions[`enemy_${i}`];
+        if (pos) {
+            html += `<div style="color: var(--lcars-red);">Enemy ${i + 1}: (${pos.q}, ${pos.r})</div>`;
+        }
+    }
+
+    container.innerHTML = html;
+}
+
+function updateHiddenFields() {
+    document.getElementById('tactical_map_json').value = JSON.stringify(tacticalMapData);
+    document.getElementById('ship_positions_json').value = JSON.stringify(shipPositions);
+}
+
+function clearMap() {
+    tacticalMapData.tiles = [];
+    renderMap();
+}
+
+function randomizeMap() {
+    tacticalMapData.tiles = [];
+    const terrains = ['open', 'dust_cloud', 'debris_field', 'asteroid_field', 'dense_nebula'];
+    const radius = tacticalMapData.radius;
+
+    // Generate random terrain for ~30% of hexes
+    for (let q = -radius; q <= radius; q++) {
+        const r1 = Math.max(-radius, -q - radius);
+        const r2 = Math.min(radius, -q + radius);
+        for (let r = r1; r <= r2; r++) {
+            if (Math.random() < 0.3 && !(q === 0 && r === 0)) {
+                tacticalMapData.tiles.push({
+                    coord: { q, r },
+                    terrain: terrains[Math.floor(Math.random() * terrains.length)]
+                });
+            }
+        }
+    }
+
+    renderMap();
+}
+
+function resetPositions() {
+    shipPositions = {
+        player: { q: -2, r: 1 }
+    };
+    for (let i = 0; i < enemyCount; i++) {
+        shipPositions[`enemy_${i}`] = { ...defaultEnemyPositions[i] };
+    }
+    renderMap();
+}
+
+// Ship selector change handler
+document.getElementById('ship-to-place').addEventListener('change', function() {
+    selectedShip = this.value;
+});
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', initMap);
+</script>
+{% endblock %}

@@ -82,7 +82,19 @@ This app digitizes the starship combat experience for STA 2e tabletop sessions. 
 
 ## Installation
 
-### Option 1: Docker (Recommended)
+### Option 1: Mac App (Easiest)
+
+**[Download the latest release](https://github.com/tommertron/staStarShipSimulator/releases/latest)**
+
+1. Download `STA-Starship-Simulator-X.X.X.dmg` from the releases page
+2. Open the DMG file
+3. Drag "STA Starship Simulator" to your Applications folder
+4. Launch from Applications
+5. Your browser will open automatically to the app
+
+The app runs a local server - share the Network URL shown in the app window with players on your local network.
+
+### Option 2: Docker
 
 **Prerequisites**: Docker and Docker Compose installed
 
@@ -103,7 +115,7 @@ docker compose down
 
 The application will be available at **http://localhost:5001**
 
-### Option 2: Local Python
+### Option 3: Local Python
 
 **Prerequisites**: Python 3.10+
 

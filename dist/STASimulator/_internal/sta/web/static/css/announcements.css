@@ -1,0 +1,424 @@
+/**
+ * Combat Announcements Styles
+ */
+
+/* ===== BANNER MODE (Persistent Top Bar) ===== */
+.announcement-banner {
+    position: relative;
+    height: 60px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-bottom: 3px solid var(--lcars-african-violet, #cc99cc);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 100;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+    flex-shrink: 0;
+}
+
+/* When banner is present, adjust main content to fill remaining space */
+body.has-announcement-banner {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    padding: 0 !important;
+}
+
+body.has-announcement-banner > .player-wrapper,
+body.has-announcement-banner > .gm-wrapper,
+body.has-announcement-banner > .viewscreen-wrapper,
+body.has-announcement-banner > .lcars-wrapper {
+    flex: 1;
+    height: auto !important;
+    min-height: 0;
+}
+
+.banner-left,
+.banner-center,
+.banner-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.banner-left {
+    flex: 1;
+    justify-content: flex-start;
+}
+
+.banner-center {
+    flex: 0 0 auto;
+}
+
+.banner-right {
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.banner-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--lcars-ice, #aaddff);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.banner-current-actor {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--lcars-butterscotch, #ffaa00);
+    letter-spacing: 1px;
+}
+
+.banner-current-action {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--lcars-bluey, #99ccff);
+    font-style: italic;
+}
+
+.banner-current-turn {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.banner-round {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--lcars-text, #ffffff);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding: 8px 20px;
+    background: rgba(204, 153, 204, 0.2);
+    border-radius: 20px;
+    border: 2px solid var(--lcars-african-violet, #cc99cc);
+}
+
+.banner-round-num {
+    color: var(--lcars-african-violet, #cc99cc);
+}
+
+.banner-next-actor {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--lcars-violet-creme, #ddbbdd);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Hailing section in banner */
+.banner-hailing {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, rgba(255, 153, 102, 0.95), rgba(255, 204, 102, 0.95));
+    border-bottom: 3px solid var(--lcars-butterscotch, #ffaa00);
+    padding: 12px 20px;
+    box-shadow: 0 3px 15px rgba(255, 170, 0, 0.3);
+    z-index: 9998;
+}
+
+.banner-hailing-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.banner-hailing-icon {
+    font-size: 1.8rem;
+}
+
+.banner-hailing-status {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--lcars-text-dark, #000);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.banner-hailing-from {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.8);
+}
+
+.banner-hailing-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.banner-hail-btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 20px;
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.banner-hail-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.banner-hail-accept {
+    background: var(--lcars-success, #88cc88);
+    color: var(--lcars-text-dark, #000);
+}
+
+.banner-hail-reject,
+.banner-hail-close {
+    background: var(--lcars-tomato, #ff6666);
+    color: var(--lcars-text-dark, #000);
+}
+
+/* Pulse animation when banner updates */
+@keyframes banner-pulse {
+    0%, 100% {
+        border-bottom-color: var(--lcars-african-violet, #cc99cc);
+    }
+    50% {
+        border-bottom-color: var(--lcars-butterscotch, #ffaa00);
+        box-shadow: 0 2px 20px rgba(255, 170, 0, 0.4);
+    }
+}
+
+.announcement-banner.banner-pulse {
+    animation: banner-pulse 1s ease-in-out;
+}
+
+/* Responsive design for banner */
+@media (max-width: 768px) {
+    .announcement-banner {
+        height: auto;
+        flex-direction: column;
+        padding: 10px;
+        gap: 8px;
+    }
+
+    .banner-left,
+    .banner-center,
+    .banner-right {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .banner-current-actor {
+        font-size: 1.1rem;
+    }
+
+    .banner-round {
+        font-size: 1.2rem;
+        padding: 5px 15px;
+    }
+}
+
+/* ===== MODAL MODE (Fullscreen Overlay) ===== */
+.announcement-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+}
+
+.announcement-overlay.show {
+    opacity: 1;
+}
+
+.announcement-content {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 4px solid var(--lcars-african-violet, #cc99cc);
+    border-radius: 20px;
+    padding: 40px 60px;
+    max-width: 800px;
+    min-width: 600px;
+    box-shadow: 0 0 40px rgba(204, 153, 204, 0.5),
+                0 0 80px rgba(204, 153, 204, 0.3);
+    transform: scale(0.8);
+    transition: transform 0.3s ease-in-out;
+}
+
+.announcement-overlay.show .announcement-content {
+    transform: scale(1);
+}
+
+/* Header with ship name and round */
+.announcement-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--lcars-butterscotch, #ffaa00);
+}
+
+.announcement-ship {
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--lcars-butterscotch, #ffaa00);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.announcement-round {
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--lcars-ice, #aaddff);
+    text-transform: uppercase;
+}
+
+/* Actor name */
+.announcement-actor {
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--lcars-bluey, #99ccff);
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin-bottom: 10px;
+}
+
+/* Action name */
+.announcement-action {
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+    font-size: 3rem;
+    font-weight: 700;
+    color: var(--lcars-text, #ffffff);
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    margin-bottom: 20px;
+    text-align: center;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+}
+
+/* Description */
+.announcement-description {
+    font-family: var(--font-secondary, 'Helvetica', sans-serif);
+    font-size: 1.2rem;
+    color: var(--lcars-ice, #aaddff);
+    margin-bottom: 25px;
+    line-height: 1.6;
+    text-align: center;
+    font-style: italic;
+}
+
+/* Results section */
+.announcement-result {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    padding: 20px;
+    border-left: 4px solid var(--lcars-african-violet, #cc99cc);
+}
+
+.announcement-roll {
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+    font-size: 1.3rem;
+    color: var(--lcars-text, #ffffff);
+    margin-bottom: 10px;
+}
+
+.announcement-roll strong {
+    color: var(--lcars-butterscotch, #ffaa00);
+}
+
+.announcement-roll-result {
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+    font-size: 1.6rem;
+    font-weight: 700;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 15px 0;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.announcement-roll-result.success {
+    background: var(--lcars-success, #88cc88);
+    color: var(--lcars-text-dark, #000000);
+}
+
+.announcement-roll-result.failure {
+    background: var(--lcars-tomato, #ff6666);
+    color: var(--lcars-text-dark, #000000);
+}
+
+.announcement-roll-result .complication {
+    font-size: 1.2rem;
+    color: var(--lcars-taupe, #aa9988);
+    font-weight: 600;
+}
+
+.announcement-damage {
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--lcars-tomato, #ff6666);
+    margin-top: 15px;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.announcement-resource {
+    font-family: var(--font-primary, 'Antonio', sans-serif);
+    font-size: 1.1rem;
+    color: var(--lcars-violet-creme, #ddbbdd);
+    margin-top: 10px;
+    text-align: center;
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 768px) {
+    .announcement-content {
+        min-width: 90%;
+        max-width: 90%;
+        padding: 30px 40px;
+    }
+
+    .announcement-action {
+        font-size: 2.2rem;
+    }
+
+    .announcement-actor {
+        font-size: 1.4rem;
+    }
+
+    .announcement-description {
+        font-size: 1rem;
+    }
+}
+
+/* Animation for pulsing effect on important elements */
+@keyframes announce-pulse {
+    0%, 100% {
+        text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+    }
+    50% {
+        text-shadow: 0 0 30px rgba(255, 255, 255, 0.8);
+    }
+}
+
+.announcement-action {
+    animation: announce-pulse 2s ease-in-out infinite;
+}

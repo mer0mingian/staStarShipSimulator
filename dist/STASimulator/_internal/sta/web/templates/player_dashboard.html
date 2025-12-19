@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}{{ campaign.name }} - STA Starship Simulator{% endblock %}
+
+{% block header %}{{ campaign.name }}{% endblock %}
+
+{% block content %}
+<!-- Campaign Info Bar -->
+<div class="panel" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-color: var(--lcars-green);">
+    <div>
+        <span style="color: var(--lcars-tan);">Playing as:</span>
+        <strong style="color: var(--lcars-green);">{{ player.player_name }}</strong>
+    </div>
+    <div>
+        <a href="{{ url_for('campaigns.switch_character', campaign_id=campaign.campaign_id) }}" class="btn btn-small" style="background: #666;">
+            Switch Character
+        </a>
+    </div>
+</div>
+
+<div class="grid">
+    <!-- Your Character -->
+    <div class="panel" style="border-color: var(--lcars-green);">
+        <h2>Your Character</h2>
+        {% if character %}
+            <div style="margin-bottom: 15px;">
+                <div class="stat-row">
+                    <span>Name</span>
+                    <span class="stat-value">{{ character.name }}</span>
+                </div>
+                {% if character.rank %}
+                <div class="stat-row">
+                    <span>Rank</span>
+                    <span class="stat-value">{{ character.rank }}</span>
+                </div>
+                {% endif %}
+                {% if character.species %}
+                <div class="stat-row">
+                    <span>Species</span>
+                    <span class="stat-value">{{ character.species }}</span>
+                </div>
+                {% endif %}
+                {% if character.role %}
+                <div class="stat-row">
+                    <span>Role</span>
+                    <span class="stat-value">{{ character.role }}</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <h3 style="color: var(--lcars-orange); font-size: 0.9em; margin: 15px 0 10px 0;">Attributes</h3>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 0.85em;">
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-orange);">Control</div>
+                    <div style="font-size: 1.2em;">{{ character.attributes.control }}</div>
+                </div>
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-orange);">Daring</div>
+                    <div style="font-size: 1.2em;">{{ character.attributes.daring }}</div>
+                </div>
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-orange);">Fitness</div>
+                    <div style="font-size: 1.2em;">{{ character.attributes.fitness }}</div>
+                </div>
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-orange);">Insight</div>
+                    <div style="font-size: 1.2em;">{{ character.attributes.insight }}</div>
+                </div>
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-orange);">Presence</div>
+                    <div style="font-size: 1.2em;">{{ character.attributes.presence }}</div>
+                </div>
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-orange);">Reason</div>
+                    <div style="font-size: 1.2em;">{{ character.attributes.reason }}</div>
+                </div>
+            </div>
+
+            <h3 style="color: var(--lcars-blue); font-size: 0.9em; margin: 15px 0 10px 0;">Disciplines</h3>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 0.85em;">
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-blue);">Command</div>
+                    <div style="font-size: 1.2em;">{{ character.disciplines.command }}</div>
+                </div>
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-blue);">Conn</div>
+                    <div style="font-size: 1.2em;">{{ character.disciplines.conn }}</div>
+                </div>
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-blue);">Engineering</div>
+                    <div style="font-size: 1.2em;">{{ character.disciplines.engineering }}</div>
+                </div>
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-blue);">Medicine</div>
+                    <div style="font-size: 1.2em;">{{ character.disciplines.medicine }}</div>
+                </div>
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-blue);">Science</div>
+                    <div style="font-size: 1.2em;">{{ character.disciplines.science }}</div>
+                </div>
+                <div style="text-align: center; background: #333; padding: 5px; border-radius: 3px;">
+                    <div style="color: var(--lcars-blue);">Security</div>
+                    <div style="font-size: 1.2em;">{{ character.disciplines.security }}</div>
+                </div>
+            </div>
+        {% else %}
+            <p style="color: var(--lcars-tan);">No character data available</p>
+        {% endif %}
+    </div>
+
+    <!-- Right Column -->
+    <div>
+        <!-- Active Encounter -->
+        <div class="panel" style="border-color: {% if active_encounter %}var(--lcars-green){% else %}var(--lcars-tan){% endif %}; margin-bottom: 15px;">
+            <h2>Current Mission</h2>
+            {% if active_encounter %}
+                <div style="margin-bottom: 15px;">
+                    <strong style="font-size: 1.2em; color: var(--lcars-green);">{{ active_encounter.name }}</strong>
+                    <div class="stat-row" style="margin-top: 10px;">
+                        <span>Round</span>
+                        <span class="stat-value">{{ active_encounter.round }}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>Turn</span>
+                        <span class="stat-value">{{ active_encounter.current_turn.title() }}</span>
+                    </div>
+                </div>
+
+                <!-- Position Selection -->
+                <div style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px;">
+                    <label for="position-select" style="display: block; margin-bottom: 5px; color: var(--lcars-tan);">
+                        Your Bridge Position:
+                    </label>
+                    <select id="position-select" style="width: 100%;" onchange="updateMyPosition(this.value)" {% if active_encounter and player.position != 'unassigned' %}disabled{% endif %}>
+                        {% for pos in positions %}
+                            <option value="{{ pos }}"
+                                {% if player.position == pos %}selected{% endif %}
+                                {% if pos in taken_positions and player.position != pos %}disabled{% endif %}>
+                                {{ pos.title() }}{% if pos in taken_positions and player.position != pos %} ({{ taken_positions[pos] }}){% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    {% if active_encounter and player.position != 'unassigned' %}
+                    <p style="color: var(--lcars-orange); font-size: 0.8em; margin-top: 5px;">
+                        Position locked during combat. Use "Change Position" action on bridge.
+                    </p>
+                    {% endif %}
+                </div>
+
+                <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='player') }}"
+                   class="btn" style="width: 100%; text-align: center;">
+                    Enter Bridge
+                </a>
+            {% else %}
+                <p style="color: var(--lcars-tan);">No active mission</p>
+                <p style="color: var(--lcars-tan); font-size: 0.9em; margin-top: 10px;">
+                    Waiting for Q to start an encounter...
+                </p>
+            {% endif %}
+        </div>
+
+        <!-- Ship Info -->
+        <div class="panel" style="border-color: var(--lcars-blue);">
+            <h2>Ship Status</h2>
+            {% if active_ship %}
+                <div class="stat-row">
+                    <span>Name</span>
+                    <span class="stat-value">{{ active_ship.name }}</span>
+                </div>
+                <div class="stat-row">
+                    <span>Class</span>
+                    <span class="stat-value">{{ active_ship.ship_class }}</span>
+                </div>
+                <div class="stat-row">
+                    <span>Scale</span>
+                    <span class="stat-value">{{ active_ship.scale }}</span>
+                </div>
+                <div class="stat-row">
+                    <span>Shields</span>
+                    <span class="stat-value">{{ active_ship.shields }}/{{ active_ship.shields_max }}</span>
+                </div>
+                <div class="shields-bar">
+                    <div class="fill" style="width: {{ (active_ship.shields / active_ship.shields_max * 100) if active_ship.shields_max > 0 else 0 }}%;"></div>
+                </div>
+            {% else %}
+                <p style="color: var(--lcars-tan);">No ship assigned</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div style="margin-top: 20px;">
+    <a href="{{ url_for('campaigns.player_home') }}" class="btn btn-small" style="background: #666;">
+        Back to Campaigns
+    </a>
+</div>
+
+<script>
+const campaignId = '{{ campaign.campaign_id }}';
+const playerId = {{ player.id }};
+
+async function updateMyPosition(position) {
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/player/${playerId}/position`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ position })
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error updating position: ' + error.message);
+    }
+}
+</script>
+{% endblock %}

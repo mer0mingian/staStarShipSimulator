@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Join {{ campaign.name }} - STA Starship Simulator{% endblock %}
+
+{% block header %}Select Your Character{% endblock %}
+
+{% block sidebar_nav %}
+<a href="{{ url_for('campaigns.player_home') }}" class="lcars-sidebar-btn color-6">Back</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 700px; margin: 0 auto;">
+    <!-- Campaign Info -->
+    <div class="lcars-bar" style="background: var(--lcars-african-violet);">{{ campaign.name }}</div>
+    <div class="lcars-panel panel-violet mb-3">
+        {% if campaign.description %}
+        <p class="text-muted">{{ campaign.description }}</p>
+        {% else %}
+        <p class="text-muted">Join this campaign and take your station!</p>
+        {% endif %}
+    </div>
+
+    {% if players %}
+    <form method="POST" action="{{ url_for('campaigns.join_campaign', campaign_id=campaign.campaign_id) }}">
+        <div class="lcars-bar-capped">
+            <div class="bar-cap" style="background: var(--lcars-ice);"></div>
+            <div class="bar-content">Available Characters</div>
+            <div class="bar-cap" style="background: var(--lcars-bluey);"></div>
+        </div>
+        <div class="lcars-panel panel-blue">
+            <p class="text-muted mb-2">Select the character you want to play:</p>
+
+            <div class="character-list">
+                {% for player in players %}
+                <label class="character-card">
+                    <input type="radio" name="player_id" value="{{ player.id }}" required>
+                    <div class="character-info">
+                        <div class="character-header">
+                            <strong class="character-name">{{ player.player_name }}</strong>
+                            {% if player.character %}
+                            <span class="character-meta">
+                                {{ player.character.rank or '' }} {{ player.character.species or '' }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        {% if player.character %}
+                        <div class="stats-grid">
+                            <div class="stat-block attr">
+                                <span class="stat-label">CTL</span>
+                                <span class="stat-val">{{ player.character.attributes.control }}</span>
+                            </div>
+                            <div class="stat-block attr">
+                                <span class="stat-label">DAR</span>
+                                <span class="stat-val">{{ player.character.attributes.daring }}</span>
+                            </div>
+                            <div class="stat-block attr">
+                                <span class="stat-label">FIT</span>
+                                <span class="stat-val">{{ player.character.attributes.fitness }}</span>
+                            </div>
+                            <div class="stat-block attr">
+                                <span class="stat-label">INS</span>
+                                <span class="stat-val">{{ player.character.attributes.insight }}</span>
+                            </div>
+                            <div class="stat-block attr">
+                                <span class="stat-label">PRE</span>
+                                <span class="stat-val">{{ player.character.attributes.presence }}</span>
+                            </div>
+                            <div class="stat-block attr">
+                                <span class="stat-label">REA</span>
+                                <span class="stat-val">{{ player.character.attributes.reason }}</span>
+                            </div>
+                        </div>
+                        <div class="stats-grid mt-1">
+                            <div class="stat-block disc">
+                                <span class="stat-label">CMD</span>
+                                <span class="stat-val">{{ player.character.disciplines.command }}</span>
+                            </div>
+                            <div class="stat-block disc">
+                                <span class="stat-label">CON</span>
+                                <span class="stat-val">{{ player.character.disciplines.conn }}</span>
+                            </div>
+                            <div class="stat-block disc">
+                                <span class="stat-label">ENG</span>
+                                <span class="stat-val">{{ player.character.disciplines.engineering }}</span>
+                            </div>
+                            <div class="stat-block disc">
+                                <span class="stat-label">MED</span>
+                                <span class="stat-val">{{ player.character.disciplines.medicine }}</span>
+                            </div>
+                            <div class="stat-block disc">
+                                <span class="stat-label">SCI</span>
+                                <span class="stat-val">{{ player.character.disciplines.science }}</span>
+                            </div>
+                            <div class="stat-block disc">
+                                <span class="stat-label">SEC</span>
+                                <span class="stat-val">{{ player.character.disciplines.security }}</span>
+                            </div>
+                        </div>
+                        {% else %}
+                        <p class="text-muted" style="font-size: 0.85em; font-style: italic;">No character stats</p>
+                        {% endif %}
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+
+            <div style="display: flex; gap: 15px; justify-content: flex-end; margin-top: 20px;">
+                <a href="{{ url_for('campaigns.player_home') }}" class="lcars-btn btn-sm" style="background: var(--lcars-gray);">
+                    Cancel
+                </a>
+                <button type="submit" class="lcars-btn btn-ice">Select Character</button>
+            </div>
+        </div>
+    </form>
+    {% else %}
+    <div class="lcars-bar" style="background: var(--lcars-almond);">No Characters Available</div>
+    <div class="lcars-panel">
+        <p class="text-muted">
+            The Game Master hasn't created any characters for this campaign yet.
+            Please ask Q to create characters before you can join.
+        </p>
+        <div class="mt-2">
+            <a href="{{ url_for('campaigns.player_home') }}" class="lcars-btn btn-sm" style="background: var(--lcars-gray);">
+                Back
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.character-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.character-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 15px;
+    background: var(--lcars-panel-bg);
+    border: 2px solid var(--lcars-gray);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.character-card:hover {
+    border-color: var(--lcars-ice);
+    background: #1a1a1a;
+}
+
+.character-card:has(input:checked) {
+    border-color: var(--lcars-success) !important;
+    background: rgba(153, 204, 153, 0.1) !important;
+    box-shadow: 0 0 15px rgba(153, 204, 153, 0.2);
+}
+
+.character-card input[type="radio"] {
+    margin-top: 4px;
+    accent-color: var(--lcars-success);
+    width: 18px;
+    height: 18px;
+}
+
+.character-info {
+    flex: 1;
+}
+
+.character-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.character-name {
+    font-size: 1.1em;
+    color: var(--lcars-text);
+}
+
+.character-meta {
+    color: var(--lcars-almond);
+    font-size: 0.85em;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 5px;
+}
+
+.stat-block {
+    text-align: center;
+    background: #222;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.stat-block .stat-label {
+    display: block;
+    font-size: 0.65em;
+    text-transform: uppercase;
+}
+
+.stat-block.attr .stat-label {
+    color: var(--lcars-orange);
+}
+
+.stat-block.disc .stat-label {
+    color: var(--lcars-ice);
+}
+
+.stat-block .stat-val {
+    font-weight: 700;
+    font-size: 0.9em;
+}
+
+@media (max-width: 500px) {
+    .stats-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+</style>
+{% endblock %}

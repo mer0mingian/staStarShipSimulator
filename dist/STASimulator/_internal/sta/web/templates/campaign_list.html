@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Campaigns - STA Starship Simulator{% endblock %}
+
+{% block header %}Campaigns{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+    <!-- Active Campaigns -->
+    <div class="lcars-bar" style="background: var(--lcars-african-violet);">Active Campaigns</div>
+    <div class="lcars-panel panel-violet">
+        {% if campaigns %}
+        <ul class="lcars-action-list">
+            {% for campaign in campaigns %}
+            <li class="lcars-action-item">
+                <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+                   style="color: inherit; text-decoration: none; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div class="action-name">{{ campaign.name }}</div>
+                        {% if campaign.description %}
+                        <div class="action-desc">{{ campaign.description[:50] }}{% if campaign.description|length > 50 %}...{% endif %}</div>
+                        {% endif %}
+                    </div>
+                    <span class="lcars-pill" style="font-size: 0.65rem;">{{ campaign.campaign_id }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-muted">No active campaigns. Create one to get started!</p>
+        {% endif %}
+    </div>
+
+    <!-- Join Campaign -->
+    <div class="lcars-bar-capped">
+        <div class="bar-cap" style="background: var(--lcars-ice);"></div>
+        <div class="bar-content">Join a Campaign</div>
+        <div class="bar-cap" style="background: var(--lcars-bluey);"></div>
+    </div>
+    <div class="lcars-panel panel-blue">
+        <form id="join-form" class="lcars-grid-2" style="align-items: end; gap: 15px;">
+            <div>
+                <label class="lcars-label" for="campaign-code">Campaign Code</label>
+                <input type="text" id="campaign-code" class="lcars-input" placeholder="e.g., abc12345">
+            </div>
+            <div>
+                <button type="submit" class="lcars-btn btn-ice" style="width: 100%;">Join</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Create New -->
+    <div class="lcars-bar bar-orange">Create New Campaign</div>
+    <div class="lcars-panel panel-orange">
+        <a href="{{ url_for('campaigns.new_campaign') }}" class="lcars-btn" style="width: 100%; text-align: center;">
+            New Campaign
+        </a>
+    </div>
+
+    <!-- Standalone Encounters -->
+    <div class="lcars-bar" style="background: var(--lcars-almond);">Standalone Encounters</div>
+    <div class="lcars-panel">
+        <p class="text-muted mb-2">Quick encounters without campaign context</p>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <a href="{{ url_for('encounters.new_encounter') }}" class="lcars-btn btn-sm" style="background: var(--lcars-almond);">
+                New Standalone Encounter
+            </a>
+            <a href="{{ url_for('main.index') }}" class="lcars-btn btn-sm" style="background: var(--lcars-gray);">
+                View Existing
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('join-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const code = document.getElementById('campaign-code').value.trim();
+    if (code) {
+        window.location.href = `/campaigns/${code}/join`;
+    }
+});
+</script>
+{% endblock %}

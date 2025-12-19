@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Game Master - STA Starship Simulator{% endblock %}
+
+{% block header %}Game Master Station{% endblock %}
+
+{% block sidebar_nav %}
+<a href="{{ url_for('main.index') }}" class="lcars-sidebar-btn color-6">Back</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+    {% if my_campaigns %}
+    <!-- My Campaigns Panel -->
+    <div class="lcars-bar" style="background: var(--lcars-african-violet);">My Campaigns</div>
+    <div class="lcars-panel panel-violet">
+        <p class="text-muted mb-2">Campaigns you are running</p>
+        <ul class="lcars-action-list">
+            {% for campaign in my_campaigns %}
+            <li class="lcars-action-item" style="position: relative;">
+                <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id, role='gm') }}"
+                   style="color: inherit; text-decoration: none; display: block;">
+                    <div class="action-name">{{ campaign.name }}</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+                        {% if campaign.description %}
+                        <span class="action-desc">{{ campaign.description[:40] }}{% if campaign.description|length > 40 %}...{% endif %}</span>
+                        {% else %}
+                        <span class="action-desc">&nbsp;</span>
+                        {% endif %}
+                        <span class="lcars-pill" style="font-size: 0.65rem;">{{ campaign.campaign_id }}</span>
+                    </div>
+                </a>
+                <button onclick="event.preventDefault(); event.stopPropagation(); deleteCampaign('{{ campaign.campaign_id }}', '{{ campaign.name }}')"
+                        class="btn-delete-campaign"
+                        title="Delete campaign">
+                    &times;
+                </button>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Create Campaign Panel -->
+    <div class="lcars-bar-capped">
+        <div class="bar-cap" style="background: var(--lcars-gold);"></div>
+        <div class="bar-content">Create New Campaign</div>
+        <div class="bar-cap" style="background: var(--lcars-orange);"></div>
+    </div>
+    <div class="lcars-panel panel-orange">
+        <p class="text-muted mb-3">Start a new adventure for your crew</p>
+
+        <div class="lcars-grid-2" style="gap: 15px;">
+            <a href="{{ url_for('campaigns.new_campaign') }}" class="lcars-btn" style="width: 100%; text-align: center;">
+                Custom Campaign
+            </a>
+            <button onclick="generateRandomCampaign()" class="lcars-btn btn-blue" style="width: 100%;">
+                Quick Start
+            </button>
+        </div>
+
+        <div class="mt-3" style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <div class="lcars-stat-row">
+                    <span class="lcars-stat-label">Custom</span>
+                    <span class="lcars-stat-value text-orange">Set your own details</span>
+                </div>
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+                <div class="lcars-stat-row">
+                    <span class="lcars-stat-label">Quick Start</span>
+                    <span class="lcars-stat-value text-blue">Random ship & encounter</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if other_campaigns %}
+    <!-- Other Campaigns Panel -->
+    <div class="lcars-bar" style="background: var(--lcars-almond);">Other Active Campaigns</div>
+    <div class="lcars-panel" style="opacity: 0.8;">
+        <p class="text-muted mb-2">Campaigns run by other GMs</p>
+        <ul class="lcars-action-list">
+            {% for campaign in other_campaigns %}
+            <li class="lcars-action-item" style="cursor: default; opacity: 0.7;">
+                <div class="action-name">{{ campaign.name }}</div>
+                <div class="action-desc">
+                    <span class="lcars-pill" style="font-size: 0.65rem; background: var(--lcars-gray);">{{ campaign.campaign_id }}</span>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Navigation -->
+    <div class="mt-3">
+        <a href="{{ url_for('main.index') }}" class="lcars-btn btn-sm" style="background: var(--lcars-gray);">
+            Back to Role Selection
+        </a>
+    </div>
+</div>
+
+<style>
+.btn-delete-campaign {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    background: var(--lcars-red, #cc0000);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.lcars-action-item:hover .btn-delete-campaign {
+    opacity: 1;
+}
+.btn-delete-campaign:hover {
+    background: #ff3333;
+}
+</style>
+
+<script>
+async function deleteCampaign(campaignId, campaignName) {
+    if (!confirm(`Delete campaign "${campaignName}"? This will remove all encounters and player data. This cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error deleting campaign: ' + error.message);
+    }
+}
+
+async function generateRandomCampaign() {
+    try {
+        const response = await fetch('/campaigns/api/generate-random', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            window.location.href = `/campaigns/${data.campaign_id}`;
+        } else {
+            const data = await response.json();
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error generating campaign: ' + error.message);
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}STA Starship Simulator{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/lcars.css') }}">
+    <style>
+        /* Legacy compatibility styles - will be phased out */
+        .panel {
+            background: var(--lcars-panel-bg);
+            border: 2px solid var(--lcars-butterscotch);
+            border-radius: var(--frame-inner-radius);
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+
+        .panel h2 {
+            color: var(--lcars-butterscotch);
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 24px;
+            background: var(--lcars-orange);
+            color: var(--lcars-text-dark);
+            text-decoration: none;
+            font-family: var(--font-primary);
+            font-size: var(--font-size-base);
+            font-weight: 700;
+            text-transform: uppercase;
+            border: none;
+            border-radius: var(--button-radius);
+            cursor: pointer;
+            min-height: var(--button-height);
+        }
+
+        .btn:hover {
+            filter: brightness(115%);
+            text-decoration: none;
+        }
+
+        .btn:active {
+            filter: brightness(85%);
+        }
+
+        .btn-small {
+            padding: 6px 16px;
+            font-size: var(--font-size-sm);
+            min-height: 32px;
+            border-radius: 16px;
+        }
+
+        .btn-danger {
+            background: var(--lcars-tomato);
+        }
+
+        .btn-success {
+            background: var(--lcars-success);
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--lcars-gray);
+        }
+
+        .stat-value {
+            color: var(--lcars-ice);
+            font-weight: bold;
+        }
+
+        .resource-pool {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: var(--lcars-panel-bg);
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+
+        .resource-pool .value {
+            font-size: 2.5em;
+            font-weight: bold;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .momentum .value { color: var(--lcars-ice); }
+        .threat .value { color: var(--lcars-tomato); }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .action-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .action-list li {
+            padding: 12px 15px;
+            margin: 4px 0;
+            background: #1a1a1a;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            border-left: 4px solid transparent;
+        }
+
+        .action-list li:hover {
+            background: #252525;
+            border-left-color: var(--lcars-orange);
+        }
+
+        .action-list .action-type {
+            font-size: 0.85em;
+            color: var(--lcars-almond);
+        }
+
+        .shields-bar {
+            height: 20px;
+            background: var(--lcars-gray);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .shields-bar .fill {
+            height: 100%;
+            background: var(--lcars-ice);
+            transition: width 0.3s;
+            border-radius: 10px;
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .alert-success { background: var(--lcars-success); color: var(--lcars-text-dark); }
+        .alert-danger { background: var(--lcars-tomato); color: var(--lcars-text-dark); }
+        .alert-info { background: var(--lcars-ice); color: var(--lcars-text-dark); }
+
+        .dice-result {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            margin: 3px;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .dice-success { background: var(--lcars-success); color: var(--lcars-text-dark); }
+        .dice-crit { background: var(--lcars-ice); color: var(--lcars-text-dark); }
+        .dice-fail { background: var(--lcars-gray); color: var(--lcars-text); }
+        .dice-complication { background: var(--lcars-tomato); color: var(--lcars-text-dark); }
+
+        /* Status badges */
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        .status-done { background: var(--lcars-success); color: var(--lcars-text-dark); }
+        .status-rft { background: var(--lcars-orange); color: var(--lcars-text-dark); }
+        .status-not-impl { background: var(--lcars-gray); color: var(--lcars-text); }
+
+        /* Legacy color variable mappings */
+        :root {
+            --lcars-blue: var(--lcars-bluey);
+            --lcars-purple: var(--lcars-african-violet);
+            --lcars-tan: var(--lcars-almond);
+            --lcars-red: var(--lcars-tomato);
+            --lcars-green: var(--lcars-success);
+        }
+    </style>
+    {% block extra_styles %}{% endblock %}
+</head>
+<body>
+    <div class="lcars-app">
+        <div class="lcars-frame">
+            <!-- Left Sidebar -->
+            <aside class="lcars-sidebar">
+                <div class="lcars-elbow-top">
+                    <span class="elbow-text">LCARS 47988</span>
+                </div>
+                <nav class="lcars-sidebar-nav">
+                    <a href="{{ url_for('main.index') }}" class="lcars-sidebar-btn color-1">Home</a>
+                    <a href="{{ url_for('campaigns.player_home') }}" class="lcars-sidebar-btn color-2">Player</a>
+                    <a href="{{ url_for('campaigns.gm_home') }}" class="lcars-sidebar-btn color-3">Game Master</a>
+                    {% block sidebar_nav %}{% endblock %}
+                    <div class="lcars-spacer color-2"></div>
+                </nav>
+                <div class="lcars-elbow-bottom"></div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="lcars-main">
+                <!-- Header Bar -->
+                <header class="lcars-header">
+                    <div class="lcars-header-cap-left"></div>
+                    <div class="lcars-header-bar">
+                        <h1 class="lcars-title">{% block header %}STA Starship Simulator{% endblock %}</h1>
+                    </div>
+                    <div class="lcars-header-cap-right">
+                        <div class="data-cascade">
+                            <span>47</span>
+                            <span>21</span>
+                            <span>88</span>
+                            <span>03</span>
+                            <span>66</span>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- Content Area -->
+                <div class="lcars-content-wrapper">
+                    {% with messages = get_flashed_messages() %}
+                        {% if messages %}
+                            {% for message in messages %}
+                                <div class="lcars-alert alert-info">{{ message }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    {% block content %}{% endblock %}
+                </div>
+
+                <!-- Footer Bar -->
+                <footer class="lcars-footer">
+                    <div class="lcars-footer-bar"></div>
+                    <div class="lcars-footer-cap"></div>
+                </footer>
+            </main>
+        </div>
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
