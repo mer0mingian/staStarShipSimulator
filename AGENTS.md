@@ -261,45 +261,51 @@ See `ADDING_ACTIONS.md` for detailed examples and patterns.
 
 ## Testing
 
-**Run tests before pushing to GitHub!**
+**Run tests before committing - ALWAYS!**
+
+### Testing Practice (CRITICAL)
+
+1. **Before any commit**: Run `pytest` and ensure all tests pass
+2. **Add tests for new features**: Every new API endpoint, UI component, or business logic must have corresponding tests
+3. **Test coverage**: Aim for meaningful coverage of critical paths, not just line counts
+4. **Commit only after tests pass**: Never commit broken or untested code
+
+### Running Tests
 
 ```bash
-# Install test dependencies (first time only)
-pip install -r requirements-dev.txt
+# Activate virtual environment first
+source .venv/bin/activate
 
-# Run all tests
+# Run all tests (REQUIRED before committing)
 pytest
-
-# Run with coverage report
-pytest --cov=sta
-
-# Run specific test file
-pytest tests/test_turn_order.py
-
-# Run specific test class
-pytest tests/test_turn_order.py::TestTurnClaiming
 
 # Run with verbose output
 pytest -v
+
+# Run specific test file
+pytest tests/test_scene.py
+
+# Run specific test class
+pytest tests/test_scene.py::TestNarrativeSceneView
+
+# Run with coverage report
+pytest --cov=sta
 ```
 
 ### Test Structure
 - `tests/conftest.py` - Shared fixtures (test database, sample data, helpers)
+- `tests/test_scene.py` - Scene management, narrative views, NPC/picture APIs
 - `tests/test_turn_order.py` - Turn claiming, passing, alternation, round advancement
-- `tests/test_actions_tactical.py` - Tactical station actions
-- `tests/test_actions_science.py` - Science station actions
-- `tests/test_actions_conn.py` - Conn/Helm station actions
-- `tests/test_actions_engineering.py` - Engineering station actions
-- `tests/test_actions_command.py` - Command station actions
-- `tests/test_actions_standard.py` - Standard actions (Pass, etc.)
+- `tests/test_actions_*.py` - Station-specific action tests
 - `tests/test_action_logging.py` - Combat log functionality
+- `tests/test_visibility.py` - Fog/terrain visibility rules
 
 ### Writing New Tests
-When adding new actions, add corresponding tests that verify:
-1. Action executes successfully
-2. Action is correctly categorized as minor/major
-3. Turn order changes appropriately
-4. Action is logged to combat log
+When adding new features, add corresponding tests that verify:
+1. API endpoints return correct status codes and data
+2. Business logic produces expected results
+3. Edge cases and error conditions are handled
+4. UI templates render correctly for different scenarios
 
 ## Development Notes
 
