@@ -5,33 +5,61 @@ To maintain compatibility with the upstream branch, **create new tables** for ne
 
 ---
 
-## Milestone 1: Overview Screen Enhancements
+## Core Concept: Scene as First-Class Entity
+
+**Design Philosophy:** A Scene is the primary container for GM narrative context. Combat (starship or personnel) is a special type of scene activation, not a separate entity.
+
+```
+Scene
+├── Traits (visible to players when activated)
+├── Challenges (extended tasks with progress)
+├── Picture (optional visual)
+├── Stardate
+├── Characters Present
+└── Combat (optional)
+    ├── Starship Combat
+    └── Personnel/Social Combat (future)
+```
+
+**Workflow:**
+1. GM creates scenes ahead of time (prep)
+2. GM activates a scene → players see traits, challenges, picture
+3. GM can start combat within a scene → tactical map overlay
+4. Combat ends → scene continues with updated state
+
+---
+
+## Milestone 1: Overview Screen Enhancements (IN PROGRESS)
 **Goal:** Empower the GM to present scene context on the viewscreen.
 
 ### Database Changes (`sta/database/schema.py`)
-- Create NEW table `SceneRecord`:
+- ✅ Create NEW table `SceneRecord`:
     - `id` (PK)
-    - `encounter_id` (FK to encounters)
+    - `encounter_id` (FK to encounters, nullable - scene can exist without active combat)
+    - `campaign_id` (FK to campaigns - for pre-generated scenes)
     - `scene_picture_url` (String, nullable)
     - `scene_traits_json` (Text, default "[]")
     - `challenges_json` (Text, default "[]") - Structure: `[{name, progress, resistance, difficulty}]`
     - `stardate` (String, nullable)
     - `characters_present_json` (Text, default "[]") - List of Character IDs
+    - `is_active` (Boolean) - Scene activation state
+    - `name` (String) - Scene name for GM reference
 
-### Backend (`sta/web/routes/encounters.py`)
-- Load `SceneRecord` alongside `EncounterRecord` where applicable.
-- Add API endpoints for scene updates.
+### Backend
+- ✅ Load `SceneRecord` alongside `EncounterRecord` where applicable.
+- ✅ Add API endpoints for scene updates.
 
 ### Frontend
-- **GM View (`combat_gm.html`):**
-    - Add "Scene Settings" panel with input fields for Stardate, Picture URL.
-    - Add "Scene Traits" manager (Add/Remove tags).
-    - Add "Challenges" manager.
-- **Viewscreen (`combat_viewscreen.html`):**
-    - Add "Scene Info" panel (overlay or side tab).
-    - Display Stardate prominently.
-    - Display Scene Traits and Active Challenges.
-    - Support "Show Picture" mode (hides map/stats, shows image).
+- ✅ **GM View:** Stardate, Picture URL, Scene Traits inputs
+- ✅ **Viewscreen:** Display Stardate, Scene Traits, Challenges
+- ⬜ **Picture overlay mode** (show_picture toggle)
+- ⬜ **Challenges UI** with progress tracking
+
+### Remaining Work
+- [ ] Add `campaign_id` and `is_active` to SceneRecord
+- [ ] Scene management in campaign dashboard (create/edit scenes before encounter)
+- [ ] Scene activation notification to players
+- [ ] Picture overlay on viewscreen
 
 ---
 
@@ -70,8 +98,8 @@ To maintain compatibility with the upstream branch, **create new tables** for ne
 ### Database Changes
 - Create NEW table `PersonnelEncounterRecord`:
     - `id` (PK)
-    - `encounter_id` (FK to encounters, unique)
-    - `combat_type` (Enum: 'starship', 'personnel')
+    - `scene_id` (FK to scenes) - Combat lives within a scene
+    - `combat_type` (Enum: 'starship', 'personnel', 'social')
     - `character_positions_json` (Text) - Mapped to map coords.
     - `character_states_json` (Text) - Stress, injuries per character.
 
@@ -112,6 +140,12 @@ To maintain compatibility with the upstream branch, **create new tables** for ne
 - `templates/logs/list.html`: Timeline of logs.
 - `templates/logs/edit.html`: Editor with Markdown support.
 - PDF Export (using a library like `weasyprint` or client-side JS).
+
+---
+
+## Feature Ideas (Future)
+- **Pictures for Starships and Characters:** Add `picture_url` field to both for visual display on sheets/viewscreen
+- **Quickstart Presets:** Seed data for quick demo/development (restore after DB reset)
 
 ---
 
