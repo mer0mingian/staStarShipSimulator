@@ -93,7 +93,7 @@
                 <div style="margin-top: 10px;">
                     <span style="color: var(--lcars-tan); font-size: 0.85em;">Traits: </span>
                     {% for trait in active_scene_data.scene_traits %}
-                    <span style="background: var(--lcars-butterscotch); color: #000; padding: 2px 6px; border-radius: 8px; font-size: 0.75em; margin-right: 4px;">{{ trait }}</span>
+                    <span style="background: var(--lcars-butterscotch); color: #000; padding: 2px 6px; border-radius: 8px; font-size: 0.75em; margin-right: 4px;">{{ trait.name if trait.name else trait }}</span>
                     {% endfor %}
                 </div>
                 {% endif %}
@@ -132,16 +132,23 @@
             {% if is_gm %}
                 {% if active_ship %}
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <a href="{{ url_for('encounters.new_encounter') }}?campaign={{ campaign.campaign_id }}" class="btn">
-                            Start New Encounter
-                        </a>
-                        <button class="btn" onclick="showCreateSceneModal()" style="background: var(--lcars-butterscotch);">
-                            Create Scene
-                        </button>
+                        <div class="dropdown" style="position: relative;">
+                            <button class="btn" onclick="toggleSceneDropdown()" style="background: var(--lcars-butterscotch);">
+                                Create Scene ▾
+                            </button>
+                            <div id="scene-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #1a1a1a; border: 2px solid var(--lcars-butterscotch); border-radius: 8px; min-width: 200px; z-index: 100; margin-top: 5px;">
+                                <a href="#" onclick="createSceneWithType('narrative')" style="display: block; padding: 10px 15px; color: var(--lcars-text); text-decoration: none; border-bottom: 1px solid #333;">
+                                    🎬 Narrative Scene
+                                </a>
+                                <a href="#" onclick="createSceneWithType('starship_encounter')" style="display: block; padding: 10px 15px; color: var(--lcars-text); text-decoration: none;">
+                                    🚀 Starship Combat
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 {% else %}
                     <p style="color: var(--lcars-red); margin-top: 10px;">
-                        Add a ship to the campaign before starting an encounter
+                        Add a ship to the campaign before creating a scene
                     </p>
                 {% endif %}
             {% endif %}
@@ -1353,6 +1360,54 @@ function editEncounter(encounterId) {
 }
 
 // Scene Management Functions
+function toggleSceneDropdown() {
+    const dropdown = document.getElementById('scene-dropdown');
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(event) {
+    const dropdown = document.getElementById('scene-dropdown');
+    if (dropdown && !event.target.closest('.dropdown')) {
+        dropdown.style.display = 'none';
+    }
+});
+
+async function createSceneWithType(sceneType) {
+    // Hide dropdown
+    document.getElementById('scene-dropdown').style.display = 'none';
+    
+    // For starship_encounter, redirect to new encounter page
+    if (sceneType === 'starship_encounter') {
+        window.location.href = `/encounters/new?campaign={{ campaign.campaign_id }}`;
+        return;
+    }
+    
+    // For narrative, create scene and redirect
+    const data = {
+        name: 'New Narrative Scene',
+        scene_type: sceneType,
+        status: 'draft'
+    };
+    
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/scenes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) {
+            const result = await response.json();
+            window.location.href = `/scenes/${result.id}?role=gm`;
+        } else {
+            const result = await response.json();
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error creating scene: ' + error.message);
+    }
+}
+
 function showCreateSceneModal() {
     document.getElementById('create-scene-modal').style.display = 'flex';
     document.getElementById('scene-name').value = '';
@@ -1500,7 +1555,7 @@ async function doConvertScene(event) {
 }
 
 function editScene(sceneId) {
-    window.location.href = `/scenes/${sceneId}/edit`;
+    window.location.href = `/scenes/${sceneId}?role=gm`;
 }
 </script>
 {% endblock %}

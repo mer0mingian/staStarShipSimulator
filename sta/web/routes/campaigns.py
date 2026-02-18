@@ -2093,9 +2093,80 @@ def api_convert_scene(scene_id: int):
         # Verify GM status
         session_token = request.cookies.get("sta_session_token")
         gm = (
-            session.query(CampaignPlayerRecord)
-            .filter_by(campaign_id=scene.campaign_id, is_gm=True)
-            .first()
+            session.query(CampaignPlayerRecord).filter_by(
+                campaign_id=scene.campaign_id, is_gm=True
+            )
+        ).first()
+
+        if not gm or session_token != gm.session_token:
+            return jsonify({"error": "Only GM can convert scenes"}), 403
+
+        data = request.get_json()
+        new_type = data.get("scene_type")
+
+        if new_type not in (
+            "narrative",
+            "starship_encounter",
+            "personal_encounter",
+            "social_encounter",
+        ):
+            return jsonify({"error": "Invalid scene type"}), 400
+
+        # Validation for combat types
+        if new_type == "starship_encounter":
+            # Check for player ship
+            campaign = (
+                session.query(CampaignRecord).filter_by(id=scene.campaign_id).first()
+            )
+            if not campaign or not campaign.active_ship_id:
+                return jsonify(
+                    {
+                        "error": "Cannot convert to Starship Combat: No player ship assigned to campaign"
+                    }
+                ), 400
+
+            # Check for NPCs or NP ships
+            from sta.database import SceneNPCRecord
+
+            scene_npcs = (
+                session.query(SceneNPCRecord).filter_by(scene_id=scene.id).count()
+            )
+            if scene_npcs == 0:
+                return jsonify(
+                    {
+                        "error": "Cannot convert to Starship Combat: No NPC ships or characters in scene. Add NPCs first."
+                    }
+                ), 400
+
+        if new_type == "personal_encounter":
+            # Check for NPCs
+            from sta.database import SceneNPCRecord
+
+            scene_npcs = (
+                session.query(SceneNPCRecord).filter_by(scene_id=scene.id).count()
+            )
+            if scene_npcs == 0:
+                return jsonify(
+                    {
+                        "error": "Cannot convert to Personal Combat: No NPCs in scene. Add NPCs first."
+                    }
+                ), 400
+
+        old_type = scene.scene_type
+        scene.scene_type = new_type
+
+        # Update has_map based on type (social encounters don't have maps)
+        scene.has_map = new_type != "social_encounter"
+
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "old_type": old_type,
+                "new_type": new_type,
+                "message": f"Scene converted from {old_type} to {new_type}",
+            }
         )
 
         if not gm or session_token != gm.session_token:

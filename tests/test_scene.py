@@ -282,8 +282,42 @@ class TestCampaignSceneAPI:
         scene = SceneRecord(
             campaign_id=campaign_id,
             name="Test Scene",
-            scene_type="narrative",
+            scene_type="starship_encounter",
             has_map=True,
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        client.set_cookie("sta_session_token", gm_token)
+
+        response = client.put(
+            f"/campaigns/api/scene/{scene_id}/convert",
+            json={"scene_type": "narrative"},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["old_type"] == "starship_encounter"
+        assert data["new_type"] == "narrative"
+
+    def test_convert_to_starship_requires_player_ship(
+        self, client, sample_campaign, test_session
+    ):
+        """Converting to starship_encounter requires player ship."""
+        campaign_id = sample_campaign["campaign"].id
+        gm_token = sample_campaign["players"][0].session_token
+
+        # Create scene without active ship
+        from sta.database.schema import CampaignRecord
+
+        campaign = test_session.query(CampaignRecord).filter_by(id=campaign_id).first()
+        campaign.active_ship_id = None
+        test_session.commit()
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Test Scene",
+            scene_type="narrative",
         )
         test_session.add(scene)
         test_session.commit()
@@ -295,10 +329,33 @@ class TestCampaignSceneAPI:
             f"/campaigns/api/scene/{scene_id}/convert",
             json={"scene_type": "starship_encounter"},
         )
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["old_type"] == "narrative"
-        assert data["new_type"] == "starship_encounter"
+        assert response.status_code == 400
+        assert "player ship" in response.get_json()["error"].lower()
+
+    def test_convert_to_starship_requires_npcs(
+        self, client, sample_campaign, test_session
+    ):
+        """Converting to starship_encounter requires NPCs."""
+        campaign_id = sample_campaign["campaign"].id
+        gm_token = sample_campaign["players"][0].session_token
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Test Scene",
+            scene_type="narrative",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        client.set_cookie("sta_session_token", gm_token)
+
+        response = client.put(
+            f"/campaigns/api/scene/{scene_id}/convert",
+            json={"scene_type": "starship_encounter"},
+        )
+        assert response.status_code == 400
+        assert "npc" in response.get_json()["error"].lower()
 
     def test_convert_to_social_removes_map(self, client, sample_campaign, test_session):
         """Converting to social_encounter should set has_map=False."""
