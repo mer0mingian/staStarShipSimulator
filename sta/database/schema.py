@@ -438,3 +438,26 @@ class CampaignShipRecord(Base):
         default=True
     )  # Can be assigned as active
     added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class SceneRecord(Base):
+    """Scene information for an encounter (GM-presentable context)."""
+
+    __tablename__ = "scenes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id"), unique=True)
+
+    stardate: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    scene_picture_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    scene_traits_json: Mapped[str] = mapped_column(Text, default="[]")
+    challenges_json: Mapped[str] = mapped_column(Text, default="[]")
+    characters_present_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    show_picture: Mapped[bool] = mapped_column(default=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )

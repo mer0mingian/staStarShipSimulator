@@ -713,7 +713,7 @@
         <!-- Top Bar -->
         <div class="viewscreen-top-bar">
             <div class="viewscreen-top-left">
-                <span class="lcars-label">LCARS 47988</span>
+                <span class="lcars-label">{% if scene and scene.stardate %}STARDATE {{ scene.stardate }}{% else %}LCARS 47988{% endif %}</span>
             </div>
             <div class="viewscreen-top-main">
                 <span class="viewscreen-title">{{ encounter.name }}</span>
@@ -809,6 +809,39 @@
                         {% endfor %}
                     </div>
                 </div>
+                {% endif %}
+
+                {% if scene %}
+                <!-- Scene Info -->
+                {% if scene.scene_traits or scene.challenges %}
+                <div class="status-panel" style="border-color: var(--lcars-butterscotch);">
+                    <h3 style="color: var(--lcars-butterscotch);">SCENE</h3>
+                    {% if scene.scene_traits %}
+                    <div style="margin-bottom: 8px;">
+                        <div style="color: var(--lcars-almond); font-size: 0.9rem; margin-bottom: 4px;">Traits:</div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                            {% for trait in scene.scene_traits %}
+                            <span style="background: var(--lcars-butterscotch); color: var(--lcars-text-dark); padding: 2px 8px; border-radius: 10px; font-size: 0.85rem;">{{ trait }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if scene.challenges %}
+                    <div>
+                        <div style="color: var(--lcars-almond); font-size: 0.9rem; margin-bottom: 4px;">Challenges:</div>
+                        {% for challenge in scene.challenges %}
+                        <div style="background: #1a1a1a; border-radius: 5px; padding: 6px 10px; margin-bottom: 4px; border-left: 3px solid var(--lcars-ice);">
+                            <div style="color: var(--lcars-ice); font-size: 0.9rem;">{{ challenge.name }}</div>
+                            <div style="display: flex; gap: 4px; margin-top: 4px;">
+                                {% for i in range(challenge.progress | default(0)) %}<span style="width: 12px; height: 12px; background: var(--lcars-ice); border-radius: 2px;"></span>{% endfor %}
+                                {% for i in range((challenge.resistance | default(5)) - (challenge.progress | default(0))) %}<span style="width: 12px; height: 12px; background: #333; border-radius: 2px;"></span>{% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
                 {% endif %}
 
                 <!-- LCARS Data Fill - Left Column -->

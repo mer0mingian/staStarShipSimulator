@@ -9,6 +9,7 @@ from .schema import (
     CampaignRecord,
     CampaignPlayerRecord,
     CampaignShipRecord,
+    SceneRecord,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "CampaignRecord",
     "CampaignPlayerRecord",
     "CampaignShipRecord",
+    "SceneRecord",
 ]

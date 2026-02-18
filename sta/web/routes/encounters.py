@@ -4,8 +4,13 @@ import json
 import uuid
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from sta.database import (
-    get_session, EncounterRecord, CharacterRecord, StarshipRecord,
-    CampaignRecord, CampaignPlayerRecord
+    get_session,
+    EncounterRecord,
+    CharacterRecord,
+    StarshipRecord,
+    CampaignRecord,
+    CampaignPlayerRecord,
+    SceneRecord,
 )
 from sta.generators import generate_character, generate_starship
 from sta.generators.starship import generate_enemy_ship
@@ -29,9 +34,11 @@ def new_encounter():
         session = get_session()
         try:
             # Load campaign
-            campaign = session.query(CampaignRecord).filter_by(
-                campaign_id=campaign_id_param
-            ).first()
+            campaign = (
+                session.query(CampaignRecord)
+                .filter_by(campaign_id=campaign_id_param)
+                .first()
+            )
 
             if not campaign:
                 flash("Campaign not found")
@@ -42,7 +49,11 @@ def new_encounter():
             # Use campaign's active ship
             if not campaign.active_ship_id:
                 flash("No ship assigned to campaign. Please add a ship first.")
-                return redirect(url_for("campaigns.campaign_dashboard", campaign_id=campaign_id_param))
+                return redirect(
+                    url_for(
+                        "campaigns.campaign_dashboard", campaign_id=campaign_id_param
+                    )
+                )
 
             ship_id = campaign.active_ship_id
 
@@ -70,7 +81,9 @@ def new_encounter():
 
             enemy_ids = []
             for _ in range(enemy_count):
-                enemy = generate_enemy_ship(difficulty="standard", crew_quality=crew_quality)
+                enemy = generate_enemy_ship(
+                    difficulty="standard", crew_quality=crew_quality
+                )
                 enemy_record = StarshipRecord.from_model(enemy)
                 session.add(enemy_record)
                 session.flush()
@@ -109,9 +122,17 @@ def new_encounter():
 
             # Redirect based on status
             if initial_status == "draft":
-                return redirect(url_for("campaigns.campaign_dashboard", campaign_id=campaign.campaign_id))
+                return redirect(
+                    url_for(
+                        "campaigns.campaign_dashboard", campaign_id=campaign.campaign_id
+                    )
+                )
             # Otherwise, go to combat view as GM
-            return redirect(url_for("encounters.combat", encounter_id=encounter.encounter_id, role="gm"))
+            return redirect(
+                url_for(
+                    "encounters.combat", encounter_id=encounter.encounter_id, role="gm"
+                )
+            )
         finally:
             session.close()
 
@@ -119,9 +140,11 @@ def new_encounter():
     session = get_session()
     try:
         # Load campaign - required
-        campaign = session.query(CampaignRecord).filter_by(
-            campaign_id=campaign_id_param
-        ).first()
+        campaign = (
+            session.query(CampaignRecord)
+            .filter_by(campaign_id=campaign_id_param)
+            .first()
+        )
 
         if not campaign:
             flash("Campaign not found")
@@ -144,18 +167,18 @@ def edit_encounter(encounter_id: str):
     """Edit an existing encounter."""
     session = get_session()
     try:
-        encounter = session.query(EncounterRecord).filter_by(
-            encounter_id=encounter_id
-        ).first()
+        encounter = (
+            session.query(EncounterRecord).filter_by(encounter_id=encounter_id).first()
+        )
 
         if not encounter:
             flash("Encounter not found")
             return redirect(url_for("campaigns.gm_home"))
 
         # Load campaign
-        campaign = session.query(CampaignRecord).filter_by(
-            id=encounter.campaign_id
-        ).first()
+        campaign = (
+            session.query(CampaignRecord).filter_by(id=encounter.campaign_id).first()
+        )
 
         if not campaign:
             flash("Campaign not found")
@@ -178,15 +201,21 @@ def edit_encounter(encounter_id: str):
 
             session.commit()
             flash("Encounter updated successfully")
-            return redirect(url_for("campaigns.campaign_dashboard", campaign_id=campaign.campaign_id))
+            return redirect(
+                url_for(
+                    "campaigns.campaign_dashboard", campaign_id=campaign.campaign_id
+                )
+            )
 
         # GET - Load data for the form
         # Load player ship
         player_ship = None
         if encounter.player_ship_id:
-            player_ship = session.query(StarshipRecord).filter_by(
-                id=encounter.player_ship_id
-            ).first()
+            player_ship = (
+                session.query(StarshipRecord)
+                .filter_by(id=encounter.player_ship_id)
+                .first()
+            )
 
         # Load enemy ships
         enemy_ship_ids = json.loads(encounter.enemy_ship_ids_json or "[]")
@@ -228,9 +257,9 @@ def combat(encounter_id: str):
 
     session = get_session()
     try:
-        encounter = session.query(EncounterRecord).filter_by(
-            encounter_id=encounter_id
-        ).first()
+        encounter = (
+            session.query(EncounterRecord).filter_by(encounter_id=encounter_id).first()
+        )
 
         if not encounter:
             flash("Encounter not found")
@@ -239,16 +268,23 @@ def combat(encounter_id: str):
         # For GM role, verify they have a valid GM session for this campaign
         if role == "gm" and encounter.campaign_id:
             session_token = request.cookies.get("sta_session_token")
-            gm_player = session.query(CampaignPlayerRecord).filter_by(
-                campaign_id=encounter.campaign_id,
-                is_gm=True
-            ).first()
+            gm_player = (
+                session.query(CampaignPlayerRecord)
+                .filter_by(campaign_id=encounter.campaign_id, is_gm=True)
+                .first()
+            )
 
             if not gm_player or session_token != gm_player.session_token:
                 # Not authenticated as GM - redirect to GM login
-                campaign = session.query(CampaignRecord).filter_by(id=encounter.campaign_id).first()
+                campaign = (
+                    session.query(CampaignRecord)
+                    .filter_by(id=encounter.campaign_id)
+                    .first()
+                )
                 if campaign:
-                    return redirect(url_for("campaigns.gm_login", campaign_id=campaign.campaign_id))
+                    return redirect(
+                        url_for("campaigns.gm_login", campaign_id=campaign.campaign_id)
+                    )
                 else:
                     flash("Campaign not found")
                     return redirect(url_for("main.index"))
@@ -265,47 +301,65 @@ def combat(encounter_id: str):
         if encounter.campaign_id and role == "player":
             session_token = request.cookies.get("sta_session_token")
             if session_token:
-                current_campaign_player = session.query(CampaignPlayerRecord).filter_by(
-                    session_token=session_token,
-                    campaign_id=encounter.campaign_id
-                ).first()
+                current_campaign_player = (
+                    session.query(CampaignPlayerRecord)
+                    .filter_by(
+                        session_token=session_token, campaign_id=encounter.campaign_id
+                    )
+                    .first()
+                )
 
             # If player role but no campaign membership, redirect to join the campaign
             if not current_campaign_player:
                 # Get campaign_id string for redirect
-                campaign = session.query(CampaignRecord).filter_by(id=encounter.campaign_id).first()
+                campaign = (
+                    session.query(CampaignRecord)
+                    .filter_by(id=encounter.campaign_id)
+                    .first()
+                )
                 if campaign:
                     flash("Please join the campaign first to access this encounter.")
-                    return redirect(url_for("campaigns.join_campaign", campaign_id=campaign.campaign_id))
+                    return redirect(
+                        url_for(
+                            "campaigns.join_campaign", campaign_id=campaign.campaign_id
+                        )
+                    )
 
             if current_campaign_player and current_campaign_player.character_id:
                 # Use player's own character from their campaign membership
-                char_record = session.query(CharacterRecord).filter_by(
-                    id=current_campaign_player.character_id
-                ).first()
+                char_record = (
+                    session.query(CharacterRecord)
+                    .filter_by(id=current_campaign_player.character_id)
+                    .first()
+                )
                 if char_record:
                     player_char = char_record.to_model()
                     player_char_db_id = char_record.id
 
         # Fall back to encounter's player character if no campaign character found
         if not player_char and encounter.player_character_id:
-            char_record = session.query(CharacterRecord).filter_by(
-                id=encounter.player_character_id
-            ).first()
+            char_record = (
+                session.query(CharacterRecord)
+                .filter_by(id=encounter.player_character_id)
+                .first()
+            )
             if char_record:
                 player_char = char_record.to_model()
                 player_char_db_id = char_record.id
 
         if encounter.player_ship_id:
-            ship_record = session.query(StarshipRecord).filter_by(
-                id=encounter.player_ship_id
-            ).first()
+            ship_record = (
+                session.query(StarshipRecord)
+                .filter_by(id=encounter.player_ship_id)
+                .first()
+            )
             if ship_record:
                 player_ship = ship_record.to_model()
                 player_ship_db_id = ship_record.id
 
         # Load enemy ships
         import json
+
         enemy_ids = json.loads(encounter.enemy_ship_ids_json)
         enemy_ships = []
         enemy_ship_db_ids = []
@@ -324,37 +378,64 @@ def combat(encounter_id: str):
             pending_position = current_campaign_player.pending_position
             # Apply the pending position if it's the player's turn
             if encounter.current_turn == "player":
-                current_campaign_player.position = current_campaign_player.pending_position
+                current_campaign_player.position = (
+                    current_campaign_player.pending_position
+                )
                 current_campaign_player.pending_position = None
                 session.commit()
                 pending_position = None  # Clear since we applied it
 
         # Use campaign position if available (from earlier lookup), otherwise fall back to encounter's position
         player_campaign_position = None
-        if current_campaign_player and current_campaign_player.position and current_campaign_player.position != "unassigned":
+        if (
+            current_campaign_player
+            and current_campaign_player.position
+            and current_campaign_player.position != "unassigned"
+        ):
             player_campaign_position = current_campaign_player.position
 
-        position_value = player_campaign_position if player_campaign_position else encounter.player_position
+        position_value = (
+            player_campaign_position
+            if player_campaign_position
+            else encounter.player_position
+        )
         position = Position(position_value)
         actions = get_actions_for_position(position)
 
         # Load active effects
         from sta.models.combat import ActiveEffect
+
         active_effects_data = json.loads(encounter.active_effects_json)
         active_effects = [ActiveEffect.from_dict(e) for e in active_effects_data]
 
         # Calculate resistance bonus from active effects
         resistance_bonus = sum(
-            e.resistance_bonus for e in active_effects
+            e.resistance_bonus
+            for e in active_effects
             if e.applies_to in ("defense", "all") and e.resistance_bonus > 0
         )
 
         # Load campaign if encounter belongs to one
         campaign = None
         if encounter.campaign_id:
-            campaign = session.query(CampaignRecord).filter_by(
-                id=encounter.campaign_id
-            ).first()
+            campaign = (
+                session.query(CampaignRecord)
+                .filter_by(id=encounter.campaign_id)
+                .first()
+            )
+
+        # Load scene record
+        scene = session.query(SceneRecord).filter_by(encounter_id=encounter.id).first()
+        scene_data = None
+        if scene:
+            scene_data = {
+                "stardate": scene.stardate,
+                "scene_picture_url": scene.scene_picture_url,
+                "scene_traits": json.loads(scene.scene_traits_json or "[]"),
+                "challenges": json.loads(scene.challenges_json or "[]"),
+                "characters_present": json.loads(scene.characters_present_json or "[]"),
+                "show_picture": scene.show_picture,
+            }
 
         # Load tactical map data
         tactical_map_data = json.loads(encounter.tactical_map_json or "{}")
@@ -377,7 +458,7 @@ def combat(encounter_id: str):
             """Get positions that have been detected via Sensor Sweep."""
             detected = []
             for effect in effects:
-                if hasattr(effect, 'detected_position') and effect.detected_position:
+                if hasattr(effect, "detected_position") and effect.detected_position:
                     detected.append(effect.detected_position)
             return detected
 
@@ -416,7 +497,9 @@ def combat(encounter_id: str):
 
         # Check if player is in fog-blocking terrain (Bug #113 fix)
         # For GM view, hide player position if in fog and not detected by enemies
-        player_terrain = get_terrain_at_position(tactical_map_data, player_pos.get("q", 0), player_pos.get("r", 0))
+        player_terrain = get_terrain_at_position(
+            tactical_map_data, player_pos.get("q", 0), player_pos.get("r", 0)
+        )
         player_in_fog_early = player_terrain in VISIBILITY_BLOCKING_TERRAIN
 
         # Determine if player should be shown on map
@@ -430,21 +513,27 @@ def combat(encounter_id: str):
             # Check if any enemy is in same hex - then player is visible
             for i in range(len(json.loads(encounter.enemy_ship_ids_json or "[]"))):
                 enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 999, "r": 999})
-                if enemy_pos.get("q") == player_pos.get("q") and enemy_pos.get("r") == player_pos.get("r"):
+                if enemy_pos.get("q") == player_pos.get("q") and enemy_pos.get(
+                    "r"
+                ) == player_pos.get("r"):
                     show_player_on_map = True
                     break
 
         if player_ship and show_player_on_map:
-            ship_positions.append({
-                "id": "player",
-                "name": player_ship.name,
-                "faction": "player",
-                "position": player_pos
-            })
+            ship_positions.append(
+                {
+                    "id": "player",
+                    "name": player_ship.name,
+                    "faction": "player",
+                    "position": player_pos,
+                }
+            )
 
         # Get detected positions for visibility filtering (only applies to player role)
         # GM and viewscreen see all ships
-        detected_positions = get_detected_positions(active_effects) if role == "player" else []
+        detected_positions = (
+            get_detected_positions(active_effects) if role == "player" else []
+        )
 
         # Filter enemy_ships list by visibility for player role (Bug #107 fix)
         # This ensures the sidebar ship list only shows visible enemies
@@ -455,7 +544,9 @@ def combat(encounter_id: str):
             visible_enemy_indices = []  # Track original indices for position lookup
             for i, enemy in enumerate(enemy_ships):
                 enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
-                if is_enemy_visible(player_pos, enemy_pos, tactical_map_data, detected_positions):
+                if is_enemy_visible(
+                    player_pos, enemy_pos, tactical_map_data, detected_positions
+                ):
                     visible_enemy_ships.append(enemy)
                     visible_enemy_db_ids.append(enemy_ship_db_ids[i])
                     visible_enemy_indices.append(i)
@@ -468,14 +559,18 @@ def combat(encounter_id: str):
         # Enemy ship positions (use original indices for position lookup)
         for list_idx, enemy in enumerate(enemy_ships):
             original_idx = visible_enemy_indices[list_idx]
-            enemy_pos = ship_positions_data.get(f"enemy_{original_idx}", {"q": 2, "r": -1 + original_idx})
+            enemy_pos = ship_positions_data.get(
+                f"enemy_{original_idx}", {"q": 2, "r": -1 + original_idx}
+            )
 
-            ship_positions.append({
-                "id": f"enemy_{original_idx}",
-                "name": enemy.name,
-                "faction": "enemy",
-                "position": enemy_pos
-            })
+            ship_positions.append(
+                {
+                    "id": f"enemy_{original_idx}",
+                    "name": enemy.name,
+                    "faction": "enemy",
+                    "position": enemy_pos,
+                }
+            )
 
         # Calculate GM visibility variables (for fog-of-war on GM side)
         player_in_fog = False
@@ -487,7 +582,9 @@ def combat(encounter_id: str):
 
         if player_ship:
             # Check if player ship is in visibility-blocking terrain
-            player_terrain = get_terrain_at_position(tactical_map_data, player_pos.get("q", 0), player_pos.get("r", 0))
+            player_terrain = get_terrain_at_position(
+                tactical_map_data, player_pos.get("q", 0), player_pos.get("r", 0)
+            )
             player_in_fog = player_terrain in VISIBILITY_BLOCKING_TERRAIN
 
             player_q = player_pos.get("q", 0)
@@ -495,7 +592,9 @@ def combat(encounter_id: str):
 
             # Check if any enemy ship is in the same hex as player (always visible)
             for i, enemy in enumerate(enemy_ships):
-                enemy_pos_data = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
+                enemy_pos_data = ship_positions_data.get(
+                    f"enemy_{i}", {"q": 2, "r": -1 + i}
+                )
                 enemy_q = enemy_pos_data.get("q", 0)
                 enemy_r = enemy_pos_data.get("r", 0)
                 if hex_distance(player_q, player_r, enemy_q, enemy_r) == 0:
@@ -506,13 +605,19 @@ def combat(encounter_id: str):
             if not player_detected_by_enemy:
                 for effect in active_effects:
                     # Check for sensor sweep detection zones from enemy sources
-                    if effect.detected_position and effect.source_ship and effect.source_ship.startswith("enemy_"):
+                    if (
+                        effect.detected_position
+                        and effect.source_ship
+                        and effect.source_ship.startswith("enemy_")
+                    ):
                         # detected_position is the SCANNER's position
                         # Player is visible if within 1 hex of the scanner's position
                         scanner_pos = effect.detected_position
                         scanner_q = scanner_pos.get("q", 0)
                         scanner_r = scanner_pos.get("r", 0)
-                        distance = hex_distance(player_q, player_r, scanner_q, scanner_r)
+                        distance = hex_distance(
+                            player_q, player_r, scanner_q, scanner_r
+                        )
                         if distance <= 1:  # Same hex or adjacent
                             player_detected_by_enemy = True
                             break
@@ -532,11 +637,13 @@ def combat(encounter_id: str):
         is_multiplayer = False
 
         if encounter.campaign_id:
-            campaign_players_query = session.query(CampaignPlayerRecord).filter_by(
-                campaign_id=encounter.campaign_id,
-                is_active=True,
-                is_gm=False
-            ).all()
+            campaign_players_query = (
+                session.query(CampaignPlayerRecord)
+                .filter_by(
+                    campaign_id=encounter.campaign_id, is_active=True, is_gm=False
+                )
+                .all()
+            )
 
             is_multiplayer = len(campaign_players_query) > 1
 
@@ -544,13 +651,15 @@ def combat(encounter_id: str):
             players_turns_used = json.loads(encounter.players_turns_used_json or "{}")
             for cp in campaign_players_query:
                 player_data = players_turns_used.get(str(cp.id), {})
-                campaign_players.append({
-                    "id": cp.id,
-                    "name": cp.player_name,
-                    "position": cp.position,
-                    "has_acted": player_data.get("acted", False),
-                    "is_current": encounter.current_player_id == cp.id,
-                })
+                campaign_players.append(
+                    {
+                        "id": cp.id,
+                        "name": cp.player_name,
+                        "position": cp.position,
+                        "has_acted": player_data.get("acted", False),
+                        "is_current": encounter.current_player_id == cp.id,
+                    }
+                )
 
             # Get current player's info
             if current_campaign_player:
@@ -593,6 +702,8 @@ def combat(encounter_id: str):
             player_detected_by_enemy=player_detected_by_enemy,
             # Pending position change
             pending_position=pending_position,
+            # Scene info
+            scene=scene_data,
         )
     finally:
         session.close()
