@@ -947,6 +947,31 @@
                         </div>
                     </div>
 
+                    <!-- Scene Settings Row -->
+                    <div class="scene-row" style="margin-top: 15px; padding: 12px; background: rgba(255, 170, 0, 0.1); border: 2px solid var(--lcars-butterscotch); border-radius: 10px;">
+                        <h4 style="color: var(--lcars-butterscotch); margin: 0 0 10px 0; font-size: 1rem;">🎬 SCENE SETTINGS</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="color: var(--lcars-almond); font-size: 0.85rem;">Stardate:</label>
+                                <input type="text" id="scene-stardate" placeholder="e.g., 47988.5" style="width: 100%; margin-top: 4px;" onchange="updateScene()">
+                            </div>
+                            <div>
+                                <label style="color: var(--lcars-almond); font-size: 0.85rem;">Picture URL:</label>
+                                <input type="text" id="scene-picture-url" placeholder="https://..." style="width: 100%; margin-top: 4px;" onchange="updateScene()">
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <label style="color: var(--lcars-almond); font-size: 0.85rem;">Scene Traits (comma-separated):</label>
+                            <input type="text" id="scene-traits" placeholder="e.g., Dark, Dangerous, Flooded" style="width: 100%; margin-top: 4px;" onchange="updateScene()">
+                        </div>
+                        <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
+                            <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                <input type="checkbox" id="scene-show-picture" onchange="updateScene()">
+                                <span style="color: var(--lcars-almond); font-size: 0.85rem;">Show picture on viewscreen</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <!-- Two Column Layout: Player Ship & Crew | Enemy Ships -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                         <!-- Player Ship & Crew Column -->
@@ -1667,6 +1692,60 @@
             const data = await response.json();
             document.getElementById('threat').textContent = data.threat;
         }
+
+        // ===== SCENE MANAGEMENT =====
+        let sceneData = {
+            stardate: null,
+            scene_picture_url: null,
+            scene_traits: [],
+            challenges: [],
+            characters_present: [],
+            show_picture: false
+        };
+
+        async function loadScene() {
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/scene`);
+                if (response.ok) {
+                    sceneData = await response.json();
+                    document.getElementById('scene-stardate').value = sceneData.stardate || '';
+                    document.getElementById('scene-picture-url').value = sceneData.scene_picture_url || '';
+                    document.getElementById('scene-traits').value = (sceneData.scene_traits || []).join(', ');
+                    document.getElementById('scene-show-picture').checked = sceneData.show_picture || false;
+                }
+            } catch (err) {
+                console.error('Failed to load scene:', err);
+            }
+        }
+
+        async function updateScene() {
+            const stardate = document.getElementById('scene-stardate').value.trim() || null;
+            const pictureUrl = document.getElementById('scene-picture-url').value.trim() || null;
+            const traitsText = document.getElementById('scene-traits').value.trim();
+            const traits = traitsText ? traitsText.split(',').map(t => t.trim()).filter(t => t) : [];
+            const showPicture = document.getElementById('scene-show-picture').checked;
+
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/scene`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        stardate: stardate,
+                        scene_picture_url: pictureUrl,
+                        scene_traits: traits,
+                        show_picture: showPicture
+                    })
+                });
+                if (response.ok) {
+                    sceneData = await response.json();
+                }
+            } catch (err) {
+                console.error('Failed to update scene:', err);
+            }
+        }
+
+        // Load scene on page load
+        loadScene();
 
         // Viewscreen Audio Toggle
         let viewscreenAudioEnabled = {{ 'true' if encounter.viewscreen_audio_enabled is not defined or encounter.viewscreen_audio_enabled else 'false' }};
