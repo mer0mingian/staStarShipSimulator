@@ -79,10 +79,9 @@ Scene
 - ✅ Extended Tasks section in narrative GM view
 - ✅ NPC visibility toggles in narrative scenes
 - ✅ Add NPC button and modal for narrative scenes
-- ⬜ Picture gallery/upload system
+- ✅ Picture gallery/upload system
 
-### Remaining Work
-- [ ] Add picture gallery/upload system
+### Milestone 1 Complete ✅
 
 ---
 

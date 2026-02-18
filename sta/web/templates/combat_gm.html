@@ -986,6 +986,23 @@
                                 <span style="color: var(--lcars-almond); font-size: 0.85rem;">Show picture on viewscreen</span>
                             </label>
                         </div>
+                        
+                        <!-- Picture Gallery -->
+                        <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #444;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="color: var(--lcars-almond); font-size: 0.85rem;">Picture Gallery:</span>
+                                <div style="display: flex; gap: 8px;">
+                                    <button class="btn btn-small" onclick="showAddPictureUrlModal()" style="background: var(--lcars-bluey); color: #fff; font-size: 0.75rem; padding: 4px 10px;">+ URL</button>
+                                    <label class="btn btn-small" style="background: var(--lcars-success); color: #000; font-size: 0.75rem; padding: 4px 10px; cursor: pointer;">
+                                        Upload
+                                        <input type="file" accept="image/*" onchange="uploadPictureFile(event)" style="display: none;">
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="picture-gallery" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 60px;">
+                                <span style="color: #666; font-size: 0.8rem;">Loading...</span>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Extended Tasks (for narrative scenes) -->
@@ -3251,6 +3268,141 @@
                 showToast('Error removing NPC', 'error');
                 console.error(err);
             }
+        }
+
+        // ===== PICTURE GALLERY MANAGEMENT =====
+        async function loadPictureGallery() {
+            if (!sceneId) return;
+            
+            try {
+                const response = await fetch(`/scenes/${sceneId}/pictures`);
+                const data = await response.json();
+                
+                const gallery = document.getElementById('picture-gallery');
+                if (!gallery) return;
+                
+                if (data.pictures && data.pictures.length > 0) {
+                    gallery.innerHTML = data.pictures.map(pic => `
+                        <div class="picture-thumb" data-id="${pic.id}" style="position: relative; width: 80px; height: 60px; border-radius: 6px; overflow: hidden; border: 2px solid ${pic.is_active ? 'var(--lcars-success)' : '#444'}; cursor: pointer;" onclick="activatePicture(${pic.id})">
+                            <img src="${pic.url}" style="width: 100%; height: 100%; object-fit: cover;">
+                            <button onclick="event.stopPropagation(); deletePicture(${pic.id})" style="position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.7); border: none; color: #fff; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; font-size: 12px;">×</button>
+                            ${pic.is_active ? '<div style="position: absolute; bottom: 0; left: 0; right: 0; background: var(--lcars-success); color: #000; font-size: 0.6rem; text-align: center; padding: 1px;">ACTIVE</div>' : ''}
+                        </div>
+                    `).join('');
+                } else {
+                    gallery.innerHTML = '<span style="color: #666; font-size: 0.8rem;">No pictures. Add a URL or upload an image.</span>';
+                }
+            } catch (err) {
+                console.error('Failed to load pictures:', err);
+            }
+        }
+
+        function showAddPictureUrlModal() {
+            const url = prompt('Enter image URL:');
+            if (url && url.trim()) {
+                addPictureUrl(url.trim());
+            }
+        }
+
+        async function addPictureUrl(url) {
+            try {
+                const response = await fetch(`/scenes/${sceneId}/pictures`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Picture added', 'success');
+                    loadPictureGallery();
+                } else {
+                    showToast(data.error || 'Failed to add picture', 'error');
+                }
+            } catch (err) {
+                showToast('Error adding picture', 'error');
+                console.error(err);
+            }
+        }
+
+        async function uploadPictureFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch(`/scenes/${sceneId}/pictures/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Picture uploaded', 'success');
+                    loadPictureGallery();
+                } else {
+                    showToast(data.error || 'Failed to upload picture', 'error');
+                }
+            } catch (err) {
+                showToast('Error uploading picture', 'error');
+                console.error(err);
+            }
+            
+            event.target.value = '';
+        }
+
+        async function activatePicture(pictureId) {
+            try {
+                const response = await fetch(`/scenes/${sceneId}/pictures/${pictureId}/activate`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Picture activated', 'success');
+                    loadPictureGallery();
+                    if (document.getElementById('scene-show-picture')) {
+                        document.getElementById('scene-show-picture').checked = true;
+                    }
+                } else {
+                    showToast(data.error || 'Failed to activate picture', 'error');
+                }
+            } catch (err) {
+                showToast('Error activating picture', 'error');
+                console.error(err);
+            }
+        }
+
+        async function deletePicture(pictureId) {
+            if (!confirm('Delete this picture?')) return;
+            
+            try {
+                const response = await fetch(`/scenes/${sceneId}/pictures/${pictureId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Picture deleted', 'success');
+                    loadPictureGallery();
+                } else {
+                    showToast(data.error || 'Failed to delete picture', 'error');
+                }
+            } catch (err) {
+                showToast('Error deleting picture', 'error');
+                console.error(err);
+            }
+        }
+
+        // Load pictures on page load
+        if (sceneId) {
+            loadPictureGallery();
         }
 
         // ===== EXTENDED TASKS MANAGEMENT =====
