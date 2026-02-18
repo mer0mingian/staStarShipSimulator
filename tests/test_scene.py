@@ -659,3 +659,207 @@ class TestNarrativeSceneView:
         html = response.get_data(as_text=True)
         assert "Ambassador Sarek" in html
         assert "Secret Agent" not in html
+
+
+class TestSceneNPCManagement:
+    """Tests for NPC management in scenes."""
+
+    def test_add_npc_from_archive_to_scene(self, client, sample_campaign, test_session):
+        """POST /scenes/<id>/npcs should add an NPC from archive to scene."""
+        from sta.database.schema import NPCRecord
+
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Bridge",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.flush()
+
+        npc = NPCRecord(name="Dr. Crusher", npc_type="major")
+        test_session.add(npc)
+        test_session.flush()
+
+        scene_id = scene.id
+        npc_id = npc.id
+        test_session.commit()
+
+        response = client.post(
+            f"/scenes/{scene_id}/npcs",
+            json={"npc_id": npc_id, "is_visible": True},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["name"] == "Dr. Crusher"
+        assert data["is_visible"] is True
+
+    def test_add_quick_npc_to_scene(self, client, sample_campaign, test_session):
+        """POST /scenes/<id>/npcs should create a quick NPC and add to scene."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Cargo Bay",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.post(
+            f"/scenes/{scene_id}/npcs",
+            json={
+                "quick_name": "Ensign Random",
+                "quick_description": "Red shirt",
+                "is_visible": False,
+            },
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["name"] == "Ensign Random"
+        assert data["npc_type"] == "quick"
+
+    def test_add_npc_already_in_scene_fails(
+        self, client, sample_campaign, test_session
+    ):
+        """Adding an NPC already in the scene should fail."""
+        from sta.database.schema import NPCRecord, SceneNPCRecord
+
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Ten Forward",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.flush()
+
+        npc = NPCRecord(name="Guinan", npc_type="major")
+        test_session.add(npc)
+        test_session.flush()
+
+        scene_npc = SceneNPCRecord(scene_id=scene.id, npc_id=npc.id)
+        test_session.add(scene_npc)
+        test_session.commit()
+
+        scene_id = scene.id
+        npc_id = npc.id
+
+        response = client.post(f"/scenes/{scene_id}/npcs", json={"npc_id": npc_id})
+        assert response.status_code == 400
+        assert "already in scene" in response.get_json()["error"]
+
+    def test_remove_npc_from_scene(self, client, sample_campaign, test_session):
+        """DELETE /scenes/<id>/npcs/<npc_id> should remove NPC from scene."""
+        from sta.database.schema import NPCRecord, SceneNPCRecord
+
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Sickbay",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.flush()
+
+        npc = NPCRecord(name="Nurse Ogawa", npc_type="notable")
+        test_session.add(npc)
+        test_session.flush()
+
+        scene_npc = SceneNPCRecord(
+            scene_id=scene.id, npc_id=npc.id, is_visible_to_players=True
+        )
+        test_session.add(scene_npc)
+        test_session.flush()
+
+        scene_id = scene.id
+        scene_npc_id = scene_npc.id
+        test_session.commit()
+
+        response = client.delete(f"/scenes/{scene_id}/npcs/{scene_npc_id}")
+        assert response.status_code == 200
+        assert response.get_json()["success"] is True
+
+    def test_get_available_npcs(self, client, sample_campaign, test_session):
+        """GET /scenes/<id>/npcs/available should list NPCs not yet in scene."""
+        from sta.database.schema import NPCRecord, CampaignNPCRecord, SceneNPCRecord
+
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Conference Room",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.flush()
+
+        npc1 = NPCRecord(name="Worf", npc_type="major")
+        npc2 = NPCRecord(name="Troi", npc_type="major")
+        test_session.add_all([npc1, npc2])
+        test_session.flush()
+
+        campaign_npc1 = CampaignNPCRecord(campaign_id=campaign_id, npc_id=npc1.id)
+        campaign_npc2 = CampaignNPCRecord(campaign_id=campaign_id, npc_id=npc2.id)
+        test_session.add_all([campaign_npc1, campaign_npc2])
+
+        scene_npc = SceneNPCRecord(scene_id=scene.id, npc_id=npc1.id)
+        test_session.add(scene_npc)
+
+        scene_id = scene.id
+        test_session.commit()
+
+        response = client.get(f"/scenes/{scene_id}/npcs/available")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["npcs"]) == 1
+        assert data["npcs"][0]["name"] == "Troi"
+
+    def test_toggle_npc_visibility(self, client, sample_campaign, test_session):
+        """PUT /scenes/<id>/npcs/<npc_id>/visibility should toggle visibility."""
+        from sta.database.schema import NPCRecord, SceneNPCRecord
+
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Observation Lounge",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.flush()
+
+        npc = NPCRecord(name="Riker", npc_type="major")
+        test_session.add(npc)
+        test_session.flush()
+
+        scene_npc = SceneNPCRecord(
+            scene_id=scene.id, npc_id=npc.id, is_visible_to_players=False
+        )
+        test_session.add(scene_npc)
+        test_session.flush()
+
+        scene_id = scene.id
+        scene_npc_id = scene_npc.id
+        test_session.commit()
+
+        response = client.put(
+            f"/scenes/{scene_id}/npcs/{scene_npc_id}/visibility",
+            json={"is_visible": True},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["is_visible"] is True

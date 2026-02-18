@@ -9,6 +9,7 @@ from sta.database import (
     CampaignPlayerRecord,
     SceneNPCRecord,
     NPCRecord,
+    CampaignNPCRecord,
     StarshipRecord,
 )
 
@@ -221,5 +222,143 @@ def toggle_npc_visibility(scene_id: int, npc_id: int):
         session.commit()
 
         return jsonify({"success": True, "is_visible": scene_npc.is_visible_to_players})
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/npcs/available", methods=["GET"])
+def get_available_npcs(scene_id: int):
+    """Get NPCs available to add to scene (from campaign manifest + archive)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        campaign_id = scene.campaign_id
+
+        available = []
+
+        campaign_npcs = (
+            session.query(CampaignNPCRecord).filter_by(campaign_id=campaign_id).all()
+        )
+        for cn in campaign_npcs:
+            npc = session.query(NPCRecord).filter_by(id=cn.npc_id).first()
+            if npc:
+                existing = (
+                    session.query(SceneNPCRecord)
+                    .filter_by(scene_id=scene_id, npc_id=npc.id)
+                    .first()
+                )
+                if not existing:
+                    available.append(
+                        {
+                            "id": npc.id,
+                            "name": npc.name,
+                            "npc_type": npc.npc_type,
+                            "source": "campaign",
+                        }
+                    )
+
+        return jsonify({"npcs": available})
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/npcs", methods=["POST"])
+def add_npc_to_scene(scene_id: int):
+    """Add an NPC to a scene."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        data = request.get_json() or {}
+
+        max_order = session.query(SceneNPCRecord).filter_by(scene_id=scene_id).count()
+
+        if data.get("npc_id"):
+            npc_id = data["npc_id"]
+            npc = session.query(NPCRecord).filter_by(id=npc_id).first()
+            if not npc:
+                return jsonify({"error": "NPC not found"}), 404
+
+            existing = (
+                session.query(SceneNPCRecord)
+                .filter_by(scene_id=scene_id, npc_id=npc_id)
+                .first()
+            )
+            if existing:
+                return jsonify({"error": "NPC already in scene"}), 400
+
+            scene_npc = SceneNPCRecord(
+                scene_id=scene_id,
+                npc_id=npc_id,
+                is_visible_to_players=data.get("is_visible", False),
+                order_index=max_order,
+            )
+            session.add(scene_npc)
+            session.commit()
+
+            return jsonify(
+                {
+                    "success": True,
+                    "scene_npc_id": scene_npc.id,
+                    "name": npc.name,
+                    "npc_type": npc.npc_type,
+                    "is_visible": scene_npc.is_visible_to_players,
+                }
+            )
+
+        elif data.get("quick_name"):
+            quick_name = data["quick_name"].strip()
+            if not quick_name:
+                return jsonify({"error": "Name is required"}), 400
+
+            scene_npc = SceneNPCRecord(
+                scene_id=scene_id,
+                quick_name=quick_name,
+                quick_description=data.get("quick_description", ""),
+                is_visible_to_players=data.get("is_visible", False),
+                order_index=max_order,
+            )
+            session.add(scene_npc)
+            session.commit()
+
+            return jsonify(
+                {
+                    "success": True,
+                    "scene_npc_id": scene_npc.id,
+                    "name": quick_name,
+                    "npc_type": "quick",
+                    "is_visible": scene_npc.is_visible_to_players,
+                }
+            )
+
+        else:
+            return jsonify({"error": "npc_id or quick_name required"}), 400
+
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/npcs/<int:scene_npc_id>", methods=["DELETE"])
+def remove_npc_from_scene(scene_id: int, scene_npc_id: int):
+    """Remove an NPC from a scene."""
+    session = get_session()
+    try:
+        scene_npc = (
+            session.query(SceneNPCRecord)
+            .filter_by(id=scene_npc_id, scene_id=scene_id)
+            .first()
+        )
+        if not scene_npc:
+            return jsonify({"error": "NPC not found in scene"}), 404
+
+        session.delete(scene_npc)
+        session.commit()
+
+        return jsonify({"success": True})
     finally:
         session.close()

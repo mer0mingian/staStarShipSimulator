@@ -77,11 +77,11 @@ Scene
 - ✅ Narrative scene viewscreen (reuses combat_viewscreen.html)
 - ✅ Narrative scene player view (reuses combat.html)
 - ✅ Extended Tasks section in narrative GM view
-- ⬜ NPC visibility toggles in narrative scenes
+- ✅ NPC visibility toggles in narrative scenes
+- ✅ Add NPC button and modal for narrative scenes
 - ⬜ Picture gallery/upload system
 
 ### Remaining Work
-- [ ] Add NPC management UI for scenes (visibility toggles)
 - [ ] Add picture gallery/upload system
 
 ---
