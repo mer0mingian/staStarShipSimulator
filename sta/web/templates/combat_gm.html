@@ -956,146 +956,180 @@
                     {% endif %}
 
                     <!-- Scene Settings Row -->
-                    <div class="scene-row" style="margin-top: 15px; padding: 12px; background: rgba(255, 170, 0, 0.1); border: 2px solid var(--lcars-butterscotch); border-radius: 10px;">
-                        <h4 style="color: var(--lcars-butterscotch); margin: 0 0 10px 0; font-size: 1rem;">🎬 SCENE SETTINGS</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="scene-row" style="margin-top: 15px; padding: 16px; background: rgba(255, 170, 0, 0.1); border: 2px solid var(--lcars-butterscotch); border-radius: 10px;">
+                        <h4 style="color: var(--lcars-butterscotch); margin: 0 0 12px 0; font-size: 1.2rem;">🎬 SCENE SETTINGS</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                             <div>
-                                <label style="color: var(--lcars-almond); font-size: 0.85rem;">Stardate:</label>
-                                <input type="text" id="scene-stardate" placeholder="e.g., 47988.5" style="width: 100%; margin-top: 4px;" onchange="updateScene()" value="{% if scene %}{{ scene.stardate }}{% endif %}">
+                                <label style="color: var(--lcars-almond); font-size: 1rem;">Stardate:</label>
+                                <input type="text" id="scene-stardate" placeholder="e.g., 47988.5" style="width: 100%; margin-top: 6px; padding: 10px; font-size: 1rem;" onchange="updateScene()" value="{% if scene %}{{ scene.stardate }}{% endif %}">
                             </div>
                             <div>
-                                <label style="color: var(--lcars-almond); font-size: 0.85rem;">Picture URL:</label>
-                                <input type="text" id="scene-picture-url" placeholder="https://..." style="width: 100%; margin-top: 4px;" onchange="updateScene()" value="{% if scene %}{{ scene.scene_picture_url }}{% endif %}">
+                                <label style="color: var(--lcars-almond); font-size: 1rem;">Picture URL:</label>
+                                <input type="text" id="scene-picture-url" placeholder="https://..." style="width: 100%; margin-top: 6px; padding: 10px; font-size: 1rem;" onchange="updateScene()" value="{% if scene %}{{ scene.scene_picture_url }}{% endif %}">
                             </div>
                         </div>
-                        <div style="margin-top: 10px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                                <label style="color: var(--lcars-almond); font-size: 0.85rem;">Scene Traits:</label>
-                                <button class="btn btn-small" onclick="showAddSceneTraitModal()" style="background: var(--lcars-butterscotch); color: #000; font-size: 0.75rem; padding: 4px 10px;">+ Add Trait</button>
+                        <div style="margin-top: 15px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <label style="color: var(--lcars-almond); font-size: 1rem;">Scene Traits:</label>
+                                <button class="btn" onclick="showAddSceneTraitModal()" style="background: var(--lcars-butterscotch); color: #000; font-size: 1rem; padding: 8px 20px;">+ Add Trait</button>
                             </div>
-                            <div id="scene-traits-display" style="display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px;">
+                            <div id="scene-traits-display" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 32px;">
                                 {% if scene and scene.scene_traits %}
                                     {% for trait in scene.scene_traits %}
-                                    <span style="background: var(--lcars-butterscotch); color: #000; padding: 4px 10px; border-radius: 12px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
+                                    <span style="background: var(--lcars-butterscotch); color: #000; padding: 8px 14px; border-radius: 12px; font-size: 1rem; display: inline-flex; align-items: center; gap: 8px;">
                                         {{ trait.name if trait.name else trait }}
-                                        <button onclick="removeSceneTrait({{ loop.index0 }})" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold; padding: 0; font-size: 1rem;">&times;</button>
+                                        <button onclick="removeSceneTrait({{ loop.index0 }})" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold; padding: 0; font-size: 1.2rem;">&times;</button>
                                     </span>
                                     {% endfor %}
                                 {% endif %}
                             </div>
                         </div>
-                        <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
-                            <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                <input type="checkbox" id="scene-show-picture" onchange="updateScene()" {% if scene and scene.show_picture %}checked{% endif %}>
-                                <span style="color: var(--lcars-almond); font-size: 0.85rem;">Show picture on viewscreen</span>
+                        <div style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="scene-show-picture" onchange="updateScene()" {% if scene and scene.show_picture %}checked{% endif %} style="width: 20px; height: 20px;">
+                                <span style="color: var(--lcars-almond); font-size: 1rem;">Show picture on viewscreen</span>
                             </label>
                         </div>
                         
                         <!-- Picture Gallery -->
-                        <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #444;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <span style="color: var(--lcars-almond); font-size: 0.85rem;">Picture Gallery:</span>
-                                <div style="display: flex; gap: 8px;">
-                                    <button class="btn btn-small" onclick="showAddPictureUrlModal()" style="background: var(--lcars-bluey); color: #fff; font-size: 0.75rem; padding: 4px 10px;">+ URL</button>
-                                    <label class="btn btn-small" style="background: var(--lcars-success); color: #000; font-size: 0.75rem; padding: 4px 10px; cursor: pointer;">
+                        <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid #444;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <span style="color: var(--lcars-almond); font-size: 1rem;">Picture Gallery:</span>
+                                <div style="display: flex; gap: 12px;">
+                                    <button class="btn" onclick="showAddPictureUrlModal()" style="background: var(--lcars-bluey); color: #fff; font-size: 1rem; padding: 8px 20px;">+ URL</button>
+                                    <label class="btn" style="background: var(--lcars-success); color: #000; font-size: 1rem; padding: 8px 20px; cursor: pointer;">
                                         Upload
                                         <input type="file" accept="image/*" onchange="uploadPictureFile(event)" style="display: none;">
                                     </label>
                                 </div>
                             </div>
-                            <div id="picture-gallery" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 60px;">
-                                <span style="color: #666; font-size: 0.8rem;">Loading...</span>
+                            <div id="picture-gallery" style="display: flex; flex-wrap: wrap; gap: 10px; min-height: 70px;">
+                                <span style="color: #666; font-size: 1rem;">Loading...</span>
                             </div>
                         </div>
                     </div>
 
                     <!-- Extended Tasks (for narrative scenes) -->
                     {% if is_narrative %}
-                    <div class="extended-tasks-row" style="margin-top: 15px; padding: 12px; background: rgba(255, 153, 0, 0.1); border: 2px solid var(--lcars-orange); border-radius: 10px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <h4 style="color: var(--lcars-orange); margin: 0; font-size: 1rem;">📋 EXTENDED TASKS</h4>
-                            <button class="btn btn-small" onclick="showAddExtendedTaskModal()" style="background: var(--lcars-orange); color: #000; font-size: 0.75rem; padding: 4px 10px;">+ Add Task</button>
+                    <div class="extended-tasks-row" style="margin-top: 15px; padding: 16px; background: rgba(255, 153, 0, 0.1); border: 2px solid var(--lcars-orange); border-radius: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h4 style="color: var(--lcars-orange); margin: 0; font-size: 1.2rem;">📋 EXTENDED TASKS</h4>
+                            <button class="btn" onclick="showAddExtendedTaskModal()" style="background: var(--lcars-orange); color: #000; font-size: 1rem; padding: 8px 20px;">+ Add Task</button>
                         </div>
                         <div id="extended-tasks-list">
                             {% if scene and scene.challenges %}
                             {% for task in scene.challenges %}
-                            <div class="extended-task-item" data-task-index="{{ loop.index0 }}" style="background: #1a1a1a; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 4px solid var(--lcars-orange);">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                    <strong style="color: var(--lcars-text);">{{ task.name }}</strong>
-                                    <div style="display: flex; align-items: center; gap: 8px;">
-                                        <span style="color: var(--lcars-almond); font-size: 0.85rem;">{{ task.progress }}/{{ task.magnitude * 5 }}</span>
-                                        <button class="btn btn-small" onclick="adjustExtendedTaskProgress({{ loop.index0 }}, 1)" style="padding: 2px 8px; font-size: 0.75rem; background: var(--lcars-success);">+</button>
-                                        <button class="btn btn-small" onclick="adjustExtendedTaskProgress({{ loop.index0 }}, -1)" style="padding: 2px 8px; font-size: 0.75rem; background: var(--lcars-tomato);">-</button>
-                                        <button class="btn btn-small" onclick="removeExtendedTask({{ loop.index0 }})" style="padding: 2px 8px; font-size: 0.75rem; background: #666;">×</button>
+                            {% set track_length = task.track_length | default(10) %}
+                            {% set difficulty = task.difficulty | default(2) %}
+                            <div class="extended-task-item" data-task-index="{{ loop.index0 }}" style="background: #1a1a1a; border-radius: 8px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--lcars-orange);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <strong style="color: var(--lcars-text); font-size: 1.1rem;">{{ task.name }}</strong>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <span style="color: var(--lcars-almond); font-size: 1rem;">{{ task.progress | default(0) }}/{{ track_length }}</span>
+                                        <button class="btn" onclick="adjustExtendedTaskProgress({{ loop.index0 }}, 1)" style="padding: 6px 16px; font-size: 1rem; background: var(--lcars-success);">+</button>
+                                        <button class="btn" onclick="adjustExtendedTaskProgress({{ loop.index0 }}, -1)" style="padding: 6px 16px; font-size: 1rem; background: var(--lcars-tomato);">-</button>
+                                        <button class="btn" onclick="removeExtendedTask({{ loop.index0 }})" style="padding: 6px 16px; font-size: 1rem; background: #666;">×</button>
                                     </div>
                                 </div>
-                                <div style="display: flex; gap: 10px; font-size: 0.8rem; color: var(--lcars-almond); margin-bottom: 8px;">
-                                    <span>Magnitude: {{ task.magnitude }}</span>
-                                    {% if task.resistance %}<span>Resistance: {{ task.resistance }}</span>{% endif %}
-                                </div>
-                                <div style="background: #333; border-radius: 4px; height: 12px; position: relative;">
-                                    <div style="background: var(--lcars-orange); height: 100%; border-radius: 4px; width: {{ (task.progress / (task.magnitude * 5) * 100) | int }}%;"></div>
-                                    {% if task.magnitude * 5 > 0 %}
-                                    <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: {% if task.progress >= (task.magnitude * 5 * 0.5) %}var(--lcars-success){% else %}#555{% endif %};"></div>
-                                    <div style="position: absolute; left: 75%; top: 0; bottom: 0; width: 2px; background: {% if task.progress >= (task.magnitude * 5 * 0.75) %}var(--lcars-success){% else %}#555{% endif %};"></div>
+                                <div style="display: flex; flex-wrap: wrap; gap: 15px; font-size: 0.95rem; color: var(--lcars-almond); margin-bottom: 10px;">
+                                    <span><strong>Difficulty:</strong> {{ difficulty }}</span>
+                                    <span><strong>Track:</strong> {{ track_length }} spaces</span>
+                                    {% if task.resistance %}<span><strong>Resistance:</strong> {{ task.resistance }}</span>{% endif %}
+                                    {% if task.time_intervals and task.time_intervals.enabled %}
+                                    <span style="color: var(--lcars-tomato);"><strong>⏱ Time:</strong> {{ task.time_intervals.remaining | default(task.time_intervals.total) }}/{{ task.time_intervals.total }} {{ task.time_intervals.interval_length }}</span>
                                     {% endif %}
-                             </div>
-                             <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: #666; margin-top: 4px;">
-                                 <span>50% {% if task.breakthrough_1 %}✓ {{ task.breakthrough_1.effect if task.breakthrough_1.effect else 'Breakthrough' }}{% endif %}</span>
-                                 <span>75% {% if task.breakthrough_2 %}✓ {{ task.breakthrough_2.effect if task.breakthrough_2.effect else 'Breakthrough' }}{% endif %}</span>
-                             </div>
-                             {% if task.breakthrough_1 and task.breakthrough_1.effect and task.progress >= (task.magnitude * 5 * 0.5) %}
-                             <div style="margin-top: 6px; padding: 6px 8px; background: rgba(255, 170, 0, 0.15); border-radius: 4px; font-size: 0.75rem; color: var(--lcars-butterscotch);">
-                                 <strong>50% Breakthrough:</strong> {{ task.breakthrough_1.effect }}
-                             </div>
-                             {% endif %}
-                             {% if task.breakthrough_2 and task.breakthrough_2.effect and task.progress >= (task.magnitude * 5 * 0.75) %}
-                             <div style="margin-top: 6px; padding: 6px 8px; background: rgba(255, 170, 0, 0.15); border-radius: 4px; font-size: 0.75rem; color: var(--lcars-butterscotch);">
-                                 <strong>75% Breakthrough:</strong> {{ task.breakthrough_2.effect }}
-                             </div>
-                             {% endif %}
-                         </div>
-                         {% endfor %}
-                         {% else %}
-                         <p style="color: #666; padding: 15px; text-align: center;">No extended tasks. Add tasks to track progress on challenges.</p>
-                         {% endif %}
-                     </div>
-                 </div>
+                                </div>
+                                <div style="background: #333; border-radius: 6px; height: 20px; position: relative;">
+                                    <div style="background: var(--lcars-orange); height: 100%; border-radius: 6px; width: {{ (task.progress / track_length * 100) | int if track_length > 0 else 0 }}%;"></div>
+                                    {% set breakthrough_1_pos = (track_length * 0.5) | int %}
+                                    {% set breakthrough_2_pos = (track_length * 0.75) | int %}
+                                    {% if track_length > 0 %}
+                                    <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: {% if task.progress >= breakthrough_1_pos %}var(--lcars-success){% else %}#555{% endif %};"></div>
+                                    <div style="position: absolute; left: 75%; top: 0; bottom: 0; width: 3px; background: {% if task.progress >= breakthrough_2_pos %}var(--lcars-success){% else %}#555{% endif %};"></div>
+                                    {% endif %}
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #888; margin-top: 6px;">
+                                    <span>50% {% if task.breakthrough_1 %}✓ {{ task.breakthrough_1.effect if task.breakthrough_1.effect else 'Breakthrough' }}{% endif %}</span>
+                                    <span>75% {% if task.breakthrough_2 %}✓ {{ task.breakthrough_2.effect if task.breakthrough_2.effect else 'Breakthrough' }}{% endif %}</span>
+                                </div>
+                                {% if task.breakthrough_1 and task.breakthrough_1.effect and task.progress >= breakthrough_1_pos %}
+                                <div style="margin-top: 8px; padding: 8px 12px; background: rgba(255, 170, 0, 0.15); border-radius: 6px; font-size: 0.9rem; color: var(--lcars-butterscotch);">
+                                    <strong>50% Breakthrough:</strong> {{ task.breakthrough_1.effect }}
+                                </div>
+                                {% endif %}
+                                {% if task.breakthrough_2 and task.breakthrough_2.effect and task.progress >= breakthrough_2_pos %}
+                                <div style="margin-top: 8px; padding: 8px 12px; background: rgba(255, 170, 0, 0.15); border-radius: 6px; font-size: 0.9rem; color: var(--lcars-butterscotch);">
+                                    <strong>75% Breakthrough:</strong> {{ task.breakthrough_2.effect }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <p style="color: #666; padding: 20px; text-align: center; font-size: 1rem;">No extended tasks. Add tasks to track progress on challenges.</p>
+                            {% endif %}
+                        </div>
+                    </div>
 
-                 <!-- Add Extended Task Modal -->
-                 <div id="add-extended-task-modal" class="modal-overlay">
-                     <div class="modal-content" style="max-width: 500px;">
-                         <h3 style="color: var(--lcars-orange);">ADD EXTENDED TASK</h3>
-                         <label class="gm-select-label" for="task-name">Task Name</label>
-                         <input type="text" id="task-name" placeholder="e.g., Repair the Warp Core" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
-                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-                             <div>
-                                 <label class="gm-select-label" for="task-magnitude">Magnitude (1-5)</label>
-                                 <select id="task-magnitude" class="gm-select select-tomato" style="padding: 8px;">
-                                     <option value="1">1 (Simple - 5 pts)</option>
-                                     <option value="2" selected>2 (Standard - 10 pts)</option>
-                                     <option value="3">3 (Challenging - 15 pts)</option>
-                                     <option value="4">4 (Difficult - 20 pts)</option>
-                                     <option value="5">5 (Extreme - 25 pts)</option>
-                                 </select>
-                             </div>
-                             <div>
-                                 <label class="gm-select-label" for="task-resistance">Resistance</label>
-                                 <input type="number" id="task-resistance" value="0" min="0" max="5" class="gm-select" style="background: #1a1a1a; padding: 8px;">
-                             </div>
-                         </div>
-                         <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #444;">
-                             <label class="gm-select-label" for="task-breakthrough-1">50% Breakthrough Effect (optional)</label>
-                             <input type="text" id="task-breakthrough-1" placeholder="e.g., Core becomes unstable" class="gm-select" style="background: #1a1a1a; padding: 8px;">
-                         </div>
-                         <div style="margin-top: 10px;">
-                             <label class="gm-select-label" for="task-breakthrough-2">75% Breakthrough Effect (optional)</label>
-                             <input type="text" id="task-breakthrough-2" placeholder="e.g., Victory in sight" class="gm-select" style="background: #1a1a1a; padding: 8px;">
-                         </div>
-                         <div class="modal-buttons" style="margin-top: 15px;">
-                             <button class="btn" onclick="hideAddExtendedTaskModal()" style="background: #555;">Cancel</button>
-                             <button class="btn" onclick="addExtendedTask()" style="background: var(--lcars-orange); color: #000;">Add Task</button>
-                         </div>
+                    <!-- Add Extended Task Modal -->
+                    <div id="add-extended-task-modal" class="modal-overlay">
+                        <div class="modal-content" style="max-width: 600px;">
+                            <h3 style="color: var(--lcars-orange); font-size: 1.3rem;">ADD EXTENDED TASK</h3>
+                            <label class="gm-select-label" for="task-name" style="font-size: 1rem;">Task Name</label>
+                            <input type="text" id="task-name" placeholder="e.g., Repair the Warp Core" class="gm-select" style="background: #1a1a1a; padding: 12px; font-size: 1.1rem;">
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 15px;">
+                                <div>
+                                    <label class="gm-select-label" for="task-difficulty" style="font-size: 0.95rem;">Difficulty (0-5)</label>
+                                    <select id="task-difficulty" class="gm-select select-tomato" style="padding: 10px; font-size: 1rem;">
+                                        <option value="0">0 (Automatic)</option>
+                                        <option value="1">1 (Simple)</option>
+                                        <option value="2" selected>2 (Routine)</option>
+                                        <option value="3">3 (Challenging)</option>
+                                        <option value="4">4 (Difficult)</option>
+                                        <option value="5">5 (Extreme)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="gm-select-label" for="task-track-length" style="font-size: 0.95rem;">Progress Track (4-25)</label>
+                                    <input type="number" id="task-track-length" value="10" min="4" max="25" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                                </div>
+                                <div>
+                                    <label class="gm-select-label" for="task-resistance" style="font-size: 0.95rem;">Resistance</label>
+                                    <input type="number" id="task-resistance" value="0" min="0" max="5" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top: 15px; padding: 12px; background: rgba(255, 102, 102, 0.1); border-radius: 8px; border: 1px solid var(--lcars-tomato);">
+                                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 1rem;">
+                                    <input type="checkbox" id="task-time-enabled" onchange="toggleTimeIntervals(this.checked)" style="width: 20px; height: 20px;">
+                                    <span style="color: var(--lcars-tomato);">⏱ Enable Time Intervals (Extended Consequence)</span>
+                                </label>
+                                <div id="time-intervals-fields" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #444;">
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                        <div>
+                                            <label class="gm-select-label" for="task-interval-length" style="font-size: 0.9rem;">Interval Length</label>
+                                            <input type="text" id="task-interval-length" placeholder="e.g., 1 minute" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                                        </div>
+                                        <div>
+                                            <label class="gm-select-label" for="task-intervals-total" style="font-size: 0.9rem;">Total Intervals</label>
+                                            <input type="number" id="task-intervals-total" value="6" min="1" max="20" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #444;">
+                                <label class="gm-select-label" for="task-breakthrough-1" style="font-size: 0.95rem;">50% Breakthrough Effect (optional)</label>
+                                <input type="text" id="task-breakthrough-1" placeholder="e.g., Situation changes..." class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                            </div>
+                            <div style="margin-top: 12px;">
+                                <label class="gm-select-label" for="task-breakthrough-2" style="font-size: 0.95rem;">75% Breakthrough Effect (optional)</label>
+                                <input type="text" id="task-breakthrough-2" placeholder="e.g., Final stretch..." class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                            </div>
+                            <div class="modal-buttons" style="margin-top: 20px;">
+                                <button class="btn" onclick="hideAddExtendedTaskModal()" style="background: #555; font-size: 1rem; padding: 12px 24px;">Cancel</button>
+                                <button class="btn" onclick="addExtendedTask()" style="background: var(--lcars-orange); color: #000; font-size: 1rem; padding: 12px 24px;">Add Task</button>
+                            </div>
                         </div>
                     </div>
                     {% endif %}
@@ -1154,30 +1188,30 @@
 
                             {% if is_narrative %}
                             <div id="npc-list">
-                                <div style="margin-bottom: 10px;">
-                                    <button class="btn btn-small" onclick="showAddNpcModal()" style="background: var(--lcars-purple); color: #fff;">+ Add NPC</button>
+                                <div style="margin-bottom: 12px;">
+                                    <button class="btn" onclick="showAddNpcModal()" style="background: var(--lcars-purple); color: #fff; font-size: 1rem; padding: 10px 24px;">+ Add NPC</button>
                                 </div>
                                 <div id="npc-items">
                                 {% if npcs %}
                                 {% for npc in npcs %}
-                                <div class="npc-overview" data-npc-id="{{ npc.id }}" style="background: #1a1a2a; border-radius: 8px; padding: 14px; margin-bottom: 10px; border-left: 4px solid var(--lcars-purple);">
+                                <div class="npc-overview" data-npc-id="{{ npc.id }}" style="background: #1a1a2a; border-radius: 8px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--lcars-purple);">
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
                                         <div>
-                                            <div style="color: var(--lcars-purple); font-weight: 700;">{{ npc.name }}</div>
-                                            <div style="color: var(--lcars-almond); font-size: 0.8em;">{{ npc.npc_type }}</div>
+                                            <div style="color: var(--lcars-purple); font-weight: 700; font-size: 1.1rem;">{{ npc.name }}</div>
+                                            <div style="color: var(--lcars-almond); font-size: 0.95rem;">{{ npc.npc_type }}</div>
                                         </div>
-                                        <div style="display: flex; align-items: center; gap: 10px;">
-                                            <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                                <input type="checkbox" onchange="toggleNpcVisibility({{ npc.id }}, this.checked)" {% if npc.is_visible %}checked{% endif %}>
-                                                <span style="color: var(--lcars-almond); font-size: 0.75rem;">Visible</span>
+                                        <div style="display: flex; align-items: center; gap: 12px;">
+                                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" onchange="toggleNpcVisibility({{ npc.id }}, this.checked)" {% if npc.is_visible %}checked{% endif %} style="width: 18px; height: 18px;">
+                                                <span style="color: var(--lcars-almond); font-size: 0.95rem;">Visible</span>
                                             </label>
-                                            <button class="btn btn-small" onclick="removeNpcFromScene({{ npc.id }})" style="background: #555; padding: 4px 8px; font-size: 0.7rem;">×</button>
+                                            <button class="btn" onclick="removeNpcFromScene({{ npc.id }})" style="background: #666; padding: 6px 14px; font-size: 1rem;">×</button>
                                         </div>
                                     </div>
                                 </div>
                                 {% endfor %}
                                 {% else %}
-                                <p style="color: #666; padding: 20px; background: #1a1a1a; border-radius: 8px; text-align: center;">No NPCs in this scene.</p>
+                                <p style="color: #666; padding: 20px; background: #1a1a1a; border-radius: 8px; text-align: center; font-size: 1rem;">No NPCs in this scene.</p>
                                 {% endif %}
                                 </div>
                             </div>
@@ -1737,46 +1771,46 @@
     <!-- Add NPC Modal (for narrative scenes) -->
     {% if is_narrative %}
     <div id="add-npc-modal" class="modal-overlay">
-        <div class="modal-content" style="max-width: 550px;">
-            <h3 style="color: var(--lcars-purple);">ADD NPC TO SCENE</h3>
+        <div class="modal-content" style="max-width: 600px;">
+            <h3 style="color: var(--lcars-purple); font-size: 1.3rem;">ADD NPC TO SCENE</h3>
             
-            <div style="margin-bottom: 15px;">
-                <label class="gm-select-label">Add from Campaign</label>
-                <select id="campaign-npc-select" class="gm-select" style="background: #1a1a1a; padding: 10px;">
+            <div style="margin-bottom: 18px;">
+                <label class="gm-select-label" style="font-size: 1rem;">Add from Campaign</label>
+                <select id="campaign-npc-select" class="gm-select" style="background: #1a1a1a; padding: 12px; font-size: 1rem;">
                     <option value="">-- Select NPC --</option>
                 </select>
-                <button class="btn btn-small" onclick="addSelectedNpc()" style="margin-top: 8px; background: var(--lcars-purple); color: #fff;">Add Selected</button>
+                <button class="btn" onclick="addSelectedNpc()" style="margin-top: 10px; background: var(--lcars-purple); color: #fff; font-size: 1rem; padding: 10px 24px;">Add Selected</button>
             </div>
             
-            <div style="border-top: 1px solid #444; padding-top: 15px; margin-top: 15px;">
-                <label class="gm-select-label">Or Create Quick NPC</label>
-                <input type="text" id="quick-npc-name" placeholder="NPC Name" class="gm-select" style="background: #1a1a1a; padding: 10px; margin-bottom: 8px;">
-                <input type="text" id="quick-npc-desc" placeholder="Brief description (optional)" class="gm-select" style="background: #1a1a1a; padding: 10px; margin-bottom: 8px;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px;">
+            <div style="border-top: 1px solid #444; padding-top: 18px; margin-top: 18px;">
+                <label class="gm-select-label" style="font-size: 1rem;">Or Create Quick NPC</label>
+                <input type="text" id="quick-npc-name" placeholder="NPC Name" class="gm-select" style="background: #1a1a1a; padding: 12px; margin-bottom: 10px; font-size: 1rem;">
+                <input type="text" id="quick-npc-desc" placeholder="Brief description (optional)" class="gm-select" style="background: #1a1a1a; padding: 12px; margin-bottom: 10px; font-size: 1rem;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 10px;">
                     <div>
-                        <label class="gm-select-label" style="font-size: 0.8rem;">NPC Type</label>
-                        <select id="quick-npc-type" class="gm-select" style="background: #1a1a1a; padding: 8px;">
+                        <label class="gm-select-label" style="font-size: 0.95rem;">NPC Type</label>
+                        <select id="quick-npc-type" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
                             <option value="minor">Minor</option>
                             <option value="notable">Notable</option>
                             <option value="major">Major</option>
                         </select>
                     </div>
                     <div>
-                        <label class="gm-select-label" style="font-size: 0.8rem;">Affiliation</label>
-                        <input type="text" id="quick-npc-affiliation" placeholder="e.g., Starfleet, Klingon" class="gm-select" style="background: #1a1a1a; padding: 8px;">
+                        <label class="gm-select-label" style="font-size: 0.95rem;">Affiliation</label>
+                        <input type="text" id="quick-npc-affiliation" placeholder="e.g., Starfleet, Klingon" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
                     </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
-                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                        <input type="checkbox" id="quick-npc-visible">
-                        <span style="color: var(--lcars-almond); font-size: 0.85rem;">Visible to players</span>
+                <div style="display: flex; align-items: center; gap: 12px; margin-top: 12px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="quick-npc-visible" style="width: 20px; height: 20px;">
+                        <span style="color: var(--lcars-almond); font-size: 1rem;">Visible to players</span>
                     </label>
                 </div>
-                <button class="btn btn-small" onclick="addQuickNpc()" style="margin-top: 10px; background: var(--lcars-purple); color: #fff; padding: 10px 20px;">Create & Add</button>
+                <button class="btn" onclick="addQuickNpc()" style="margin-top: 15px; background: var(--lcars-purple); color: #fff; font-size: 1rem; padding: 12px 28px;">Create & Add</button>
             </div>
             
-            <div class="modal-buttons">
-                <button class="btn" onclick="hideAddNpcModal()" style="background: #555;">Done</button>
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button class="btn" onclick="hideAddNpcModal()" style="background: #555; font-size: 1rem; padding: 12px 28px;">Done</button>
             </div>
         </div>
     </div>
@@ -3480,16 +3514,29 @@
         function hideAddExtendedTaskModal() {
             document.getElementById('add-extended-task-modal').classList.remove('active');
             document.getElementById('task-name').value = '';
-            document.getElementById('task-magnitude').value = '2';
+            document.getElementById('task-difficulty').value = '2';
+            document.getElementById('task-track-length').value = '10';
             document.getElementById('task-resistance').value = '0';
+            document.getElementById('task-time-enabled').checked = false;
+            document.getElementById('task-interval-length').value = '';
+            document.getElementById('task-intervals-total').value = '6';
+            document.getElementById('time-intervals-fields').style.display = 'none';
             document.getElementById('task-breakthrough-1').value = '';
             document.getElementById('task-breakthrough-2').value = '';
         }
 
+        function toggleTimeIntervals(enabled) {
+            document.getElementById('time-intervals-fields').style.display = enabled ? 'block' : 'none';
+        }
+
         async function addExtendedTask() {
             const name = document.getElementById('task-name').value.trim();
-            const magnitude = parseInt(document.getElementById('task-magnitude').value) || 2;
+            const difficulty = parseInt(document.getElementById('task-difficulty').value) || 2;
+            const trackLength = parseInt(document.getElementById('task-track-length').value) || 10;
             const resistance = parseInt(document.getElementById('task-resistance').value) || 0;
+            const timeEnabled = document.getElementById('task-time-enabled').checked;
+            const intervalLength = document.getElementById('task-interval-length').value.trim();
+            const intervalsTotal = parseInt(document.getElementById('task-intervals-total').value) || 6;
             const breakthrough1 = document.getElementById('task-breakthrough-1').value.trim();
             const breakthrough2 = document.getElementById('task-breakthrough-2').value.trim();
             
@@ -3498,14 +3545,22 @@
                 return;
             }
             
-            const maxProgress = magnitude * 5;
+            const clampedTrackLength = Math.max(4, Math.min(25, trackLength));
+            
             const newTask = {
                 name: name,
                 progress: 0,
-                magnitude: magnitude,
+                difficulty: difficulty,
+                track_length: clampedTrackLength,
                 resistance: resistance,
-                breakthrough_1: breakthrough1 ? { at_progress: Math.floor(maxProgress * 0.5), effect: breakthrough1 } : null,
-                breakthrough_2: breakthrough2 ? { at_progress: Math.floor(maxProgress * 0.75), effect: breakthrough2 } : null
+                time_intervals: timeEnabled ? {
+                    enabled: true,
+                    interval_length: intervalLength || '1 interval',
+                    total: intervalsTotal,
+                    remaining: intervalsTotal
+                } : null,
+                breakthrough_1: breakthrough1 ? { at_progress: Math.floor(clampedTrackLength * 0.5), effect: breakthrough1 } : null,
+                breakthrough_2: breakthrough2 ? { at_progress: Math.floor(clampedTrackLength * 0.75), effect: breakthrough2 } : null
             };
             
             challenges.push(newTask);
@@ -3518,8 +3573,8 @@
             if (!challenges[index]) return;
             
             const task = challenges[index];
-            const maxProgress = task.magnitude * 5;
-            task.progress = Math.max(0, Math.min(maxProgress, task.progress + change));
+            const maxProgress = task.track_length || 10;
+            task.progress = Math.max(0, Math.min(maxProgress, (task.progress || 0) + change));
             
             await updateSceneData();
             location.reload();
