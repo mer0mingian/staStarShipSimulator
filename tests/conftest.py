@@ -92,12 +92,15 @@ def app():
                     with patch(
                         "sta.web.routes.campaigns.get_session", mock_get_session
                     ):
-                        # Import and create app after patching
-                        from sta.web.app import create_app
+                        with patch(
+                            "sta.web.routes.scenes.get_session", mock_get_session
+                        ):
+                            # Import and create app after patching
+                            from sta.web.app import create_app
 
-                        flask_app = create_app()
-                        flask_app.config["TESTING"] = True
-                        yield flask_app
+                            flask_app = create_app()
+                            flask_app.config["TESTING"] = True
+                            yield flask_app
 
 
 @pytest.fixture(scope="function")

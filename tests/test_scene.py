@@ -2,7 +2,7 @@
 
 import json
 import pytest
-from sta.database.schema import SceneRecord
+from sta.database.schema import SceneRecord, CampaignRecord, CampaignPlayerRecord
 
 
 class TestSceneRecord:
@@ -31,6 +31,22 @@ class TestSceneRecord:
         traits = json.loads(scene.scene_traits_json)
         assert traits == ["Dark", "Dangerous"]
 
+    def test_scene_traits_with_descriptions(self, test_session, sample_campaign):
+        """Scene traits can include descriptions for hover/click."""
+        campaign_id = sample_campaign["campaign"].id
+        traits = [
+            {"name": "Dark", "description": "No light sources available"},
+            {"name": "Dangerous", "description": "Environmental hazards present"},
+        ]
+        scene = SceneRecord(
+            campaign_id=campaign_id, scene_traits_json=json.dumps(traits)
+        )
+        test_session.add(scene)
+        test_session.flush()
+        loaded = json.loads(scene.scene_traits_json)
+        assert loaded[0]["name"] == "Dark"
+        assert loaded[0]["description"] == "No light sources available"
+
     def test_scene_challenges_json_structure(self, test_session, sample_campaign):
         """Challenges should support name, progress, resistance."""
         campaign_id = sample_campaign["campaign"].id
@@ -44,6 +60,25 @@ class TestSceneRecord:
         assert loaded[0]["name"] == "Repair Warp Core"
         assert loaded[0]["progress"] == 2
         assert loaded[0]["resistance"] == 5
+
+    def test_extended_task_with_breakthroughs(self, test_session, sample_campaign):
+        """Extended tasks should support breakthrough descriptions."""
+        campaign_id = sample_campaign["campaign"].id
+        task = {
+            "name": "Navigate Anomaly",
+            "progress": 0,
+            "resistance": 2,
+            "magnitude": 3,
+            "breakthrough_1": {"at_progress": 6, "effect": "Difficulty increases by 1"},
+            "breakthrough_2": {"at_progress": 9, "effect": "Resistance reduced to 1"},
+        }
+        scene = SceneRecord(campaign_id=campaign_id, challenges_json=json.dumps([task]))
+        test_session.add(scene)
+        test_session.flush()
+        loaded = json.loads(scene.challenges_json)
+        assert loaded[0]["name"] == "Navigate Anomaly"
+        assert loaded[0]["magnitude"] == 3
+        assert loaded[0]["breakthrough_1"]["effect"] == "Difficulty increases by 1"
 
     def test_scene_types(self, test_session, sample_campaign):
         """Scene should support different types."""
@@ -61,6 +96,23 @@ class TestSceneRecord:
         assert starship.scene_type == "starship_encounter"
         assert personal.scene_type == "personal_encounter"
         assert social.scene_type == "social_encounter"
+
+    def test_scene_has_map_based_on_type(self, test_session, sample_campaign):
+        """Social encounters should not have maps by default."""
+        campaign_id = sample_campaign["campaign"].id
+
+        narrative = SceneRecord(
+            campaign_id=campaign_id, scene_type="narrative", has_map=True
+        )
+        social = SceneRecord(
+            campaign_id=campaign_id, scene_type="social_encounter", has_map=False
+        )
+
+        test_session.add_all([narrative, social])
+        test_session.flush()
+
+        assert narrative.has_map is True
+        assert social.has_map is False
 
 
 class TestSceneAPI:
@@ -102,12 +154,10 @@ class TestSceneAPI:
         """POST /scene should update an existing scene."""
         encounter_id = sample_encounter["encounter"].encounter_id
 
-        # Create initial scene
         client.post(
             f"/api/encounter/{encounter_id}/scene", json={"stardate": "47988.0"}
         )
 
-        # Update scene
         response = client.post(
             f"/api/encounter/{encounter_id}/scene", json={"stardate": "47989.0"}
         )
@@ -119,13 +169,11 @@ class TestSceneAPI:
         """GET /scene should return the created scene data."""
         encounter_id = sample_encounter["encounter"].encounter_id
 
-        # Create scene
         client.post(
             f"/api/encounter/{encounter_id}/scene",
             json={"stardate": "47990.0", "scene_traits": ["Hostile"]},
         )
 
-        # Get scene
         response = client.get(f"/api/encounter/{encounter_id}/scene")
         data = response.get_json()
         assert data["stardate"] == "47990.0"
@@ -150,3 +198,255 @@ class TestSceneAPI:
         assert len(data["challenges"]) == 2
         assert data["challenges"][0]["name"] == "Repair Warp Core"
         assert data["challenges"][0]["progress"] == 2
+
+
+class TestCampaignSceneAPI:
+    """Tests for campaign-level scene API endpoints."""
+
+    def test_create_scene_for_campaign(self, client, sample_campaign):
+        """POST /campaigns/api/campaign/<id>/scenes should create a scene."""
+        campaign_id = sample_campaign["campaign"].campaign_id
+        gm_token = sample_campaign["players"][0].session_token
+
+        client.set_cookie("sta_session_token", gm_token)
+
+        response = client.post(
+            f"/campaigns/api/campaign/{campaign_id}/scenes",
+            json={
+                "name": "Bridge Briefing",
+                "scene_type": "narrative",
+                "stardate": "47988.5",
+                "scene_traits": ["Tense", "Urgent"],
+            },
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["name"] == "Bridge Briefing"
+        assert data["scene_type"] == "narrative"
+
+    def test_activate_scene(self, client, sample_campaign, test_session):
+        """PUT /campaigns/api/scene/<id>/status should activate a scene."""
+        campaign_id = sample_campaign["campaign"].id
+        gm_token = sample_campaign["players"][0].session_token
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Test Scene",
+            scene_type="narrative",
+            status="draft",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        client.set_cookie("sta_session_token", gm_token)
+
+        response = client.put(
+            f"/campaigns/api/scene/{scene_id}/status", json={"status": "active"}
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["status"] == "active"
+
+    def test_deactivate_scene(self, client, sample_campaign, test_session):
+        """PUT /campaigns/api/scene/<id>/status should deactivate a scene."""
+        campaign_id = sample_campaign["campaign"].id
+        gm_token = sample_campaign["players"][0].session_token
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Active Scene",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        client.set_cookie("sta_session_token", gm_token)
+
+        response = client.put(
+            f"/campaigns/api/scene/{scene_id}/status", json={"status": "draft"}
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["status"] == "draft"
+
+    def test_convert_scene_type(self, client, sample_campaign, test_session):
+        """PUT /campaigns/api/scene/<id>/convert should change scene type."""
+        campaign_id = sample_campaign["campaign"].id
+        gm_token = sample_campaign["players"][0].session_token
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Test Scene",
+            scene_type="narrative",
+            has_map=True,
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        client.set_cookie("sta_session_token", gm_token)
+
+        response = client.put(
+            f"/campaigns/api/scene/{scene_id}/convert",
+            json={"scene_type": "starship_encounter"},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["old_type"] == "narrative"
+        assert data["new_type"] == "starship_encounter"
+
+    def test_convert_to_social_removes_map(self, client, sample_campaign, test_session):
+        """Converting to social_encounter should set has_map=False."""
+        campaign_id = sample_campaign["campaign"].id
+        gm_token = sample_campaign["players"][0].session_token
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Test Scene",
+            scene_type="narrative",
+            has_map=True,
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        client.set_cookie("sta_session_token", gm_token)
+
+        client.put(
+            f"/campaigns/api/scene/{scene_id}/convert",
+            json={"scene_type": "social_encounter"},
+        )
+
+        test_session.expire_all()
+        updated = test_session.query(SceneRecord).filter_by(id=scene_id).first()
+        assert updated.has_map is False
+
+    def test_delete_draft_scene(self, client, sample_campaign, test_session):
+        """DELETE /campaigns/api/scene/<id> should delete a draft scene."""
+        campaign_id = sample_campaign["campaign"].id
+        gm_token = sample_campaign["players"][0].session_token
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Draft Scene",
+            scene_type="narrative",
+            status="draft",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        client.set_cookie("sta_session_token", gm_token)
+
+        response = client.delete(f"/campaigns/api/scene/{scene_id}")
+        assert response.status_code == 200
+        assert response.get_json()["success"] is True
+
+    def test_cannot_delete_active_scene(self, client, sample_campaign, test_session):
+        """DELETE should fail for active scenes."""
+        campaign_id = sample_campaign["campaign"].id
+        gm_token = sample_campaign["players"][0].session_token
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Active Scene",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        client.set_cookie("sta_session_token", gm_token)
+
+        response = client.delete(f"/campaigns/api/scene/{scene_id}")
+        assert response.status_code == 400
+        assert "Cannot delete active" in response.get_json()["error"]
+
+
+class TestSceneUpdateAPI:
+    """Tests for PUT /api/scene/<id> endpoint."""
+
+    def test_update_scene_by_id(self, client, sample_campaign, test_session):
+        """PUT /api/scene/<id> should update scene data."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id, name="Test Scene", scene_type="narrative"
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.put(
+            f"/api/scene/{scene_id}",
+            json={
+                "name": "Updated Scene",
+                "stardate": "47999.0",
+                "scene_traits": ["New Trait"],
+            },
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["name"] == "Updated Scene"
+        assert data["stardate"] == "47999.0"
+
+    def test_update_extended_tasks(self, client, sample_campaign, test_session):
+        """PUT /api/scene/<id> should update extended tasks with breakthroughs."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id, name="Test Scene", challenges_json="[]"
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        tasks = [
+            {
+                "name": "Repair Core",
+                "progress": 3,
+                "resistance": 2,
+                "magnitude": 3,
+                "breakthrough_1": {"at_progress": 6, "effect": "Core becomes unstable"},
+                "breakthrough_2": {"at_progress": 9, "effect": "Victory in sight"},
+            }
+        ]
+
+        response = client.put(f"/api/scene/{scene_id}", json={"challenges": tasks})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["challenges"]) == 1
+        assert (
+            data["challenges"][0]["breakthrough_1"]["effect"] == "Core becomes unstable"
+        )
+
+    def test_update_traits_with_descriptions(
+        self, client, sample_campaign, test_session
+    ):
+        """PUT /api/scene/<id> should support traits with descriptions."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id, name="Test Scene", scene_traits_json="[]"
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        traits = [
+            {"name": "Dark", "description": "No light source available"},
+            {"name": "Cold", "description": "Temperature below freezing"},
+        ]
+
+        response = client.put(f"/api/scene/{scene_id}", json={"scene_traits": traits})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["scene_traits"]) == 2
+        assert data["scene_traits"][0]["description"] == "No light source available"
