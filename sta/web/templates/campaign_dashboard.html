@@ -78,9 +78,14 @@
             <p style="color: var(--lcars-tan);">No active encounter</p>
             {% if is_gm %}
                 {% if active_ship %}
-                    <a href="{{ url_for('encounters.new_encounter') }}?campaign={{ campaign.campaign_id }}" class="btn">
-                        Start New Encounter
-                    </a>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <a href="{{ url_for('encounters.new_encounter') }}?campaign={{ campaign.campaign_id }}" class="btn">
+                            Start New Encounter
+                        </a>
+                        <button class="btn" onclick="showCreateSceneModal()" style="background: var(--lcars-butterscotch);">
+                            Create Scene
+                        </button>
+                    </div>
                 {% else %}
                     <p style="color: var(--lcars-red); margin-top: 10px;">
                         Add a ship to the campaign before starting an encounter
@@ -303,16 +308,39 @@
     {% endif %}
 </div>
 
-<!-- Draft Encounters (GM Only) -->
-{% if is_gm and draft_encounters %}
+<!-- Draft Scenes & Encounters (GM Only) -->
+{% if is_gm and (draft_encounters or draft_scenes) %}
 <div class="panel" style="border-color: var(--lcars-tan);">
-    <h2>Draft Encounters</h2>
+    <h2>Draft Scenes & Encounters</h2>
     <ul class="action-list">
-        {% for enc in draft_encounters %}
-            <li style="display: flex; justify-content: space-between; align-items: center;">
+        {% for scene in draft_scenes %}
+            <li style="display: flex; justify-content: space-between; align-items: center; border-left: 3px solid var(--lcars-butterscotch);">
                 <div>
+                    <span style="margin-right: 8px; font-size: 1.1em;">
+                        {% if scene.scene_type == 'narrative' %}🎬{% elif scene.scene_type == 'starship_encounter' %}🚀{% elif scene.scene_type == 'personal_encounter' %}👤{% elif scene.scene_type == 'social_encounter' %}💬{% endif %}
+                    </span>
+                    <strong>{{ scene.name }}</strong>
+                    <span class="action-type" style="background: var(--lcars-butterscotch); color: #000;">{{ scene.scene_type.replace('_', ' ').title() }}</span>
+                </div>
+                <div style="display: flex; gap: 5px;">
+                    <button class="btn btn-small" onclick="editScene({{ scene.id }})">
+                        Edit
+                    </button>
+                    <button class="btn btn-small btn-success" onclick="activateScene({{ scene.id }})">
+                        Activate
+                    </button>
+                    <button class="btn btn-small btn-danger" onclick="deleteScene({{ scene.id }}, '{{ scene.name }}')">
+                        &times;
+                    </button>
+                </div>
+            </li>
+        {% endfor %}
+        {% for enc in draft_encounters %}
+            <li style="display: flex; justify-content: space-between; align-items: center; border-left: 3px solid var(--lcars-red);">
+                <div>
+                    <span style="margin-right: 8px; font-size: 1.1em;">⚔️</span>
                     <strong>{{ enc.name }}</strong>
-                    <span class="action-type">Draft</span>
+                    <span class="action-type" style="background: var(--lcars-red);">Starship Combat</span>
                 </div>
                 <div style="display: flex; gap: 5px;">
                     <button class="btn btn-small" onclick="editEncounter('{{ enc.encounter_id }}')">
@@ -601,6 +629,43 @@
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                 <button type="button" class="btn btn-small" style="background: #666;" onclick="hideEditShipModal()">Cancel</button>
                 <button type="submit" class="btn btn-small">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Create Scene Modal -->
+<div id="create-scene-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+        <h2>Create New Scene</h2>
+        <form id="create-scene-form" onsubmit="createScene(event)">
+            <div style="margin-bottom: 15px;">
+                <label for="scene-name">Scene Name</label>
+                <input type="text" id="scene-name" required style="width: 100%;" placeholder="e.g., Bridge Briefing">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label for="scene-type">Scene Type</label>
+                <select id="scene-type" style="width: 100%;" onchange="updateSceneTypeHint()">
+                    <option value="narrative">🎬 Narrative (Roleplay)</option>
+                    <option value="starship_encounter">🚀 Starship Combat</option>
+                    <option value="personal_encounter">👤 Personal Combat</option>
+                    <option value="social_encounter">💬 Social Encounter</option>
+                </select>
+                <p id="scene-type-hint" style="color: var(--lcars-tan); font-size: 0.85em; margin-top: 5px;">
+                    General roleplay scene with traits and challenges.
+                </p>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label for="scene-stardate">Stardate (optional)</label>
+                <input type="text" id="scene-stardate" style="width: 100%;" placeholder="e.g., 47988.5">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label for="scene-traits">Scene Traits (comma-separated)</label>
+                <input type="text" id="scene-traits" style="width: 100%;" placeholder="e.g., Dark, Dangerous, Flooded">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-small" style="background: #666;" onclick="hideCreateSceneModal()">Cancel</button>
+                <button type="submit" class="btn btn-small" style="background: var(--lcars-butterscotch);">Create Scene</button>
             </div>
         </form>
     </div>
@@ -1203,6 +1268,104 @@ async function saveShip(event) {
 function editEncounter(encounterId) {
     // Redirect to the full edit page
     window.location.href = `/encounters/${encounterId}/edit`;
+}
+
+// Scene Management Functions
+function showCreateSceneModal() {
+    document.getElementById('create-scene-modal').style.display = 'flex';
+    document.getElementById('scene-name').value = '';
+    document.getElementById('scene-type').value = 'narrative';
+    document.getElementById('scene-stardate').value = '';
+    document.getElementById('scene-traits').value = '';
+    updateSceneTypeHint();
+}
+
+function hideCreateSceneModal() {
+    document.getElementById('create-scene-modal').style.display = 'none';
+}
+
+function updateSceneTypeHint() {
+    const type = document.getElementById('scene-type').value;
+    const hints = {
+        'narrative': 'General roleplay scene with traits and challenges.',
+        'starship_encounter': 'Ship-to-ship combat with tactical map.',
+        'personal_encounter': 'Character-scale combat or action.',
+        'social_encounter': 'Social conflict and negotiation (no map).'
+    };
+    document.getElementById('scene-type-hint').textContent = hints[type] || '';
+}
+
+async function createScene(event) {
+    event.preventDefault();
+    
+    const traitsText = document.getElementById('scene-traits').value.trim();
+    const traits = traitsText ? traitsText.split(',').map(t => t.trim()).filter(t => t) : [];
+    
+    const data = {
+        name: document.getElementById('scene-name').value,
+        scene_type: document.getElementById('scene-type').value,
+        stardate: document.getElementById('scene-stardate').value || null,
+        scene_traits: traits,
+        status: 'draft'
+    };
+    
+    try {
+        const response = await fetch(`/campaigns/api/campaign/${campaignId}/scenes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const result = await response.json();
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error creating scene: ' + error.message);
+    }
+}
+
+async function activateScene(sceneId) {
+    if (!confirm('Activate this scene? It will be shown to all players.')) return;
+    
+    try {
+        const response = await fetch(`/campaigns/api/scene/${sceneId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'active' })
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const result = await response.json();
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error activating scene: ' + error.message);
+    }
+}
+
+async function deleteScene(sceneId, sceneName) {
+    if (!confirm(`Delete scene "${sceneName}"? This cannot be undone.`)) return;
+    
+    try {
+        const response = await fetch(`/campaigns/api/scene/${sceneId}`, {
+            method: 'DELETE'
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const result = await response.json();
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error deleting scene: ' + error.message);
+    }
+}
+
+function editScene(sceneId) {
+    window.location.href = `/scenes/${sceneId}/edit`;
 }
 </script>
 {% endblock %}
