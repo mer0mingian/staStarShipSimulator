@@ -581,7 +581,7 @@
 
 {% block scripts %}
 <script>
-    const encounterId = '{{ encounter.encounter_id }}';
+    const encounterId = {% if encounter and encounter.encounter_id %}'{{ encounter.encounter_id }}'{% else %}null{% endif %};
     const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
     const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
     const weaponsBonus = {{ player_ship.weapons_damage_bonus() if player_ship else 0 }};

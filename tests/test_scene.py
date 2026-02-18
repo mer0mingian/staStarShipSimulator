@@ -991,3 +991,126 @@ class TestScenePictureManagement:
 
         deleted = test_session.get(ScenePictureRecord, pic_id)
         assert deleted is None
+
+
+class TestNarrativeSceneNoCombatAPI:
+    """Tests to verify narrative scenes don't call combat APIs."""
+
+    def test_narrative_scene_no_encounter_id_in_js(
+        self, client, sample_campaign, test_session
+    ):
+        """Narrative scene player view should have null encounterId in JS."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Narrative Scene",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}?role=player")
+        html = response.get_data(as_text=True)
+
+        assert "const encounterId = null" in html or "const encounterId =null" in html
+
+    def test_narrative_scene_has_is_narrative_flag(
+        self, client, sample_campaign, test_session
+    ):
+        """Narrative scene player view should have isNarrative variable."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Story Scene",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}?role=player")
+        assert response.status_code == 200
+
+    def test_narrative_scene_gm_requires_auth(
+        self, client, sample_campaign, test_session
+    ):
+        """Narrative scene GM view should require authentication."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Scene Without Combat",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}?role=gm")
+        assert response.status_code == 302
+
+    def test_narrative_scene_shows_scene_name_in_player_view(
+        self, client, sample_campaign, test_session
+    ):
+        """Narrative scene player view should show scene name."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="The Diplomatic Meeting",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}?role=player")
+        html = response.get_data(as_text=True)
+
+        assert "The Diplomatic Meeting" in html
+
+    def test_extended_task_with_breakthrough_effects(
+        self, client, sample_campaign, test_session
+    ):
+        """Extended tasks should support breakthrough effects."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Engineering Crisis",
+            scene_type="narrative",
+            status="active",
+            challenges_json=json.dumps(
+                [
+                    {
+                        "name": "Repair Warp Core",
+                        "progress": 5,
+                        "magnitude": 2,
+                        "resistance": 1,
+                        "breakthrough_1": {
+                            "at_progress": 5,
+                            "effect": "Core becomes unstable",
+                        },
+                        "breakthrough_2": {
+                            "at_progress": 7,
+                            "effect": "Victory in sight",
+                        },
+                    }
+                ]
+            ),
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}?role=player")
+        html = response.get_data(as_text=True)
+
+        assert "Repair Warp Core" in html
