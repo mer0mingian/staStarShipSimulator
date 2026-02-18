@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ encounter.name }} - Game Master View</title>
+    <title>{% if is_narrative %}{{ scene.name }} - Narrative Scene{% else %}{{ encounter.name }} - Game Master View{% endif %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/lcars.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/announcements.css') }}">
     <style>
@@ -880,7 +880,8 @@
             <div class="gm-content">
                 <!-- MAIN TAB (Overview) -->
                 <div id="tab-main" class="tab-panel active">
-                    <!-- Big Turn Indicator - VERY PROMINENT -->
+                    <!-- Big Turn Indicator - VERY PROMINENT (only for combat) -->
+                    {% if not is_narrative %}
                     <div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'enemy' %}your-turn{% else %}player-turn{% endif %}">
                         <div style="display: flex; align-items: center; justify-content: space-between; gap: 30px; flex-wrap: wrap;">
                             <div style="flex: 1; text-align: left;">
@@ -920,8 +921,10 @@
                             </button>
                         </div>
                     </div>
+                    {% endif %}
 
-                    <!-- Resources Row -->
+                    <!-- Resources Row (only for combat) -->
+                    {% if not is_narrative %}
                     <div class="resources-row">
                         <div class="resource-box momentum">
                             <span class="resource-label">Momentum</span>
@@ -946,6 +949,7 @@
                             <button class="btn btn-small" onclick="closeChannel()" id="close-channel-btn" style="display: none; margin-top: 8px; background: var(--lcars-tomato); color: var(--lcars-text-dark);">Close Channel</button>
                         </div>
                     </div>
+                    {% endif %}
 
                     <!-- Scene Settings Row -->
                     <div class="scene-row" style="margin-top: 15px; padding: 12px; background: rgba(255, 170, 0, 0.1); border: 2px solid var(--lcars-butterscotch); border-radius: 10px;">
@@ -953,20 +957,32 @@
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                             <div>
                                 <label style="color: var(--lcars-almond); font-size: 0.85rem;">Stardate:</label>
-                                <input type="text" id="scene-stardate" placeholder="e.g., 47988.5" style="width: 100%; margin-top: 4px;" onchange="updateScene()">
+                                <input type="text" id="scene-stardate" placeholder="e.g., 47988.5" style="width: 100%; margin-top: 4px;" onchange="updateScene()" value="{% if scene %}{{ scene.stardate }}{% endif %}">
                             </div>
                             <div>
                                 <label style="color: var(--lcars-almond); font-size: 0.85rem;">Picture URL:</label>
-                                <input type="text" id="scene-picture-url" placeholder="https://..." style="width: 100%; margin-top: 4px;" onchange="updateScene()">
+                                <input type="text" id="scene-picture-url" placeholder="https://..." style="width: 100%; margin-top: 4px;" onchange="updateScene()" value="{% if scene %}{{ scene.scene_picture_url }}{% endif %}">
                             </div>
                         </div>
                         <div style="margin-top: 10px;">
-                            <label style="color: var(--lcars-almond); font-size: 0.85rem;">Scene Traits (comma-separated):</label>
-                            <input type="text" id="scene-traits" placeholder="e.g., Dark, Dangerous, Flooded" style="width: 100%; margin-top: 4px;" onchange="updateScene()">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                <label style="color: var(--lcars-almond); font-size: 0.85rem;">Scene Traits:</label>
+                                <button class="btn btn-small" onclick="showAddSceneTraitModal()" style="background: var(--lcars-butterscotch); color: #000; font-size: 0.75rem; padding: 4px 10px;">+ Add Trait</button>
+                            </div>
+                            <div id="scene-traits-display" style="display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px;">
+                                {% if scene and scene.scene_traits %}
+                                    {% for trait in scene.scene_traits %}
+                                    <span style="background: var(--lcars-butterscotch); color: #000; padding: 4px 10px; border-radius: 12px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
+                                        {{ trait.name if trait.name else trait }}
+                                        <button onclick="removeSceneTrait({{ loop.index0 }})" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold; padding: 0; font-size: 1rem;">&times;</button>
+                                    </span>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
                         </div>
                         <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
                             <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                <input type="checkbox" id="scene-show-picture" onchange="updateScene()">
+                                <input type="checkbox" id="scene-show-picture" onchange="updateScene()" {% if scene and scene.show_picture %}checked{% endif %}>
                                 <span style="color: var(--lcars-almond); font-size: 0.85rem;">Show picture on viewscreen</span>
                             </label>
                         </div>
@@ -1013,15 +1029,41 @@
                             </div>
                         </div>
 
-                        <!-- Enemy Ships Column -->
-                        <div class="ship-panel enemy-ship" style="border-color: var(--lcars-tomato);">
-                            <h3 style="color: var(--lcars-tomato); display: flex; justify-content: space-between; align-items: center;">
-                                <span>ENEMY SHIPS</span>
+                        <!-- Enemy Ships / NPC Column -->
+                        <div class="ship-panel enemy-ship" style="border-color: {% if is_narrative %}var(--lcars-purple){% else %}var(--lcars-tomato){% endif %};">
+                            <h3 style="color: {% if is_narrative %}var(--lcars-purple){% else %}var(--lcars-tomato){% endif %}; display: flex; justify-content: space-between; align-items: center;">
+                                <span>{% if is_narrative %}NPC SHIPS & CHARACTERS{% else %}ENEMY SHIPS{% endif %}</span>
+                                {% if not is_narrative %}
                                 <span id="enemy-turn-count" style="font-size: 0.9rem; background: rgba(255, 102, 102, 0.2); padding: 4px 12px; border-radius: 10px;">
                                     <span id="overview-enemy-turns-used">0</span>/<span id="overview-enemy-turns-total">0</span> turns
                                 </span>
+                                {% endif %}
                             </h3>
 
+                            {% if is_narrative %}
+                            <div id="npc-list">
+                                {% if npcs %}
+                                {% for npc in npcs %}
+                                <div class="npc-overview" style="background: #1a1a2a; border-radius: 8px; padding: 14px; margin-bottom: 10px; border-left: 4px solid var(--lcars-purple);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <div style="color: var(--lcars-purple); font-weight: 700;">{{ npc.name }}</div>
+                                            <div style="color: var(--lcars-almond); font-size: 0.8em;">{{ npc.npc_type }}</div>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                                <input type="checkbox" onchange="toggleNpcVisibility({{ npc.id }}, this.checked)" {% if npc.is_visible %}checked{% endif %}>
+                                                <span style="color: var(--lcars-almond); font-size: 0.75rem;">Visible</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                                {% else %}
+                                <p style="color: #666; padding: 20px; background: #1a1a1a; border-radius: 8px; text-align: center;">No NPCs. Add NPCs to this scene from the NPC management.</p>
+                                {% endif %}
+                            </div>
+                            {% else %}
                             <div id="enemy-ships-list">
                                 {% if enemy_ships %}
                                 {% for enemy in enemy_ships %}
@@ -1049,6 +1091,7 @@
                                 <p style="color: #666; padding: 20px; background: #1a1a1a; border-radius: 8px; text-align: center;">No enemy ships. Add one from the Ships tab.</p>
                                 {% endif %}
                             </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -2870,6 +2913,87 @@
         setInterval(fetchStatus, 3000);
         setInterval(refreshCombatLog, 5000);
         setInterval(fetchRoundActions, 4000);  // Poll round actions
+
+        // ===== NARRATIVE SCENE FUNCTIONS =====
+        let sceneTraits = {% if scene and scene.scene_traits %}{{ scene.scene_traits | tojson }}{% else %}[]{% endif %};
+        let sceneId = {% if scene %}{{ scene.id }}{% else %}null{% endif %};
+
+        function showAddSceneTraitModal() {
+            const modal = document.createElement('div');
+            modal.id = 'add-trait-modal';
+            modal.style.cssText = 'display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 2000; align-items: center; justify-content: center;';
+            modal.innerHTML = `
+                <div class="panel" style="max-width: 400px; width: 90%;">
+                    <h2>Add Scene Trait</h2>
+                    <form onsubmit="addSceneTrait(event)">
+                        <div style="margin-bottom: 15px;">
+                            <label style="color: var(--lcars-almond);">Trait Name</label>
+                            <input type="text" id="trait-name-input" required style="width: 100%; margin-top: 4px;" placeholder="e.g., Dark, Dangerous">
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label style="color: var(--lcars-almond);">Description (optional)</label>
+                            <textarea id="trait-desc-input" rows="2" style="width: 100%; margin-top: 4px;" placeholder="Shown on hover"></textarea>
+                        </div>
+                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                            <button type="button" class="btn btn-small" style="background: #666;" onclick="document.getElementById('add-trait-modal').remove()">Cancel</button>
+                            <button type="submit" class="btn btn-small" style="background: var(--lcars-butterscotch);">Add</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        async function addSceneTrait(event) {
+            event.preventDefault();
+            const name = document.getElementById('trait-name-input').value.trim();
+            const description = document.getElementById('trait-desc-input').value.trim();
+            
+            if (!name) return;
+            
+            sceneTraits.push({
+                name: name,
+                description: description || null
+            });
+            
+            await updateSceneData();
+            document.getElementById('add-trait-modal').remove();
+            location.reload();
+        }
+
+        async function removeSceneTrait(index) {
+            sceneTraits.splice(index, 1);
+            await updateSceneData();
+            location.reload();
+        }
+
+        async function updateSceneData() {
+            if (!sceneId) return;
+            
+            await fetch(`/api/scene/${sceneId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    scene_traits: sceneTraits,
+                    stardate: document.getElementById('scene-stardate')?.value || null,
+                    scene_picture_url: document.getElementById('scene-picture-url')?.value || null,
+                    show_picture: document.getElementById('scene-show-picture')?.checked || false
+                })
+            });
+        }
+
+        async function toggleNpcVisibility(npcId, isVisible) {
+            await fetch(`/scenes/${sceneId}/npcs/${npcId}/visibility`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_visible: isVisible })
+            });
+        }
+
+        // Override updateScene for narrative scenes
+        if (sceneId) {
+            window.updateScene = updateSceneData;
+        }
     </script>
 </body>
 </html>
