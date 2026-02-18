@@ -33,12 +33,14 @@
 </div>
 
 <div class="grid">
-    <!-- Active Encounter -->
-    <div class="panel" style="border-color: {% if active_encounter %}var(--lcars-green){% else %}var(--lcars-tan){% endif %};">
-        <h2>Active Encounter</h2>
+    <!-- Active Scene -->
+    <div class="panel" style="border-color: {% if active_encounter or active_scene %}var(--lcars-green){% else %}var(--lcars-tan){% endif %};">
+        <h2>Active Scene</h2>
         {% if active_encounter %}
             <div style="margin-bottom: 15px;">
+                <span style="font-size: 1.1em; margin-right: 8px;">⚔️</span>
                 <strong style="font-size: 1.2em;">{{ active_encounter.name }}</strong>
+                <span style="background: var(--lcars-red); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; margin-left: 8px;">Starship Combat</span>
                 <div class="stat-row">
                     <span>Round</span>
                     <span class="stat-value">{{ active_encounter.round }}</span>
@@ -74,8 +76,59 @@
                 </a>
                 {% endif %}
             </div>
+        {% elif active_scene_data %}
+            <div style="margin-bottom: 15px;">
+                <span style="font-size: 1.1em; margin-right: 8px;">
+                    {% if active_scene_data.scene_type == 'narrative' %}🎬{% elif active_scene_data.scene_type == 'personal_encounter' %}👤{% elif active_scene_data.scene_type == 'social_encounter' %}💬{% else %}🎬{% endif %}
+                </span>
+                <strong style="font-size: 1.2em;">{{ active_scene_data.name }}</strong>
+                <span style="background: var(--lcars-butterscotch); color: #000; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; margin-left: 8px;">{{ active_scene_data.scene_type.replace('_', ' ').title() }}</span>
+                {% if active_scene_data.stardate %}
+                <div class="stat-row">
+                    <span>Stardate</span>
+                    <span class="stat-value">{{ active_scene_data.stardate }}</span>
+                </div>
+                {% endif %}
+                {% if active_scene_data.scene_traits %}
+                <div style="margin-top: 10px;">
+                    <span style="color: var(--lcars-tan); font-size: 0.85em;">Traits: </span>
+                    {% for trait in active_scene_data.scene_traits %}
+                    <span style="background: var(--lcars-butterscotch); color: #000; padding: 2px 6px; border-radius: 8px; font-size: 0.75em; margin-right: 4px;">{{ trait }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                {% if is_gm %}
+                <a href="{{ url_for('scenes.view_scene', scene_id=active_scene_data.id, role='gm') }}"
+                   class="btn btn-small" style="background: var(--lcars-purple);">
+                    Open GM View
+                </a>
+                <a href="{{ url_for('scenes.view_scene', scene_id=active_scene_data.id, role='viewscreen') }}"
+                   class="btn btn-small" style="background: var(--lcars-blue);">
+                    Open Viewscreen
+                </a>
+                <button class="btn btn-small" onclick="editScene({{ active_scene_data.id }})" style="background: var(--lcars-tan);">
+                    Edit
+                </button>
+                <button class="btn btn-small" onclick="convertScene({{ active_scene_data.id }}, '{{ active_scene_data.name }}')" style="background: var(--lcars-ice);">
+                    Convert to...
+                </button>
+                <button class="btn btn-small" onclick="deactivateScene({{ active_scene_data.id }})" style="background: var(--lcars-orange);">
+                    Deactivate
+                </button>
+                <button class="btn btn-small btn-danger" onclick="deleteScene({{ active_scene_data.id }}, '{{ active_scene_data.name }}')">
+                    Delete
+                </button>
+                {% else %}
+                <a href="{{ url_for('scenes.view_scene', scene_id=active_scene_data.id, role='player') }}"
+                   class="btn btn-small">
+                    View Scene
+                </a>
+                {% endif %}
+            </div>
         {% else %}
-            <p style="color: var(--lcars-tan);">No active encounter</p>
+            <p style="color: var(--lcars-tan);">No active scene</p>
             {% if is_gm %}
                 {% if active_ship %}
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -666,6 +719,35 @@
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                 <button type="button" class="btn btn-small" style="background: #666;" onclick="hideCreateSceneModal()">Cancel</button>
                 <button type="submit" class="btn btn-small" style="background: var(--lcars-butterscotch);">Create Scene</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Convert Scene Modal -->
+<div id="convert-scene-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 450px; width: 90%;">
+        <h2>Convert Scene</h2>
+        <p style="color: var(--lcars-tan); margin-bottom: 15px;">
+            Convert "<span id="convert-scene-name"></span>" to a different scene type.
+        </p>
+        <form id="convert-scene-form" onsubmit="doConvertScene(event)">
+            <input type="hidden" id="convert-scene-id">
+            <div style="margin-bottom: 15px;">
+                <label for="convert-scene-type">New Scene Type</label>
+                <select id="convert-scene-type" style="width: 100%;">
+                    <option value="narrative">🎬 Narrative (Roleplay)</option>
+                    <option value="starship_encounter">🚀 Starship Combat</option>
+                    <option value="personal_encounter">👤 Personal Combat</option>
+                    <option value="social_encounter">💬 Social Encounter</option>
+                </select>
+            </div>
+            <p style="color: var(--lcars-tan); font-size: 0.85em; margin-bottom: 15px;">
+                <strong>Note:</strong> Converting to a combat scene type will preserve scene data but may require additional setup (map, enemies, etc.).
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-small" style="background: #666;" onclick="hideConvertSceneModal()">Cancel</button>
+                <button type="submit" class="btn btn-small" style="background: var(--lcars-ice);">Convert</button>
             </div>
         </form>
     </div>
@@ -1361,6 +1443,59 @@ async function deleteScene(sceneId, sceneName) {
         }
     } catch (error) {
         alert('Error deleting scene: ' + error.message);
+    }
+}
+
+async function deactivateScene(sceneId) {
+    if (!confirm('Deactivate this scene? It will be moved back to draft status.')) return;
+    
+    try {
+        const response = await fetch(`/campaigns/api/scene/${sceneId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'draft' })
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const result = await response.json();
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error deactivating scene: ' + error.message);
+    }
+}
+
+function convertScene(sceneId, sceneName) {
+    document.getElementById('convert-scene-id').value = sceneId;
+    document.getElementById('convert-scene-name').textContent = sceneName;
+    document.getElementById('convert-scene-modal').style.display = 'flex';
+}
+
+function hideConvertSceneModal() {
+    document.getElementById('convert-scene-modal').style.display = 'none';
+}
+
+async function doConvertScene(event) {
+    event.preventDefault();
+    
+    const sceneId = document.getElementById('convert-scene-id').value;
+    const newType = document.getElementById('convert-scene-type').value;
+    
+    try {
+        const response = await fetch(`/campaigns/api/scene/${sceneId}/convert`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scene_type: newType })
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const result = await response.json();
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error converting scene: ' + error.message);
     }
 }
 

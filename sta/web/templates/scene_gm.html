@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}{{ scene.name }} - GM View{% endblock %}
+
+{% block header %}{{ scene.name }} <span style="color: var(--lcars-butterscotch);">[GM]</span>{% endblock %}
+
+{% block content %}
+<div class="panel" style="border-color: var(--lcars-purple);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h2 style="margin: 0;">
+            <span style="font-size: 1.2em; margin-right: 8px;">
+                {% if scene.scene_type == 'narrative' %}🎬{% elif scene.scene_type == 'personal_encounter' %}👤{% elif scene.scene_type == 'social_encounter' %}💬{% else %}🎬{% endif %}
+            </span>
+            {{ scene.name }}
+        </h2>
+        <span style="background: var(--lcars-butterscotch); color: #000; padding: 4px 12px; border-radius: 15px;">
+            {{ scene.scene_type.replace('_', ' ').title() }}
+        </span>
+    </div>
+
+    {% if scene.stardate %}
+    <div class="stat-row">
+        <span>Stardate</span>
+        <span class="stat-value">{{ scene.stardate }}</span>
+    </div>
+    {% endif %}
+
+    <!-- Scene Traits -->
+    <div style="margin-top: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h3 style="color: var(--lcars-butterscotch); margin: 0;">Scene Traits</h3>
+            <button class="btn btn-small" onclick="showAddTraitModal('scene')" style="background: var(--lcars-butterscotch);">
+                + Add Trait
+            </button>
+        </div>
+        <div id="scene-traits-container">
+            {% for trait in scene.scene_traits %}
+            <div class="trait-badge" style="display: inline-flex; align-items: center; gap: 8px; background: var(--lcars-butterscotch); color: #000; padding: 4px 12px; border-radius: 15px; margin: 4px;">
+                <span>{{ trait }}</span>
+                <button onclick="removeSceneTrait('{{ trait }}')" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold;">&times;</button>
+            </div>
+            {% endfor %}
+            {% if not scene.scene_traits %}
+            <p style="color: var(--lcars-tan); font-style: italic;">No scene traits defined</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Extended Tasks -->
+    <div style="margin-top: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h3 style="color: var(--lcars-ice); margin: 0;">Extended Tasks</h3>
+            <button class="btn btn-small" onclick="showAddExtendedTaskModal()" style="background: var(--lcars-ice);">
+                + Add Task
+            </button>
+        </div>
+        <div id="extended-tasks-container">
+            {% for task in scene.challenges %}
+            <div class="task-card" style="background: #1a1a1a; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 4px solid var(--lcars-ice);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong>{{ task.name }}</strong>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="btn btn-small" onclick="advanceTask({{ loop.index0 }})" style="background: var(--lcars-green);">+1</button>
+                        <button class="btn btn-small btn-danger" onclick="removeTask({{ loop.index0 }})">&times;</button>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 4px; margin-top: 8px;">
+                    {% for i in range(task.progress | default(0)) %}
+                    <span style="width: 14px; height: 14px; background: var(--lcars-ice); border-radius: 3px;"></span>
+                    {% endfor %}
+                    {% for i in range((task.resistance | default(5)) - (task.progress | default(0))) %}
+                    <span style="width: 14px; height: 14px; background: #333; border-radius: 3px;"></span>
+                    {% endfor %}
+                </div>
+                <div style="color: var(--lcars-tan); font-size: 0.85em; margin-top: 4px;">
+                    Progress: {{ task.progress | default(0) }} / {{ task.resistance | default(5) }}
+                </div>
+            </div>
+            {% endfor %}
+            {% if not scene.challenges %}
+            <p style="color: var(--lcars-tan); font-style: italic;">No extended tasks defined</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div style="display: flex; gap: 10px; margin-top: 20px;">
+    <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}" class="btn btn-small" style="background: #666;">
+        Back to Campaign
+    </a>
+    <a href="{{ url_for('scenes.view_scene', scene_id=scene.id, role='viewscreen') }}" class="btn btn-small" style="background: var(--lcars-blue);">
+        Open Viewscreen
+    </a>
+    <button class="btn btn-small" onclick="deactivateScene({{ scene.id }})" style="background: var(--lcars-orange);">
+        Deactivate Scene
+    </button>
+</div>
+
+<!-- Add Trait Modal -->
+<div id="add-trait-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 400px; width: 90%;">
+        <h2>Add Scene Trait</h2>
+        <form onsubmit="addSceneTrait(event)">
+            <div style="margin-bottom: 15px;">
+                <label for="trait-name">Trait Name</label>
+                <input type="text" id="trait-name" required style="width: 100%;" placeholder="e.g., Dark, Dangerous, Flooded">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label for="trait-description">Description (shown on hover)</label>
+                <textarea id="trait-description" rows="2" style="width: 100%;" placeholder="Optional description for players"></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-small" style="background: #666;" onclick="hideAddTraitModal()">Cancel</button>
+                <button type="submit" class="btn btn-small" style="background: var(--lcars-butterscotch);">Add</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Add Extended Task Modal -->
+<div id="add-task-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 450px; width: 90%;">
+        <h2>Add Extended Task</h2>
+        <form onsubmit="addExtendedTask(event)">
+            <div style="margin-bottom: 15px;">
+                <label for="task-name">Task Name</label>
+                <input type="text" id="task-name" required style="width: 100%;" placeholder="e.g., Repair Warp Core">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label for="task-resistance">Resistance (Work needed)</label>
+                <input type="number" id="task-resistance" min="1" max="20" value="5" style="width: 100%;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label for="task-magnitude">Magnitude (Difficulty)</label>
+                <select id="task-magnitude" style="width: 100%;">
+                    <option value="1">1 - Simple</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3" selected>3 - Challenging</option>
+                    <option value="4">4 - Difficult</option>
+                    <option value="5">5 - Formidable</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-small" style="background: #666;" onclick="hideAddExtendedTaskModal()">Cancel</button>
+                <button type="submit" class="btn btn-small" style="background: var(--lcars-ice);">Add Task</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const sceneId = {{ scene.id }};
+let sceneTraits = {{ scene.scene_traits | tojson }};
+let extendedTasks = {{ scene.challenges | tojson }};
+
+function showAddTraitModal() {
+    document.getElementById('add-trait-modal').style.display = 'flex';
+    document.getElementById('trait-name').value = '';
+    document.getElementById('trait-description').value = '';
+}
+
+function hideAddTraitModal() {
+    document.getElementById('add-trait-modal').style.display = 'none';
+}
+
+async function addSceneTrait(event) {
+    event.preventDefault();
+    const name = document.getElementById('trait-name').value.trim();
+    if (!name) return;
+    
+    sceneTraits.push(name);
+    await updateScene();
+    hideAddTraitModal();
+    window.location.reload();
+}
+
+async function removeSceneTrait(traitName) {
+    sceneTraits = sceneTraits.filter(t => t !== traitName);
+    await updateScene();
+    window.location.reload();
+}
+
+function showAddExtendedTaskModal() {
+    document.getElementById('add-task-modal').style.display = 'flex';
+    document.getElementById('task-name').value = '';
+    document.getElementById('task-resistance').value = '5';
+    document.getElementById('task-magnitude').value = '3';
+}
+
+function hideAddExtendedTaskModal() {
+    document.getElementById('add-task-modal').style.display = 'none';
+}
+
+async function addExtendedTask(event) {
+    event.preventDefault();
+    const task = {
+        name: document.getElementById('task-name').value,
+        resistance: parseInt(document.getElementById('task-resistance').value),
+        magnitude: parseInt(document.getElementById('task-magnitude').value),
+        progress: 0
+    };
+    extendedTasks.push(task);
+    await updateScene();
+    hideAddExtendedTaskModal();
+    window.location.reload();
+}
+
+async function advanceTask(index) {
+    if (extendedTasks[index]) {
+        extendedTasks[index].progress = (extendedTasks[index].progress || 0) + 1;
+        await updateScene();
+        window.location.reload();
+    }
+}
+
+async function removeTask(index) {
+    extendedTasks.splice(index, 1);
+    await updateScene();
+    window.location.reload();
+}
+
+async function updateScene() {
+    await fetch(`/api/scene/${sceneId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            scene_traits: sceneTraits,
+            challenges: extendedTasks
+        })
+    });
+}
+
+async function deactivateScene(sceneId) {
+    if (!confirm('Deactivate this scene?')) return;
+    await fetch(`/campaigns/api/scene/${sceneId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'draft' })
+    });
+    window.location.href = '/campaigns/{{ campaign.campaign_id }}';
+}
+</script>
+{% endblock %}

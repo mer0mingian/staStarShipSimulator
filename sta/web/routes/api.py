@@ -5702,3 +5702,47 @@ def get_server_info():
     return jsonify(
         {"local_ip": local_ip, "port": port, "url": f"http://{local_ip}:{port}"}
     )
+
+
+@api_bp.route("/scene/<int:scene_id>", methods=["PUT"])
+def update_scene_by_id(scene_id: int):
+    """Update scene data by ID."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        data = request.get_json() or {}
+
+        if "name" in data:
+            scene.name = data["name"]
+        if "stardate" in data:
+            scene.stardate = data["stardate"]
+        if "scene_picture_url" in data:
+            scene.scene_picture_url = data["scene_picture_url"]
+        if "scene_traits" in data:
+            scene.scene_traits_json = json.dumps(data["scene_traits"])
+        if "challenges" in data:
+            scene.challenges_json = json.dumps(data["challenges"])
+        if "show_picture" in data:
+            scene.show_picture = data["show_picture"]
+
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "id": scene.id,
+                "name": scene.name,
+                "stardate": scene.stardate,
+                "scene_traits": json.loads(scene.scene_traits_json),
+                "challenges": json.loads(scene.challenges_json),
+            }
+        )
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()

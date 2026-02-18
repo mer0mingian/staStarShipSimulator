@@ -285,6 +285,18 @@ def campaign_dashboard(campaign_id: str):
         draft_scenes = [s for s in scenes if s.status == "draft"]
         active_scene = next((s for s in scenes if s.status == "active"), None)
 
+        # Parse active scene data for template
+        active_scene_data = None
+        if active_scene:
+            active_scene_data = {
+                "id": active_scene.id,
+                "name": active_scene.name,
+                "scene_type": active_scene.scene_type,
+                "status": active_scene.status,
+                "stardate": active_scene.stardate,
+                "scene_traits": json.loads(active_scene.scene_traits_json or "[]"),
+            }
+
         positions = [p.value for p in Position]
 
         response = make_response(
@@ -301,6 +313,7 @@ def campaign_dashboard(campaign_id: str):
                 completed_encounters=completed_encounters,
                 draft_scenes=draft_scenes,
                 active_scene=active_scene,
+                active_scene_data=active_scene_data,
                 positions=positions,
             )
         )
@@ -2064,5 +2077,56 @@ def api_delete_scene(scene_id: int):
         session.delete(scene)
         session.commit()
         return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/scene/<int:scene_id>/convert", methods=["PUT"])
+def api_convert_scene(scene_id: int):
+    """API: Convert scene to a different type (GM only)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        # Verify GM status
+        session_token = request.cookies.get("sta_session_token")
+        gm = (
+            session.query(CampaignPlayerRecord)
+            .filter_by(campaign_id=scene.campaign_id, is_gm=True)
+            .first()
+        )
+
+        if not gm or session_token != gm.session_token:
+            return jsonify({"error": "Only GM can convert scenes"}), 403
+
+        data = request.get_json()
+        new_type = data.get("scene_type")
+
+        if new_type not in (
+            "narrative",
+            "starship_encounter",
+            "personal_encounter",
+            "social_encounter",
+        ):
+            return jsonify({"error": "Invalid scene type"}), 400
+
+        old_type = scene.scene_type
+        scene.scene_type = new_type
+
+        # Update has_map based on type (social encounters don't have maps)
+        scene.has_map = new_type != "social_encounter"
+
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "old_type": old_type,
+                "new_type": new_type,
+                "message": f"Scene converted from {old_type} to {new_type}",
+            }
+        )
     finally:
         session.close()
