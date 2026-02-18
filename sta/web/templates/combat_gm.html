@@ -988,6 +988,73 @@
                         </div>
                     </div>
 
+                    <!-- Extended Tasks (for narrative scenes) -->
+                    {% if is_narrative %}
+                    <div class="extended-tasks-row" style="margin-top: 15px; padding: 12px; background: rgba(255, 153, 0, 0.1); border: 2px solid var(--lcars-orange); border-radius: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <h4 style="color: var(--lcars-orange); margin: 0; font-size: 1rem;">📋 EXTENDED TASKS</h4>
+                            <button class="btn btn-small" onclick="showAddExtendedTaskModal()" style="background: var(--lcars-orange); color: #000; font-size: 0.75rem; padding: 4px 10px;">+ Add Task</button>
+                        </div>
+                        <div id="extended-tasks-list">
+                            {% if scene and scene.challenges %}
+                            {% for task in scene.challenges %}
+                            <div class="extended-task-item" data-task-index="{{ loop.index0 }}" style="background: #1a1a1a; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 4px solid var(--lcars-orange);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <strong style="color: var(--lcars-text);">{{ task.name }}</strong>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="color: var(--lcars-almond); font-size: 0.85rem;">{{ task.progress }}/{{ task.magnitude * 5 }}</span>
+                                        <button class="btn btn-small" onclick="adjustExtendedTaskProgress({{ loop.index0 }}, 1)" style="padding: 2px 8px; font-size: 0.75rem; background: var(--lcars-success);">+</button>
+                                        <button class="btn btn-small" onclick="adjustExtendedTaskProgress({{ loop.index0 }}, -1)" style="padding: 2px 8px; font-size: 0.75rem; background: var(--lcars-tomato);">-</button>
+                                        <button class="btn btn-small" onclick="removeExtendedTask({{ loop.index0 }})" style="padding: 2px 8px; font-size: 0.75rem; background: #666;">×</button>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 10px; font-size: 0.8rem; color: var(--lcars-almond); margin-bottom: 8px;">
+                                    <span>Magnitude: {{ task.magnitude }}</span>
+                                    {% if task.resistance %}<span>Resistance: {{ task.resistance }}</span>{% endif %}
+                                </div>
+                                <div style="background: #333; border-radius: 4px; height: 12px; position: relative;">
+                                    <div style="background: var(--lcars-orange); height: 100%; border-radius: 4px; width: {{ (task.progress / (task.magnitude * 5) * 100) | int }}%;"></div>
+                                    {% if task.magnitude * 5 > 0 %}
+                                    <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: {% if task.progress >= (task.magnitude * 5 * 0.5) %}var(--lcars-success){% else %}#555{% endif %};"></div>
+                                    <div style="position: absolute; left: 75%; top: 0; bottom: 0; width: 2px; background: {% if task.progress >= (task.magnitude * 5 * 0.75) %}var(--lcars-success){% else %}#555{% endif %};"></div>
+                                    {% endif %}
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: #666; margin-top: 4px;">
+                                    <span>50% {% if task.breakthrough_1 %}✓ Breakthrough{% endif %}</span>
+                                    <span>75% {% if task.breakthrough_2 %}✓ Breakthrough{% endif %}</span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <p style="color: #666; padding: 15px; text-align: center;">No extended tasks. Add tasks to track progress on challenges.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Add Extended Task Modal -->
+                    <div id="add-extended-task-modal" class="modal-overlay">
+                        <div class="modal-content">
+                            <h3 style="color: var(--lcars-orange);">ADD EXTENDED TASK</h3>
+                            <label class="gm-select-label" for="task-name">Task Name</label>
+                            <input type="text" id="task-name" placeholder="e.g., Repair the Warp Core" class="gm-select" style="background: #1a1a1a;">
+                            <label class="gm-select-label" for="task-magnitude">Magnitude (1-5)</label>
+                            <select id="task-magnitude" class="gm-select select-tomato">
+                                <option value="1">1 (Simple)</option>
+                                <option value="2" selected>2 (Standard)</option>
+                                <option value="3">3 (Challenging)</option>
+                                <option value="4">4 (Difficult)</option>
+                                <option value="5">5 (Extreme)</option>
+                            </select>
+                            <label class="gm-select-label" for="task-resistance">Resistance (optional)</label>
+                            <input type="number" id="task-resistance" value="0" min="0" max="5" class="gm-select" style="background: #1a1a1a;">
+                            <div class="modal-buttons">
+                                <button class="btn" onclick="hideAddExtendedTaskModal()" style="background: #555;">Cancel</button>
+                                <button class="btn" onclick="addExtendedTask()" style="background: var(--lcars-orange); color: #000;">Add Task</button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <!-- Two Column Layout: Player Ship & Crew | Enemy Ships -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                         <!-- Player Ship & Crew Column -->
@@ -2916,6 +2983,7 @@
 
         // ===== NARRATIVE SCENE FUNCTIONS =====
         let sceneTraits = {% if scene and scene.scene_traits %}{{ scene.scene_traits | tojson }}{% else %}[]{% endif %};
+        let challenges = {% if scene and scene.challenges %}{{ scene.challenges | tojson }}{% else %}[]{% endif %};
         let sceneId = {% if scene %}{{ scene.id }}{% else %}null{% endif %};
 
         function showAddSceneTraitModal() {
@@ -2975,6 +3043,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     scene_traits: sceneTraits,
+                    challenges: challenges,
                     stardate: document.getElementById('scene-stardate')?.value || null,
                     scene_picture_url: document.getElementById('scene-picture-url')?.value || null,
                     show_picture: document.getElementById('scene-show-picture')?.checked || false
@@ -2988,6 +3057,62 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_visible: isVisible })
             });
+        }
+
+        // ===== EXTENDED TASKS MANAGEMENT =====
+        function showAddExtendedTaskModal() {
+            document.getElementById('add-extended-task-modal').classList.add('active');
+        }
+
+        function hideAddExtendedTaskModal() {
+            document.getElementById('add-extended-task-modal').classList.remove('active');
+            document.getElementById('task-name').value = '';
+            document.getElementById('task-magnitude').value = '2';
+            document.getElementById('task-resistance').value = '0';
+        }
+
+        async function addExtendedTask() {
+            const name = document.getElementById('task-name').value.trim();
+            const magnitude = parseInt(document.getElementById('task-magnitude').value) || 2;
+            const resistance = parseInt(document.getElementById('task-resistance').value) || 0;
+            
+            if (!name) {
+                showToast('Task name is required', 'error');
+                return;
+            }
+            
+            const newTask = {
+                name: name,
+                progress: 0,
+                magnitude: magnitude,
+                resistance: resistance,
+                breakthrough_1: null,
+                breakthrough_2: null
+            };
+            
+            challenges.push(newTask);
+            await updateSceneData();
+            hideAddExtendedTaskModal();
+            location.reload();
+        }
+
+        async function adjustExtendedTaskProgress(index, change) {
+            if (!challenges[index]) return;
+            
+            const task = challenges[index];
+            const maxProgress = task.magnitude * 5;
+            task.progress = Math.max(0, Math.min(maxProgress, task.progress + change));
+            
+            await updateSceneData();
+            location.reload();
+        }
+
+        async function removeExtendedTask(index) {
+            if (!challenges[index]) return;
+            
+            challenges.splice(index, 1);
+            await updateSceneData();
+            location.reload();
         }
 
         // Override updateScene for narrative scenes

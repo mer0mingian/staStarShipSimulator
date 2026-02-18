@@ -1,9 +1,55 @@
 {% extends "base.html" %}
 
-{% block title %}{{ encounter.name }} - Combat{% endblock %}
-{% block header %}{{ encounter.name }} - Round {{ encounter.round }}{% endblock %}
+{% block title %}{% if is_narrative %}{{ scene.name }} - Narrative{% else %}{{ encounter.name }} - Combat{% endif %}{% endblock %}
+{% block header %}{% if is_narrative %}{{ scene.name }}{% else %}{{ encounter.name }} - Round {{ encounter.round }}{% endif %}{% endblock %}
 
 {% block content %}
+{% if is_narrative %}
+<!-- Scene Header for Narrative -->
+<div class="panel" style="border-color: var(--lcars-purple);">
+    <h2 style="color: var(--lcars-purple);">🎬 {{ scene.name }}</h2>
+    {% if scene.stardate %}
+    <div class="stat-row">
+        <span>Stardate</span>
+        <span class="stat-value">{{ scene.stardate }}</span>
+    </div>
+    {% endif %}
+    {% if scene.scene_traits %}
+    <div style="margin-top: 10px;">
+        <strong style="color: var(--lcars-tan);">Scene Traits:</strong>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
+            {% for trait in scene.scene_traits %}
+            <span style="background: var(--lcars-purple); color: #fff; padding: 4px 12px; border-radius: 12px; font-size: 0.9rem;" {% if trait.description %}title="{{ trait.description }}"{% endif %}>
+                {{ trait.name if trait.name else trait }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% if scene.challenges %}
+    <div style="margin-top: 15px;">
+        <h3 style="color: var(--lcars-orange); font-size: 1em; margin-bottom: 10px;">Extended Tasks</h3>
+        {% for task in scene.challenges %}
+        <div style="background: #1a1a1a; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 4px solid var(--lcars-orange);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong>{{ task.name }}</strong>
+                <span style="color: var(--lcars-almond); font-size: 0.85rem;">{{ task.progress }}/{{ task.magnitude * 5 }}</span>
+            </div>
+            <div style="background: #333; border-radius: 4px; height: 8px; margin-top: 8px;">
+                <div style="background: var(--lcars-orange); height: 100%; border-radius: 4px; width: {{ (task.progress / (task.magnitude * 5) * 100) | int }}%;"></div>
+            </div>
+            {% if task.breakthrough_1 or task.breakthrough_2 %}
+            <div style="font-size: 0.8rem; color: var(--lcars-tan); margin-top: 6px;">
+                {% if task.progress >= (task.magnitude * 5 * 0.75) %}✓ {% endif %}Breakthrough at 75%
+                {% if task.progress >= (task.magnitude * 5 * 0.5) and task.progress < (task.magnitude * 5 * 0.75) %}✓ {% endif %}| 50%
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% else %}
 <div class="grid">
     <!-- Resource Pools -->
     <div class="panel">
@@ -29,6 +75,7 @@
             <button class="btn btn-small" onclick="nextTurn()">End Turn</button>
         </div>
     </div>
+{% endif %}
 
     <!-- Player Character -->
     {% if player_char %}
@@ -174,7 +221,25 @@
     </div>
     {% endif %}
 
-    <!-- Enemy Ships -->
+    <!-- NPCs (for narrative scenes) -->
+    {% if is_narrative and npcs %}
+    <div class="panel" style="border-color: var(--lcars-purple);">
+        <h2 style="color: var(--lcars-purple);">Characters Present</h2>
+        {% for npc in npcs %}
+        {% if npc.is_visible %}
+        <div style="background: #1a1a2a; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 4px solid var(--lcars-purple);">
+            <div style="color: var(--lcars-purple); font-weight: 700;">{{ npc.name }}</div>
+            {% if npc.npc_type and npc.npc_type != 'quick' %}
+            <div style="color: var(--lcars-almond); font-size: 0.85em;">{{ npc.npc_type }}</div>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Enemy Ships (combat only) -->
+    {% if not is_narrative %}
     {% for enemy in enemy_ships %}
     <div class="panel enemy-ship" style="border-color: var(--lcars-red);" data-ship-id="{{ loop.index0 }}">
         <h2 style="color: var(--lcars-red);">{{ enemy.name }}</h2>
@@ -228,9 +293,11 @@
         {% endfor %}
     </div>
     {% endfor %}
+    {% endif %}
 </div>
 
-<!-- Actions Panel -->
+<!-- Actions Panel (combat only) -->
+{% if not is_narrative %}
 <div class="grid">
     <div class="panel">
         <h2>Minor Actions</h2>
@@ -436,6 +503,7 @@
         <div id="dice-summary" style="margin-top: 10px;"></div>
     </div>
 </div>
+{% endif %}
 
 <style>
     .stats-grid {

@@ -143,6 +143,16 @@ def view_scene(scene_id: int):
             is_narrative=True,
             npcs=npcs_data,
             player_ship=player_ship,
+            player_char=None,
+            position=None,
+            actions={
+                "position_minor": [],
+                "position_major": [],
+                "standard_minor": [],
+                "standard_major": [],
+            },
+            enemy_ships=[],
+            resistance_bonus=0,
             encounter=None,
         )
     finally:

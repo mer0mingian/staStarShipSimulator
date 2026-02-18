@@ -507,3 +507,155 @@ class TestSceneUpdateAPI:
         data = response.get_json()
         assert len(data["scene_traits"]) == 2
         assert data["scene_traits"][0]["description"] == "No light source available"
+
+
+class TestNarrativeSceneView:
+    """Tests for narrative scene view routes."""
+
+    def test_view_narrative_scene_as_player(
+        self, client, sample_campaign, test_session
+    ):
+        """Narrative scene should render for player with scene header."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Bridge Briefing",
+            scene_type="narrative",
+            status="active",
+            stardate="47988.5",
+            scene_traits_json=json.dumps(
+                [
+                    {"name": "Tense", "description": "Crew is on edge"},
+                    {"name": "Dark", "description": None},
+                ]
+            ),
+            challenges_json=json.dumps(
+                [
+                    {
+                        "name": "Repair Warp Core",
+                        "progress": 3,
+                        "magnitude": 2,
+                        "resistance": 1,
+                    }
+                ]
+            ),
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}?role=player")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Bridge Briefing" in html
+        assert "🎬" in html
+        assert "Scene Traits" in html
+        assert "Tense" in html
+        assert "Extended Tasks" in html
+        assert "Repair Warp Core" in html
+
+    def test_view_narrative_scene_as_gm(self, client, sample_campaign, test_session):
+        """Narrative scene GM view requires authentication."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Cargo Bay",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}?role=gm")
+        assert response.status_code == 302
+
+    def test_view_narrative_scene_as_viewscreen(
+        self, client, sample_campaign, test_session
+    ):
+        """Narrative scene should render for viewscreen with scene name."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Observation Lounge",
+            scene_type="narrative",
+            status="active",
+            stardate="48000.0",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}?role=viewscreen")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Observation Lounge" in html
+
+    def test_narrative_scene_hides_combat_elements(
+        self, client, sample_campaign, test_session
+    ):
+        """Narrative scene player view should hide combat-specific elements."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Planet Surface",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}?role=player")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+
+        assert "FIRE WEAPONS" not in html
+        assert "Dice Roller" not in html
+        assert (
+            "Resources" not in html
+            or "Momentum" not in html.split("<h2>Resources</h2>")[0]
+            if "<h2>Resources</h2>" in html
+            else True
+        )
+
+    def test_narrative_scene_shows_visible_npcs(
+        self, client, sample_campaign, test_session
+    ):
+        """Narrative scene should show visible NPCs to players."""
+        from sta.database.schema import NPCRecord, SceneNPCRecord
+
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Starbase 47",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.flush()
+
+        npc = NPCRecord(name="Ambassador Sarek", npc_type="major")
+        test_session.add(npc)
+        test_session.flush()
+
+        visible_npc = SceneNPCRecord(
+            scene_id=scene.id, npc_id=npc.id, is_visible_to_players=True
+        )
+        hidden_npc = SceneNPCRecord(
+            scene_id=scene.id, quick_name="Secret Agent", is_visible_to_players=False
+        )
+        test_session.add_all([visible_npc, hidden_npc])
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}?role=player")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Ambassador Sarek" in html
+        assert "Secret Agent" not in html
