@@ -25,3 +25,6 @@ Thumbs.db
 
 # Reference files (large rulebook files)
 referenceFiles/
+
+# sta rules
+docs/sta2e_rules/
