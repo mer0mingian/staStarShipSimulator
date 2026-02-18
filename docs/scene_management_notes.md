@@ -4,106 +4,194 @@
 
 ```
 Campaign
-├── Scenes (new first-class entity)
-│   ├── id, name, type, status
-│   ├── Stardate, picture, traits, challenges
-│   ├── Optional: Map, NPCs
-│   └── Optional: Combat data (if type=encounter)
+├── Scenes (first-class entity)
+│   ├── Type: narrative, starship_encounter, personal_encounter, social_encounter
+│   ├── Content: Stardate, picture, traits, challenges
+│   ├── Optional: Map (not for social)
+│   └── Optional: Combat data (encounter types only)
+
+NPC Archive (global)
+└── Campaign NPCs (selected from archive or created fresh)
+    └── Scene NPCs (present in current scene)
 ```
 
-## Database Changes
+---
 
-### Update SceneRecord
+## Database Schema
+
+### SceneRecord (Updated)
 ```python
 class SceneRecord(Base):
     __tablename__ = "scenes"
     
     id: PK
     campaign_id: FK to campaigns (required)
-    encounter_id: FK to encounters (nullable - only if combat scene)
+    encounter_id: FK to encounters (nullable - only for combat scenes)
     
-    # Basic info
     name: String
-    scene_type: Enum  # 'narrative', 'starship_combat', 'personnel_combat', 'social'
+    scene_type: Enum  # 'narrative', 'starship_encounter', 'personal_encounter', 'social_encounter'
     status: String    # 'draft', 'active', 'completed'
     
-    # Scene content
     stardate: String
     scene_picture_url: String
-    scene_traits_json: Text
+    scene_traits_json: Text  # Location/equipment/circumstantial traits
     challenges_json: Text
-    characters_present_json: Text  # Character IDs in scene
+    characters_present_json: Text
     
-    # Map (optional)
-    has_map: Boolean
+    has_map: Boolean  # False for social encounters
     tactical_map_json: Text
     
-    # NPCs in scene
-    npcs_json: Text  # [{name, description, visible_to_players, picture_url}]
-    
-    # Presentation
     show_picture: Boolean
-    active_picture_index: Integer  # Index in gallery
+    active_picture_id: FK to scene_pictures (nullable)
     
     created_at, updated_at
 ```
 
-### New Table: ScenePictureRecord
+### ScenePictureRecord (New)
 ```python
 class ScenePictureRecord(Base):
     __tablename__ = "scene_pictures"
     
     id: PK
     scene_id: FK to scenes
-    filename: String  # Stored filename
-    original_name: String  # User's original filename
-    is_active: Boolean  # Currently displayed
+    filename: String  # Stored filename (uploads/)
+    original_name: String
+    url: String  # External URL (if not uploaded)
+    is_active: Boolean
     order_index: Integer
     uploaded_at: DateTime
 ```
 
-### New Table: CharacterTraitRecord
+### NPCRecord (New - Global Archive)
+```python
+class NPCRecord(Base):
+    __tablename__ = "npc_archive"
+    
+    id: PK
+    name: String
+    npc_type: Enum  # 'major', 'notable', 'minor', 'npc_crew'
+    
+    # Minimal stats (for major/notable)
+    attributes_json: Text  # Optional
+    disciplines_json: Text  # Optional
+    stress: Integer
+    stress_max: Integer
+    
+    # Extended fields
+    appearance: Text
+    motivation: Text
+    affiliation: String
+    location: String
+    picture_url: String
+    notes: Text
+    
+    # For NPC Ship crew
+    ship_id: FK to starships (nullable)
+    
+    created_at, updated_at
+```
+
+### CampaignNPCRecord (New - Campaign Manifest)
+```python
+class CampaignNPCRecord(Base):
+    __tablename__ = "campaign_npcs"
+    
+    id: PK
+    campaign_id: FK to campaigns
+    npc_id: FK to npc_archive
+    is_visible_to_players: Boolean
+    added_at: DateTime
+```
+
+### SceneNPCRecord (New - NPCs in Scene)
+```python
+class SceneNPCRecord(Base):
+    __tablename__ = "scene_npcs"
+    
+    id: PK
+    scene_id: FK to scenes
+    npc_id: FK to npc_archive (nullable - can be on-the-fly)
+    
+    # On-the-fly NPC fields
+    quick_name: String
+    quick_description: Text
+    
+    is_visible_to_players: Boolean
+    order_index: Integer
+```
+
+### CharacterTraitRecord (New)
 ```python
 class CharacterTraitRecord(Base):
     __tablename__ = "character_traits"
     
     id: PK
-    character_id: FK to characters
+    character_id: FK to characters (required)
     trait_name: String
-    source: String  # 'gm_added', 'scene_effect', 'earned'
-    scene_id: FK to scenes (nullable - if from specific scene)
-    is_temporary: Boolean
+    description: Text (nullable)
+    source: String  # 'gm', 'player', 'scene', 'campaign' - for tracking only
+    scene_id: FK to scenes (nullable - if originated from scene)
+    is_active: Boolean  # Can be toggled off when no longer true
     created_at: DateTime
 ```
 
-## UI Changes
+---
 
-### Campaign Dashboard (GM)
-- Add "Create Scene" button next to "Start Encounter"
-- Combine draft scenes + draft encounters in bottom section
-- Visual indicators: 
-  - Scene icon 🎬 for narrative scenes
-  - Ship icon 🚀 for starship combat
-  - Person icon 👤 for personnel combat
-  - Speech icon 💬 for social scenes
+## Scene Types
 
-### Scene Editor (GM) - Non-Encounter
-- Tabs: Overview, NPCs, Pictures, Map (optional)
-- Overview: Stardate, Traits, Challenges, Player Ship (optional)
-- NPCs: List with visibility toggle, add/remove
-- Pictures: Gallery view, upload button, set active
-- Map: Same hex editor as encounter (optional)
+| Type | Map | Combat | NPCs Visible | Notes |
+|------|-----|--------|--------------|-------|
+| narrative | Optional | No | Yes | General roleplay scene |
+| starship_encounter | Yes | Yes | Yes | Ship-to-ship combat |
+| personal_encounter | Yes | Yes | Yes | Character-scale combat |
+| social_encounter | No | No | Yes | Social conflict/interaction |
 
-### Viewscreen - Non-Encounter
-- Show scene picture (full or overlay)
-- Stardate prominent
-- Scene traits displayed
-- Visible NPCs listed
-- No combat UI elements
+---
 
-## Questions Pending
-1. Scene types: Enum or boolean flags?
-2. NPC source: From manifest or on-the-fly?
-3. Picture storage: Local files or URLs?
-4. Scene activation: How does it work?
-5. Character traits: Temporary or permanent?
+## Trait System
+
+Traits exist in two contexts:
+1. **Scene Traits** - Location, equipment, circumstantial (stored on SceneRecord)
+2. **Character Traits** - Personal conditions (stored on CharacterTraitRecord)
+
+Both GM and Player can:
+- Add new traits to their character
+- Remove/toggle inactive traits
+- View trait history
+
+---
+
+## Implementation Order
+
+1. **Phase 1: Database Schema**
+   - [ ] Update SceneRecord with scene_type, status, has_map
+   - [ ] Create ScenePictureRecord
+   - [ ] Create NPCRecord (archive)
+   - [ ] Create CampaignNPCRecord
+   - [ ] Create SceneNPCRecord
+   - [ ] Create CharacterTraitRecord
+
+2. **Phase 2: Scene CRUD**
+   - [ ] Create scene route/template
+   - [ ] Edit scene route/template
+   - [ ] Scene type-specific UI
+
+3. **Phase 3: NPC System**
+   - [ ] NPC archive management
+   - [ ] Add NPCs to campaign
+   - [ ] Add NPCs to scene
+
+4. **Phase 4: Picture System**
+   - [ ] File upload handling
+   - [ ] Gallery UI
+   - [ ] Picture activation
+
+5. **Phase 5: Character Traits**
+   - [ ] Add/remove traits UI
+   - [ ] Trait display on viewscreen
+   - [ ] Player self-service trait management
+
+6. **Phase 6: Scene Activation**
+   - [ ] Activate scene endpoint
+   - [ ] Player notification
+   - [ ] Viewscreen transition

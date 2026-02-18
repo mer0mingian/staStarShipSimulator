@@ -8,33 +8,59 @@ from sta.database.schema import SceneRecord
 class TestSceneRecord:
     """Tests for SceneRecord model."""
 
-    def test_scene_record_creation(self, test_session):
-        """SceneRecord should be creatable with encounter_id."""
-        scene = SceneRecord(encounter_id=1)
+    def test_scene_record_creation(self, test_session, sample_campaign):
+        """SceneRecord should be creatable with campaign_id."""
+        campaign_id = sample_campaign["campaign"].id
+        scene = SceneRecord(campaign_id=campaign_id, name="Test Scene")
         test_session.add(scene)
         test_session.flush()
         assert scene.id is not None
         assert scene.stardate is None
         assert scene.scene_picture_url is None
+        assert scene.scene_type == "narrative"
+        assert scene.status == "draft"
 
-    def test_scene_traits_json_serialization(self, test_session):
+    def test_scene_traits_json_serialization(self, test_session, sample_campaign):
         """Scene traits should serialize to/from JSON."""
-        scene = SceneRecord(encounter_id=1, scene_traits_json='["Dark", "Dangerous"]')
+        campaign_id = sample_campaign["campaign"].id
+        scene = SceneRecord(
+            campaign_id=campaign_id, scene_traits_json='["Dark", "Dangerous"]'
+        )
         test_session.add(scene)
         test_session.flush()
         traits = json.loads(scene.scene_traits_json)
         assert traits == ["Dark", "Dangerous"]
 
-    def test_scene_challenges_json_structure(self, test_session):
+    def test_scene_challenges_json_structure(self, test_session, sample_campaign):
         """Challenges should support name, progress, resistance."""
+        campaign_id = sample_campaign["campaign"].id
         challenges = [{"name": "Repair Warp Core", "progress": 2, "resistance": 5}]
-        scene = SceneRecord(encounter_id=1, challenges_json=json.dumps(challenges))
+        scene = SceneRecord(
+            campaign_id=campaign_id, challenges_json=json.dumps(challenges)
+        )
         test_session.add(scene)
         test_session.flush()
         loaded = json.loads(scene.challenges_json)
         assert loaded[0]["name"] == "Repair Warp Core"
         assert loaded[0]["progress"] == 2
         assert loaded[0]["resistance"] == 5
+
+    def test_scene_types(self, test_session, sample_campaign):
+        """Scene should support different types."""
+        campaign_id = sample_campaign["campaign"].id
+
+        narrative = SceneRecord(campaign_id=campaign_id, scene_type="narrative")
+        starship = SceneRecord(campaign_id=campaign_id, scene_type="starship_encounter")
+        personal = SceneRecord(campaign_id=campaign_id, scene_type="personal_encounter")
+        social = SceneRecord(campaign_id=campaign_id, scene_type="social_encounter")
+
+        test_session.add_all([narrative, starship, personal, social])
+        test_session.flush()
+
+        assert narrative.scene_type == "narrative"
+        assert starship.scene_type == "starship_encounter"
+        assert personal.scene_type == "personal_encounter"
+        assert social.scene_type == "social_encounter"
 
 
 class TestSceneAPI:

@@ -5627,7 +5627,11 @@ def update_scene(encounter_id: str):
         scene = session.query(SceneRecord).filter_by(encounter_id=encounter.id).first()
 
         if not scene:
-            scene = SceneRecord(encounter_id=encounter.id)
+            scene = SceneRecord(
+                encounter_id=encounter.id,
+                campaign_id=encounter.campaign_id,
+                name=f"Scene for {encounter.name}",
+            )
             session.add(scene)
 
         data = request.get_json() or {}
@@ -5644,12 +5648,22 @@ def update_scene(encounter_id: str):
             scene.characters_present_json = json.dumps(data["characters_present"])
         if "show_picture" in data:
             scene.show_picture = data["show_picture"]
+        if "name" in data:
+            scene.name = data["name"]
+        if "scene_type" in data:
+            scene.scene_type = data["scene_type"]
+        if "status" in data:
+            scene.status = data["status"]
 
         session.commit()
 
         return jsonify(
             {
                 "success": True,
+                "id": scene.id,
+                "name": scene.name,
+                "scene_type": scene.scene_type,
+                "status": scene.status,
                 "stardate": scene.stardate,
                 "scene_picture_url": scene.scene_picture_url,
                 "scene_traits": json.loads(scene.scene_traits_json),

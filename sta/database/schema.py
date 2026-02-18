@@ -441,12 +441,24 @@ class CampaignShipRecord(Base):
 
 
 class SceneRecord(Base):
-    """Scene information for an encounter (GM-presentable context)."""
+    """Scene information - first-class entity for narrative context."""
 
     __tablename__ = "scenes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id"), unique=True)
+
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), nullable=False)
+    encounter_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("encounters.id"), nullable=True, unique=True
+    )
+
+    name: Mapped[str] = mapped_column(String(100), default="New Scene")
+    scene_type: Mapped[str] = mapped_column(
+        String(30), default="narrative"
+    )  # narrative, starship_encounter, personal_encounter, social_encounter
+    status: Mapped[str] = mapped_column(
+        String(20), default="draft"
+    )  # draft, active, completed
 
     stardate: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     scene_picture_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -455,9 +467,122 @@ class SceneRecord(Base):
     challenges_json: Mapped[str] = mapped_column(Text, default="[]")
     characters_present_json: Mapped[str] = mapped_column(Text, default="[]")
 
+    has_map: Mapped[bool] = mapped_column(default=False)
+    tactical_map_json: Mapped[str] = mapped_column(Text, default="{}")
+
     show_picture: Mapped[bool] = mapped_column(default=False)
+    active_picture_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("scene_pictures.id"), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
     )
+
+
+class ScenePictureRecord(Base):
+    """Pictures uploaded for a scene."""
+
+    __tablename__ = "scene_pictures"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scene_id: Mapped[int] = mapped_column(ForeignKey("scenes.id"))
+
+    filename: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )  # Local storage
+    original_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    url: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True
+    )  # External URL
+    is_active: Mapped[bool] = mapped_column(default=False)
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class NPCRecord(Base):
+    """NPC Archive - global NPC database."""
+
+    __tablename__ = "npc_archive"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    npc_type: Mapped[str] = mapped_column(
+        String(20), default="minor"
+    )  # major, notable, minor, npc_crew
+
+    attributes_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    disciplines_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    stress: Mapped[int] = mapped_column(Integer, default=5)
+    stress_max: Mapped[int] = mapped_column(Integer, default=5)
+
+    appearance: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    motivation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    affiliation: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    location: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    picture_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    ship_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("starships.id"), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
+
+
+class CampaignNPCRecord(Base):
+    """NPCs assigned to a campaign (manifest)."""
+
+    __tablename__ = "campaign_npcs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"))
+    npc_id: Mapped[int] = mapped_column(ForeignKey("npc_archive.id"))
+
+    is_visible_to_players: Mapped[bool] = mapped_column(default=False)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class SceneNPCRecord(Base):
+    """NPCs present in a scene."""
+
+    __tablename__ = "scene_npcs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scene_id: Mapped[int] = mapped_column(ForeignKey("scenes.id"))
+    npc_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("npc_archive.id"), nullable=True
+    )
+
+    quick_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    quick_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    is_visible_to_players: Mapped[bool] = mapped_column(default=False)
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CharacterTraitRecord(Base):
+    """Traits assigned to characters."""
+
+    __tablename__ = "character_traits"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    character_id: Mapped[int] = mapped_column(ForeignKey("characters.id"))
+
+    trait_name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(
+        String(50), default="gm"
+    )  # gm, player, scene, campaign
+
+    scene_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("scenes.id"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
