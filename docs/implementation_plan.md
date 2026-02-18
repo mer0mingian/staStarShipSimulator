@@ -12,7 +12,9 @@ To maintain compatibility with the upstream branch, **create new tables** for ne
 ```
 Scene
 ├── Traits (visible to players when activated)
-├── Challenges (extended tasks with progress)
+│   └── Each trait: {name, description} for hover/click info
+├── Extended Tasks (challenges with progress tracking)
+│   └── Each task: {name, progress, resistance, magnitude, breakthrough_1, breakthrough_2}
 ├── Picture (optional visual)
 ├── Stardate
 ├── Characters Present
@@ -29,6 +31,20 @@ Scene
 
 ---
 
+## Future Features (Documented)
+
+### Alert Conditions for Ship Combat
+- **Red Alert**: Ship in immediate danger
+  - Visual: Flashing red overlay on viewscreen
+  - Optional: Sound effect (klaxon)
+  - Optional: Bonus to certain actions
+- **Yellow Alert**: Ship at heightened readiness
+  - Visual: Yellow tint on viewscreen
+- **Normal/Blue**: Standard operations
+- Toggle button in GM view during starship combat
+
+---
+
 ## Milestone 1: Overview Screen Enhancements (IN PROGRESS)
 **Goal:** Empower the GM to present scene context on the viewscreen.
 
@@ -38,8 +54,8 @@ Scene
     - `encounter_id` (FK to encounters, nullable - scene can exist without active combat)
     - `campaign_id` (FK to campaigns - for pre-generated scenes)
     - `scene_picture_url` (String, nullable)
-    - `scene_traits_json` (Text, default "[]")
-    - `challenges_json` (Text, default "[]") - Structure: `[{name, progress, resistance, difficulty}]`
+    - `scene_traits_json` (Text, default "[]") - Format: `[{name, description}]`
+    - `challenges_json` (Text, default "[]") - Format: `[{name, progress, resistance, magnitude, breakthrough_1, breakthrough_2}]`
     - `stardate` (String, nullable)
     - `characters_present_json` (Text, default "[]") - List of Character IDs
     - `is_active` (Boolean) - Scene activation state
