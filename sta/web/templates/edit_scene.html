@@ -50,9 +50,32 @@
             </select>
         </div>
 
-        <!-- NPCs and NP Ships -->
-        <div class="panel" style="border-color: var(--lcars-red);">
-            <h2 style="color: var(--lcars-red);">NPCs and NP Ships ({{ npcs | length }})</h2>
+        <!-- Scene Traits -->
+        <div class="panel" style="border-color: var(--lcars-butterscotch);">
+            <h2 style="color: var(--lcars-butterscotch);">Scene Traits</h2>
+            <div id="scene-traits-list">
+                {% if scene.scene_traits %}
+                {% for trait in scene.scene_traits %}
+                <span style="background: var(--lcars-butterscotch); color: #000; padding: 6px 14px; border-radius: 15px; margin: 4px; display: inline-flex; align-items: center; gap: 8px;">
+                    {{ trait.name if trait.name else trait }}
+                    <button type="button" onclick="removeSceneTrait({{ loop.index0 }})" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold;">&times;</button>
+                </span>
+                {% endfor %}
+                {% else %}
+                <p style="color: var(--lcars-tan); font-style: italic;">No scene traits defined</p>
+                {% endif %}
+            </div>
+            <div style="margin-top: 15px;">
+                <input type="text" id="new-trait-name" placeholder="Trait name" style="width: 200px;">
+                <input type="text" id="new-trait-description" placeholder="Description (optional)" style="width: 300px;">
+                <button type="button" class="btn btn-small" onclick="addSceneTrait()" style="background: var(--lcars-butterscotch);">Add Trait</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NPCs and NP Ships -->
+    <div class="panel" style="border-color: var(--lcars-red);">
+        <h2 style="color: var(--lcars-red);">NPCs and NP Ships ({{ npcs | length }})</h2>
             <div id="npcs-list">
                 {% for npc in npcs %}
                 <div class="npc-card" data-npc-id="{{ npc.id }}" style="background: #222; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
@@ -98,28 +121,6 @@
             {% if not npcs %}
             <p style="color: var(--lcars-tan);">No NPCs added yet.</p>
             {% endif %}
-        </div>
-    </div>
-
-    <!-- Scene Traits -->
-    <div class="panel" style="border-color: var(--lcars-butterscotch);">
-        <h2 style="color: var(--lcars-butterscotch);">Scene Traits</h2>
-        <div id="scene-traits-list">
-            {% if scene.scene_traits %}
-            {% for trait in scene.scene_traits %}
-            <span style="background: var(--lcars-butterscotch); color: #000; padding: 6px 14px; border-radius: 15px; margin: 4px; display: inline-flex; align-items: center; gap: 8px;">
-                {{ trait.name if trait.name else trait }}
-                <button type="button" onclick="removeSceneTrait({{ loop.index0 }})" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold;">&times;</button>
-            </span>
-            {% endfor %}
-            {% else %}
-            <p style="color: var(--lcars-tan); font-style: italic;">No scene traits defined</p>
-            {% endif %}
-        </div>
-        <div style="margin-top: 15px;">
-            <input type="text" id="new-trait-name" placeholder="Trait name" style="width: 200px;">
-            <input type="text" id="new-trait-description" placeholder="Description (optional)" style="width: 300px;">
-            <button type="button" class="btn btn-small" onclick="addSceneTrait()" style="background: var(--lcars-butterscotch);">Add Trait</button>
         </div>
     </div>
 
