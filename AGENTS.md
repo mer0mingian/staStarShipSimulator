@@ -218,7 +218,11 @@ Each bridge position has specific minor and major actions available:
 
 ## File Reference
 
-- **GitHub Issues** - **Check this first!** Tracks planned features and current development priorities. Use `gh issue list` to see open issues, organized by milestones (Alpha, Beta, v1.0) and labels (station types, core-mechanics, etc.)
+- **GitHub Issues** - **Check this first!** Tracks planned features and current development priorities.
+  - Repository: `tommertron/staStarShipSimulator`
+  - View online: https://github.com/tommertron/staStarShipSimulator/issues
+  - List via CLI: `gh issue list --repo tommertron/staStarShipSimulator`
+  - Organized by milestones (Alpha, Beta, v1.0) and labels (station types, core-mechanics, ai-mode, etc.)
 - `starshiprules.md` - Extracted starship combat rules from STA 2e Core Rulebook
 - `STA2e_Core Rulebook_DIGITAL_v1.1.txt` - Full rulebook text (human reference only, DO NOT READ)
 - `ADDING_ACTIONS.md` - Quick guide for adding new actions using the declarative system

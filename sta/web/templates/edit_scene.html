@@ -1,0 +1,545 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Scene - {{ scene.name }}{% endblock %}
+{% block header %}Edit Scene{% endblock %}
+
+{% block content %}
+<!-- Campaign Context Banner -->
+<div class="panel" style="border-color: var(--lcars-purple); margin-bottom: 15px;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <span style="color: var(--lcars-tan);">Campaign:</span>
+            <strong style="color: var(--lcars-purple);">{{ campaign.name }}</strong>
+            <span style="margin-left: 15px; color: var(--lcars-tan);">Scene:</span>
+            <strong style="color: var(--lcars-orange);">{{ scene.name }}</strong>
+            <span class="action-type" style="margin-left: 10px;">{{ scene.status.title() }}</span>
+        </div>
+        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+           class="btn btn-small" style="background: #666;">
+            Back to Campaign
+        </a>
+    </div>
+</div>
+
+<form method="POST" id="scene-form">
+    <div class="grid">
+        <!-- Scene Details -->
+        <div class="panel">
+            <h2>Scene Details</h2>
+            <label for="name">Scene Name</label>
+            <input type="text" name="name" id="name" value="{{ scene.name }}" style="width: 100%;">
+            
+            <label for="description" style="margin-top: 10px;">Description</label>
+            <textarea name="description" id="description" rows="4" style="width: 100%;" placeholder="Describe this scene...">{{ scene.description or '' }}</textarea>
+            
+            <label for="stardate" style="margin-top: 10px;">Stardate</label>
+            <input type="text" name="stardate" id="stardate" value="{{ scene.stardate or '' }}" placeholder="e.g., 47988.5" style="width: 100%;">
+            
+            <label for="scene_type" style="margin-top: 10px;">Scene Type</label>
+            <select name="scene_type" id="scene_type" style="width: 100%;">
+                <option value="narrative" {% if scene.scene_type == 'narrative' %}selected{% endif %}>Narrative</option>
+                <option value="social_encounter" {% if scene.scene_type == 'social_encounter' %}selected{% endif %}>Social Encounter</option>
+                <option value="personal_encounter" {% if scene.scene_type == 'personal_encounter' %}selected{% endif %}>Personal Encounter</option>
+            </select>
+            
+            <label for="status" style="margin-top: 10px;">Status</label>
+            <select name="status" id="status" style="width: 100%;">
+                <option value="draft" {% if scene.status == 'draft' %}selected{% endif %}>Draft</option>
+                <option value="active" {% if scene.status == 'active' %}selected{% endif %}>Active</option>
+                <option value="completed" {% if scene.status == 'completed' %}selected{% endif %}>Completed</option>
+            </select>
+        </div>
+
+        <!-- NPCs and NP Ships -->
+        <div class="panel" style="border-color: var(--lcars-red);">
+            <h2 style="color: var(--lcars-red);">NPCs and NP Ships ({{ npcs | length }})</h2>
+            <div id="npcs-list">
+                {% for npc in npcs %}
+                <div class="npc-card" data-npc-id="{{ npc.id }}" style="background: #222; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <strong style="color: var(--lcars-red);">{{ npc.name }}</strong>
+                        <div style="display: flex; gap: 5px;">
+                            <button type="button" class="btn btn-small" onclick="toggleNpcEdit({{ npc.id }})" style="background: #444; font-size: 0.8em;">
+                                Edit
+                            </button>
+                            <button type="button" class="btn btn-small btn-danger" onclick="removeNpc({{ npc.id }})" style="font-size: 0.8em;">&times;</button>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.85em; color: var(--lcars-tan);">
+                        {{ npc.npc_type.title() }} | 
+                        <label style="display: inline-flex; align-items: center; gap: 4px;">
+                            <input type="checkbox" {% if npc.is_visible %}checked{% endif %} onchange="toggleNpcVisibility({{ npc.id }})">
+                            Visible to Players
+                        </label>
+                    </div>
+                    <div class="npc-edit-form" id="npc-edit-{{ npc.id }}" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">
+                        <div style="margin-bottom: 10px;">
+                            <label style="font-size: 0.8em; color: var(--lcars-tan);">Name</label>
+                            <input type="text" id="npc-name-{{ npc.id }}" value="{{ npc.name }}" style="width: 100%; font-size: 0.9em;">
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button type="button" class="btn btn-small" onclick="saveNpc({{ npc.id }})" style="background: var(--lcars-green);">Save NPC</button>
+                            <button type="button" class="btn btn-small" onclick="toggleNpcEdit({{ npc.id }})" style="background: #666;">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
+                <button type="button" class="btn btn-small" onclick="showAddNpcModal()" style="background: var(--lcars-blue);">
+                    + Add NPC from Archive
+                </button>
+                <button type="button" class="btn btn-small" onclick="showAddQuickNpcModal()" style="background: var(--lcars-purple);">
+                    + Quick NPC
+                </button>
+            </div>
+            
+            {% if not npcs %}
+            <p style="color: var(--lcars-tan);">No NPCs added yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Scene Traits -->
+    <div class="panel" style="border-color: var(--lcars-butterscotch);">
+        <h2 style="color: var(--lcars-butterscotch);">Scene Traits</h2>
+        <div id="scene-traits-list">
+            {% if scene.scene_traits %}
+            {% for trait in scene.scene_traits %}
+            <span style="background: var(--lcars-butterscotch); color: #000; padding: 6px 14px; border-radius: 15px; margin: 4px; display: inline-flex; align-items: center; gap: 8px;">
+                {{ trait.name if trait.name else trait }}
+                <button type="button" onclick="removeSceneTrait({{ loop.index0 }})" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold;">&times;</button>
+            </span>
+            {% endfor %}
+            {% else %}
+            <p style="color: var(--lcars-tan); font-style: italic;">No scene traits defined</p>
+            {% endif %}
+        </div>
+        <div style="margin-top: 15px;">
+            <input type="text" id="new-trait-name" placeholder="Trait name" style="width: 200px;">
+            <input type="text" id="new-trait-description" placeholder="Description (optional)" style="width: 300px;">
+            <button type="button" class="btn btn-small" onclick="addSceneTrait()" style="background: var(--lcars-butterscotch);">Add Trait</button>
+        </div>
+    </div>
+
+    <!-- Extended Tasks -->
+    <div class="panel" style="border-color: var(--lcars-ice);">
+        <h2 style="color: var(--lcars-ice);">Extended Tasks</h2>
+        <div id="extended-tasks-list">
+            {% if scene.challenges %}
+            {% for task in scene.challenges %}
+            <div class="task-card" style="background: #1a1a1a; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 4px solid var(--lcars-ice);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>{{ task.name }}</strong>
+                        <span style="color: var(--lcars-tan); font-size: 0.85em; margin-left: 10px;">
+                            Progress: {{ task.progress | default(0) }} / {{ task.resistance | default(5) }}
+                        </span>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <button type="button" class="btn btn-small" onclick="adjustTaskProgress({{ loop.index0 }}, 1)" style="background: var(--lcars-green);">+1</button>
+                        <button type="button" class="btn btn-small" onclick="adjustTaskProgress({{ loop.index0 }}, -1)" style="background: var(--lcars-tomato);">-1</button>
+                        <button type="button" class="btn btn-small btn-danger" onclick="removeTask({{ loop.index0 }})">&times;</button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p style="color: var(--lcars-tan); font-style: italic;">No extended tasks defined</p>
+            {% endif %}
+        </div>
+        <div style="margin-top: 15px; padding: 15px; background: #1a1a1a; border-radius: 5px;">
+            <h4 style="color: var(--lcars-ice); margin: 0 0 10px 0;">Add Extended Task</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <label style="font-size: 0.85em; color: var(--lcars-tan);">Task Name</label>
+                    <input type="text" id="new-task-name" placeholder="e.g., Repair Warp Core" style="width: 100%;">
+                </div>
+                <div>
+                    <label style="font-size: 0.85em; color: var(--lcars-tan);">Resistance</label>
+                    <input type="number" id="new-task-resistance" value="5" min="1" max="20" style="width: 100%;">
+                </div>
+            </div>
+            <button type="button" class="btn btn-small" onclick="addExtendedTask()" style="background: var(--lcars-ice); margin-top: 10px;">Add Task</button>
+        </div>
+    </div>
+
+    <!-- Player Crew (only available when not draft) -->
+    <div class="panel" style="border-color: var(--lcars-green);" id="player-crew-panel">
+        <h2 style="color: var(--lcars-green);">Player Crew</h2>
+        <p style="color: var(--lcars-tan); font-size: 0.9em;">
+            {% if scene.status == 'draft' %}
+            <em>Enable the scene (change status from Draft) to manage player crew.</em>
+            {% else %}
+            Manage which player characters are present in this scene.
+            {% endif %}
+        </p>
+        
+        {% if scene.status != 'draft' %}
+        <div id="characters-present-list">
+            {% if scene.characters_present %}
+            {% for char in scene.characters_present %}
+            <span style="background: var(--lcars-green); color: #000; padding: 6px 14px; border-radius: 15px; margin: 4px; display: inline-flex; align-items: center; gap: 8px;">
+                {{ char.name if char.name else char }}
+                <button type="button" onclick="removeCharacter({{ loop.index0 }})" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold;">&times;</button>
+            </span>
+            {% endfor %}
+            {% else %}
+            <p style="color: var(--lcars-tan); font-style: italic;">No characters added</p>
+            {% endif %}
+        </div>
+        <div style="margin-top: 10px;">
+            <input type="text" id="new-character-name" placeholder="Character name" style="width: 200px;">
+            <button type="button" class="btn btn-small" onclick="addCharacter()" style="background: var(--lcars-green);">Add Character</button>
+        </div>
+        {% endif %}
+    </div>
+
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;">
+        <button type="button" class="btn" onclick="saveScene()">Save Changes</button>
+        <a href="{{ url_for('scenes.view_scene', scene_id=scene.id, role='viewscreen') }}" class="btn" style="background: var(--lcars-blue);">
+            Open Viewscreen
+        </a>
+        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}" class="btn" style="background: #666;">
+            Cancel
+        </a>
+    </div>
+</form>
+
+<!-- Add NPC Modal -->
+<div id="add-npc-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;">
+        <h2>Add NPC from Archive</h2>
+        <div style="margin-bottom: 15px;">
+            <input type="text" id="npc-search" placeholder="Search NPCs..." style="width: 100%;" oninput="filterNpcs(this.value)">
+        </div>
+        <div id="npc-archive-list" style="max-height: 300px; overflow-y: auto;">
+            <!-- NPC list will be loaded here -->
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px;">
+            <button type="button" class="btn btn-small" style="background: #666;" onclick="hideAddNpcModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Quick NPC Modal -->
+<div id="add-quick-npc-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="panel" style="max-width: 400px; width: 90%;">
+        <h2>Add Quick NPC</h2>
+        <div style="margin-bottom: 15px;">
+            <label for="quick-npc-name">Name</label>
+            <input type="text" id="quick-npc-name" placeholder="NPC name" style="width: 100%;">
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button type="button" class="btn btn-small" style="background: #666;" onclick="hideAddQuickNpcModal()">Cancel</button>
+            <button type="button" class="btn btn-small" style="background: var(--lcars-purple);" onclick="addQuickNpc()">Add NPC</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const sceneId = {{ scene.id }};
+const campaignId = {{ campaign.id }};
+let sceneTraits = {{ scene.scene_traits | tojson }};
+let extendedTasks = {{ scene.challenges | tojson }};
+let charactersPresent = {{ scene.characters_present | tojson }};
+
+// Save scene details
+async function saveScene() {
+    const data = {
+        name: document.getElementById('name').value,
+        description: document.getElementById('description').value,
+        stardate: document.getElementById('stardate').value || null,
+        scene_type: document.getElementById('scene_type').value,
+        status: document.getElementById('status').value,
+        scene_traits: sceneTraits,
+        challenges: extendedTasks,
+        characters_present: charactersPresent
+    };
+    
+    try {
+        const response = await fetch(`/api/scene/${sceneId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            alert('Scene saved successfully!');
+            if (data.status === 'draft') {
+                document.getElementById('player-crew-panel').querySelector('p').innerHTML = '<em>Enable the scene (change status from Draft) to manage player crew.</em>';
+                document.getElementById('characters-present-list').innerHTML = '';
+            } else if (document.getElementById('characters-present-list').innerHTML === '') {
+                document.getElementById('characters-present-list').innerHTML = '<p style="color: var(--lcars-tan); font-style: italic;">No characters added</p>';
+            }
+        } else {
+            const error = await response.json();
+            alert('Failed to save: ' + (error.error || 'Unknown error'));
+        }
+    } catch (e) {
+        console.error('Error saving scene:', e);
+        alert('Error saving scene: ' + e.message);
+    }
+}
+
+// NPC functions
+function toggleNpcEdit(npcId) {
+    const form = document.getElementById(`npc-edit-${npcId}`);
+    if (form) {
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+async function saveNpc(npcId) {
+    const name = document.getElementById(`npc-name-${npcId}`).value;
+    try {
+        const response = await fetch(`/scenes/${sceneId}/npcs/${npcId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        });
+        
+        if (response.ok) {
+            alert('NPC saved!');
+            location.reload();
+        }
+    } catch (e) {
+        console.error('Error saving NPC:', e);
+    }
+}
+
+async function removeNpc(npcId) {
+    if (!confirm('Remove this NPC from the scene?')) return;
+    
+    try {
+        const response = await fetch(`/scenes/${sceneId}/npcs/${npcId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            location.reload();
+        }
+    } catch (e) {
+        console.error('Error removing NPC:', e);
+    }
+}
+
+async function toggleNpcVisibility(npcId) {
+    try {
+        await fetch(`/scenes/${sceneId}/npcs/${npcId}/visibility`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+    } catch (e) {
+        console.error('Error toggling visibility:', e);
+    }
+}
+
+// Add NPC modals
+function showAddNpcModal() {
+    document.getElementById('add-npc-modal').style.display = 'flex';
+    loadNpcArchive();
+}
+
+function hideAddNpcModal() {
+    document.getElementById('add-npc-modal').style.display = 'none';
+}
+
+async function loadNpcArchive() {
+    try {
+        const response = await fetch(`/campaigns/${campaignId}/npcs`);
+        const data = await response.json();
+        
+        const list = document.getElementById('npc-archive-list');
+        if (data.npcs && data.npcs.length > 0) {
+            list.innerHTML = data.npcs.map(npc => `
+                <div style="padding: 8px; border-bottom: 1px solid #333; cursor: pointer;" onclick="addNpcToScene(${npc.id})">
+                    <strong>${npc.name}</strong>
+                    <span style="color: var(--lcars-tan); font-size: 0.85em;"> - ${npc.npc_type}</span>
+                </div>
+            `).join('');
+        } else {
+            list.innerHTML = '<p style="color: var(--lcars-tan);">No NPCs in archive</p>';
+        }
+    } catch (e) {
+        console.error('Error loading NPCs:', e);
+    }
+}
+
+function filterNpcs(query) {
+    const items = document.querySelectorAll('#npc-archive-list > div');
+    items.forEach(item => {
+        const text = item.textContent.toLowerCase();
+        item.style.display = text.includes(query.toLowerCase()) ? 'block' : 'none';
+    });
+}
+
+async function addNpcToScene(npcId) {
+    try {
+        const response = await fetch(`/scenes/${sceneId}/npcs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ npc_id: npcId })
+        });
+        
+        if (response.ok) {
+            hideAddNpcModal();
+            location.reload();
+        }
+    } catch (e) {
+        console.error('Error adding NPC:', e);
+    }
+}
+
+function showAddQuickNpcModal() {
+    document.getElementById('add-quick-npc-modal').style.display = 'flex';
+}
+
+function hideAddQuickNpcModal() {
+    document.getElementById('add-quick-npc-modal').style.display = 'none';
+}
+
+async function addQuickNpc() {
+    const name = document.getElementById('quick-npc-name').value.trim();
+    if (!name) return;
+    
+    try {
+        const response = await fetch(`/scenes/${sceneId}/npcs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quick_name: name })
+        });
+        
+        if (response.ok) {
+            hideAddQuickNpcModal();
+            document.getElementById('quick-npc-name').value = '';
+            location.reload();
+        }
+    } catch (e) {
+        console.error('Error adding quick NPC:', e);
+    }
+}
+
+// Scene traits
+function addSceneTrait() {
+    const name = document.getElementById('new-trait-name').value.trim();
+    const description = document.getElementById('new-trait-description').value.trim();
+    if (!name) return;
+    
+    sceneTraits.push({
+        name: name,
+        description: description || null
+    });
+    
+    document.getElementById('new-trait-name').value = '';
+    document.getElementById('new-trait-description').value = '';
+    
+    renderTraits();
+}
+
+function removeSceneTrait(index) {
+    sceneTraits.splice(index, 1);
+    renderTraits();
+}
+
+function renderTraits() {
+    const list = document.getElementById('scene-traits-list');
+    if (sceneTraits.length > 0) {
+        list.innerHTML = sceneTraits.map((trait, i) => `
+            <span style="background: var(--lcars-butterscotch); color: #000; padding: 6px 14px; border-radius: 15px; margin: 4px; display: inline-flex; align-items: center; gap: 8px;">
+                ${trait.name || trait}
+                <button type="button" onclick="removeSceneTrait(${i})" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold;">&times;</button>
+            </span>
+        `).join('');
+    } else {
+        list.innerHTML = '<p style="color: var(--lcars-tan); font-style: italic;">No scene traits defined</p>';
+    }
+}
+
+// Extended tasks
+function addExtendedTask() {
+    const name = document.getElementById('new-task-name').value.trim();
+    const resistance = parseInt(document.getElementById('new-task-resistance').value) || 5;
+    if (!name) return;
+    
+    extendedTasks.push({
+        name: name,
+        resistance: resistance,
+        progress: 0
+    });
+    
+    document.getElementById('new-task-name').value = '';
+    renderTasks();
+}
+
+function removeTask(index) {
+    extendedTasks.splice(index, 1);
+    renderTasks();
+}
+
+async function adjustTaskProgress(index, delta) {
+    extendedTasks[index].progress = (extendedTasks[index].progress || 0) + delta;
+    if (extendedTasks[index].progress < 0) extendedTasks[index].progress = 0;
+    if (extendedTasks[index].progress > extendedTasks[index].resistance) {
+        extendedTasks[index].progress = extendedTasks[index].resistance;
+    }
+    renderTasks();
+}
+
+function renderTasks() {
+    const list = document.getElementById('extended-tasks-list');
+    if (extendedTasks.length > 0) {
+        list.innerHTML = extendedTasks.map((task, i) => `
+            <div class="task-card" style="background: #1a1a1a; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 4px solid var(--lcars-ice);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${task.name}</strong>
+                        <span style="color: var(--lcars-tan); font-size: 0.85em; margin-left: 10px;">
+                            Progress: ${task.progress || 0} / ${task.resistance || 5}
+                        </span>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <button type="button" class="btn btn-small" onclick="adjustTaskProgress(${i}, 1)" style="background: var(--lcars-green);">+1</button>
+                        <button type="button" class="btn btn-small" onclick="adjustTaskProgress(${i}, -1)" style="background: var(--lcars-tomato);">-1</button>
+                        <button type="button" class="btn btn-small btn-danger" onclick="removeTask(${i})">&times;</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        list.innerHTML = '<p style="color: var(--lcars-tan); font-style: italic;">No extended tasks defined</p>';
+    }
+}
+
+// Characters
+function addCharacter() {
+    const name = document.getElementById('new-character-name').value.trim();
+    if (!name) return;
+    
+    charactersPresent.push({ name: name });
+    document.getElementById('new-character-name').value = '';
+    renderCharacters();
+}
+
+function removeCharacter(index) {
+    charactersPresent.splice(index, 1);
+    renderCharacters();
+}
+
+function renderCharacters() {
+    const list = document.getElementById('characters-present-list');
+    if (charactersPresent.length > 0) {
+        list.innerHTML = charactersPresent.map((char, i) => `
+            <span style="background: var(--lcars-green); color: #000; padding: 6px 14px; border-radius: 15px; margin: 4px; display: inline-flex; align-items: center; gap: 8px;">
+                ${char.name || char}
+                <button type="button" onclick="removeCharacter(${i})" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold;">&times;</button>
+            </span>
+        `).join('');
+    } else {
+        list.innerHTML = '<p style="color: var(--lcars-tan); font-style: italic;">No characters added</p>';
+    }
+}
+</script>
+{% endblock %}

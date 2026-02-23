@@ -5642,6 +5642,8 @@ def update_scene(encounter_id: str):
             scene.characters_present_json = json.dumps(data["characters_present"])
         if "name" in data:
             scene.name = data["name"]
+        if "description" in data:
+            scene.description = data["description"]
         if "scene_type" in data:
             scene.scene_type = data["scene_type"]
         if "status" in data:
@@ -5707,12 +5709,20 @@ def update_scene_by_id(scene_id: int):
 
         if "name" in data:
             scene.name = data["name"]
+        if "description" in data:
+            scene.description = data["description"]
         if "stardate" in data:
             scene.stardate = data["stardate"]
+        if "scene_type" in data:
+            scene.scene_type = data["scene_type"]
+        if "status" in data:
+            scene.status = data["status"]
         if "scene_traits" in data:
             scene.scene_traits_json = json.dumps(data["scene_traits"])
         if "challenges" in data:
             scene.challenges_json = json.dumps(data["challenges"])
+        if "characters_present" in data:
+            scene.characters_present_json = json.dumps(data["characters_present"])
 
         session.commit()
 
@@ -5721,9 +5731,13 @@ def update_scene_by_id(scene_id: int):
                 "success": True,
                 "id": scene.id,
                 "name": scene.name,
+                "description": scene.description,
+                "scene_type": scene.scene_type,
+                "status": scene.status,
                 "stardate": scene.stardate,
                 "scene_traits": json.loads(scene.scene_traits_json),
                 "challenges": json.loads(scene.challenges_json),
+                "characters_present": json.loads(scene.characters_present_json),
             }
         )
 

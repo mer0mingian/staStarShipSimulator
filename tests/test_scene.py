@@ -979,3 +979,244 @@ class TestNarrativeSceneNoCombatAPI:
         html = response.get_data(as_text=True)
 
         assert "Repair Warp Core" in html
+
+
+class TestEditScenePage:
+    """Tests for the edit scene page."""
+
+    def test_edit_scene_page_renders(self, client, sample_campaign, test_session):
+        """GET /scenes/<id>/edit should render the edit scene page."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Bridge Scene",
+            scene_type="narrative",
+            status="draft",
+            description="A tense moment on the bridge",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}/edit")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Bridge Scene" in html
+        assert "A tense moment on the bridge" in html
+        assert "Scene Details" in html
+        assert "NPCs and NP Ships" in html
+        assert "Scene Traits" in html
+        assert "Extended Tasks" in html
+
+    def test_edit_scene_page_has_campaign_header(
+        self, client, sample_campaign, test_session
+    ):
+        """Edit scene page should have campaign header like encounter page."""
+        campaign_id = sample_campaign["campaign"].id
+        campaign = test_session.get(CampaignRecord, campaign_id)
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Engineering",
+            scene_type="narrative",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}/edit")
+        html = response.get_data(as_text=True)
+
+        assert campaign.name in html
+        assert "Back to Campaign" in html
+        assert "Scene Details" in html
+
+    def test_edit_scene_shows_draft_status(self, client, sample_campaign, test_session):
+        """Edit scene page should show draft status."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Holodeck",
+            scene_type="narrative",
+            status="draft",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}/edit")
+        html = response.get_data(as_text=True)
+
+        assert "Draft" in html
+        assert "Player Crew" in html
+
+    def test_edit_scene_status_field(self, client, sample_campaign, test_session):
+        """Edit scene page should have status dropdown."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Ready Room",
+            scene_type="narrative",
+            status="draft",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}/edit")
+        html = response.get_data(as_text=True)
+
+        assert 'value="draft"' in html
+        assert 'value="active"' in html
+        assert 'value="completed"' in html
+
+    def test_edit_scene_scene_type_field(self, client, sample_campaign, test_session):
+        """Edit scene page should have scene type dropdown."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Ten Forward",
+            scene_type="social_encounter",
+            status="active",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.get(f"/scenes/{scene_id}/edit")
+        html = response.get_data(as_text=True)
+
+        assert 'value="narrative"' in html
+        assert 'value="social_encounter"' in html
+        assert 'value="personal_encounter"' in html
+
+
+class TestSceneDescriptionField:
+    """Tests for scene description field."""
+
+    def test_scene_record_has_description_field(self, test_session, sample_campaign):
+        """SceneRecord should have description field."""
+        campaign_id = sample_campaign["campaign"].id
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Test Scene",
+            description="A test description",
+        )
+        test_session.add(scene)
+        test_session.flush()
+        assert scene.description == "A test description"
+
+    def test_scene_record_description_null(self, test_session, sample_campaign):
+        """SceneRecord description can be null."""
+        campaign_id = sample_campaign["campaign"].id
+        scene = SceneRecord(campaign_id=campaign_id, name="Test Scene")
+        test_session.add(scene)
+        test_session.flush()
+        assert scene.description is None
+
+    def test_update_scene_description_via_api(
+        self, client, sample_campaign, test_session
+    ):
+        """PUT /api/scene/<id> should update description."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Medical Bay",
+            scene_type="narrative",
+            status="draft",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.put(
+            f"/api/scene/{scene_id}",
+            json={
+                "name": "Medical Bay",
+                "description": "The doctor is in",
+                "scene_type": "narrative",
+                "status": "active",
+                "scene_traits": [],
+                "challenges": [],
+                "characters_present": [],
+            },
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["description"] == "The doctor is in"
+
+    def test_scene_api_returns_description(self, client, sample_campaign, test_session):
+        """GET scene should include description in context."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Turbolift",
+            scene_type="narrative",
+            status="active",
+            description="Going up",
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        # The GET /scenes/<id> renders a template, so we check the scene context
+        # The scene_data dict includes description - verify via API or render
+        response = client.get(f"/scenes/{scene_id}/edit")
+        html = response.get_data(as_text=True)
+        assert "Going up" in html
+
+
+class TestSceneCharactersPresent:
+    """Tests for characters_present field."""
+
+    def test_scene_characters_present_api(self, client, sample_campaign, test_session):
+        """PUT /api/scene/<id> should update characters_present."""
+        campaign_id = sample_campaign["campaign"].id
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Team Meeting",
+            scene_type="narrative",
+            status="active",
+            characters_present_json=json.dumps([{"name": "Picard"}, {"name": "Riker"}]),
+        )
+        test_session.add(scene)
+        test_session.commit()
+        scene_id = scene.id
+
+        response = client.put(
+            f"/api/scene/{scene_id}",
+            json={
+                "name": "Team Meeting",
+                "description": None,
+                "scene_type": "narrative",
+                "status": "active",
+                "scene_traits": [],
+                "challenges": [],
+                "characters_present": [
+                    {"name": "Picard"},
+                    {"name": "Riker"},
+                    {"name": "Data"},
+                ],
+            },
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["characters_present"]) == 3
+        assert data["characters_present"][2]["name"] == "Data"
+
+    def test_scene_characters_present_empty(self, test_session, sample_campaign):
+        """SceneRecord characters_present can be empty."""
+        campaign_id = sample_campaign["campaign"].id
+        scene = SceneRecord(campaign_id=campaign_id, name="Empty Scene")
+        test_session.add(scene)
+        test_session.flush()
+        assert json.loads(scene.characters_present_json) == []

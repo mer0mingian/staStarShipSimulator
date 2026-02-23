@@ -957,15 +957,34 @@
 
                     <!-- Scene Settings Row -->
                     <div class="scene-row" style="margin-top: 15px; padding: 16px; background: rgba(255, 170, 0, 0.1); border: 2px solid var(--lcars-butterscotch); border-radius: 10px;">
-                        <h4 style="color: var(--lcars-butterscotch); margin: 0 0 12px 0; font-size: 1.2rem;">🎬 SCENE SETTINGS</h4>
-                        <div>
-                            <label style="color: var(--lcars-almond); font-size: 1rem;">Stardate:</label>
-                            <input type="text" id="scene-stardate" placeholder="e.g., 47988.5" style="width: 100%; margin-top: 6px; padding: 10px; font-size: 1rem;" onchange="updateScene()" value="{% if scene %}{{ scene.stardate }}{% endif %}">
+                        <h4 style="color: var(--lcars-butterscotch); margin: 0 0 12px 0; font-size: 1.3rem;">🎬 SCENE SETTINGS</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <label style="color: var(--lcars-almond); font-size: 1.1rem;">Scene Name:</label>
+                                <div style="display: flex; gap: 8px; margin-top: 4px;">
+                                    <input type="text" id="scene-name" placeholder="Scene name" style="flex: 1; padding: 10px; font-size: 1.1rem;" value="{% if scene %}{{ scene.name }}{% endif %}">
+                                    <button class="btn" onclick="saveSceneName()" style="background: var(--lcars-success); color: #000; font-size: 1rem; padding: 8px 16px;">Save</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label style="color: var(--lcars-almond); font-size: 1.1rem;">Stardate:</label>
+                                <div style="display: flex; gap: 8px; margin-top: 4px;">
+                                    <input type="text" id="scene-stardate" placeholder="e.g., 47988.5" style="flex: 1; padding: 10px; font-size: 1.1rem;" value="{% if scene %}{{ scene.stardate }}{% endif %}">
+                                    <button class="btn" onclick="updateScene()" style="background: var(--lcars-success); color: #000; font-size: 1rem; padding: 8px 16px;">Save</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <label style="color: var(--lcars-almond); font-size: 1.1rem;">Description:</label>
+                            <div style="display: flex; gap: 8px; margin-top: 4px;">
+                                <textarea id="scene-description" placeholder="Scene description..." style="width: 100%; padding: 10px; font-size: 1.1rem; min-height: 60px; resize: vertical;">{% if scene %}{{ scene.description }}{% endif %}</textarea>
+                                <button class="btn" onclick="saveSceneDescription()" style="background: var(--lcars-success); color: #000; font-size: 1rem; padding: 8px 16px; align-self: flex-start;">Save</button>
+                            </div>
                         </div>
                         <div style="margin-top: 15px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <label style="color: var(--lcars-almond); font-size: 1rem;">Scene Traits:</label>
-                                <button class="btn" onclick="showAddSceneTraitModal()" style="background: var(--lcars-butterscotch); color: #000; font-size: 1rem; padding: 8px 20px;">+ Add Trait</button>
+                                <label style="color: var(--lcars-almond); font-size: 1.1rem;">Scene Traits:</label>
+                                <button class="btn" onclick="showAddSceneTraitModal()" style="background: var(--lcars-butterscotch); color: #000; font-size: 1.1rem; padding: 8px 20px;">+ Add Trait</button>
                             </div>
                             <div id="scene-traits-display" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 32px;">
                                 {% if scene and scene.scene_traits %}
@@ -1910,6 +1929,8 @@
 
         // ===== SCENE MANAGEMENT =====
         let sceneData = {
+            name: null,
+            description: null,
             stardate: null,
             scene_traits: [],
             challenges: [],
@@ -1922,11 +1943,49 @@
                 const response = await fetch(`/api/encounter/${encounterId}/scene`);
                 if (response.ok) {
                     sceneData = await response.json();
+                    document.getElementById('scene-name').value = sceneData.name || '';
                     document.getElementById('scene-stardate').value = sceneData.stardate || '';
+                    document.getElementById('scene-description').value = sceneData.description || '';
                     document.getElementById('scene-traits').value = (sceneData.scene_traits || []).join(', ');
                 }
             } catch (err) {
                 console.error('Failed to load scene:', err);
+            }
+        }
+
+        async function saveSceneName() {
+            if (!encounterId) return;
+            const name = document.getElementById('scene-name').value.trim() || null;
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/scene`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name: name })
+                });
+                if (response.ok) {
+                    showToast('Scene name saved', 'success');
+                }
+            } catch (err) {
+                console.error('Failed to save scene name:', err);
+                showToast('Failed to save scene name', 'error');
+            }
+        }
+
+        async function saveSceneDescription() {
+            if (!encounterId) return;
+            const description = document.getElementById('scene-description').value.trim() || null;
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/scene`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ description: description })
+                });
+                if (response.ok) {
+                    showToast('Scene description saved', 'success');
+                }
+            } catch (err) {
+                console.error('Failed to save scene description:', err);
+                showToast('Failed to save scene description', 'error');
             }
         }
 

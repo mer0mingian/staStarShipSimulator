@@ -71,11 +71,11 @@
 
     /* Typography */
     --font-primary: 'Antonio', 'Arial Narrow', 'Avenir Next Condensed', sans-serif;
-    --font-size-base: 1.25rem;
-    --font-size-sm: 0.875rem;
-    --font-size-lg: 1.5rem;
-    --font-size-xl: 2rem;
-    --font-size-xxl: clamp(1.5rem, 1.25rem + 2vw, 3rem);
+    --font-size-base: 1.35rem;
+    --font-size-sm: 0.975rem;
+    --font-size-lg: 1.6rem;
+    --font-size-xl: 2.1rem;
+    --font-size-xxl: clamp(1.6rem, 1.35rem + 2vw, 3.1rem);
 }
 
 /* ============================================

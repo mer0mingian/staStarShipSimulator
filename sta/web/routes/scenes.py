@@ -71,6 +71,7 @@ def view_scene(scene_id: int):
         scene_data = {
             "id": scene.id,
             "name": scene.name,
+            "description": scene.description,
             "scene_type": scene.scene_type,
             "status": scene.status,
             "stardate": scene.stardate,
@@ -175,8 +176,77 @@ def view_scene(scene_id: int):
 
 @scenes_bp.route("/<int:scene_id>/edit")
 def edit_scene(scene_id: int):
-    """Edit a scene - redirect to GM view."""
-    return redirect(url_for("scenes.view_scene", scene_id=scene_id, role="gm"))
+    """Edit a scene - show dedicated edit page for narrative scenes."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            flash("Scene not found")
+            return redirect(url_for("main.index"))
+
+        campaign = session.query(CampaignRecord).filter_by(id=scene.campaign_id).first()
+        if not campaign:
+            flash("Campaign not found")
+            return redirect(url_for("main.index"))
+
+        # Parse scene data
+        scene_traits = json.loads(scene.scene_traits_json or "[]")
+        challenges = json.loads(scene.challenges_json or "[]")
+        characters_present = json.loads(scene.characters_present_json or "[]")
+
+        scene_data = {
+            "id": scene.id,
+            "name": scene.name,
+            "description": scene.description,
+            "scene_type": scene.scene_type,
+            "status": scene.status,
+            "stardate": scene.stardate,
+            "scene_traits": scene_traits,
+            "challenges": challenges,
+            "characters_present": characters_present,
+        }
+
+        # Load NPCs for this scene
+        scene_npcs = (
+            session.query(SceneNPCRecord)
+            .filter_by(scene_id=scene.id)
+            .order_by(SceneNPCRecord.order_index)
+            .all()
+        )
+        npcs_data = []
+        for sn in scene_npcs:
+            if sn.npc_id:
+                npc = session.query(NPCRecord).filter_by(id=sn.npc_id).first()
+                if npc:
+                    npcs_data.append(
+                        {
+                            "id": sn.id,
+                            "npc_id": npc.id,
+                            "name": npc.name,
+                            "npc_type": npc.npc_type,
+                            "is_visible": sn.is_visible_to_players,
+                        }
+                    )
+            elif sn.quick_name:
+                npcs_data.append(
+                    {
+                        "id": sn.id,
+                        "npc_id": None,
+                        "name": sn.quick_name,
+                        "npc_type": "quick",
+                        "is_visible": sn.is_visible_to_players,
+                    }
+                )
+
+        return render_template(
+            "edit_scene.html",
+            scene=scene_data,
+            scene_record=scene,
+            campaign=campaign,
+            npcs=npcs_data,
+        )
+    finally:
+        session.close()
 
 
 @scenes_bp.route("/<int:scene_id>/npcs", methods=["GET"])

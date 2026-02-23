@@ -453,6 +453,7 @@ class SceneRecord(Base):
     )
 
     name: Mapped[str] = mapped_column(String(100), default="New Scene")
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     scene_type: Mapped[str] = mapped_column(
         String(30), default="narrative"
     )  # narrative, starship_encounter, personal_encounter, social_encounter
