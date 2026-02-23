@@ -5589,22 +5589,18 @@ def get_scene(encounter_id: str):
             return jsonify(
                 {
                     "stardate": None,
-                    "scene_picture_url": None,
                     "scene_traits": [],
                     "challenges": [],
                     "characters_present": [],
-                    "show_picture": False,
                 }
             )
 
         return jsonify(
             {
                 "stardate": scene.stardate,
-                "scene_picture_url": scene.scene_picture_url,
                 "scene_traits": json.loads(scene.scene_traits_json),
                 "challenges": json.loads(scene.challenges_json),
                 "characters_present": json.loads(scene.characters_present_json),
-                "show_picture": scene.show_picture,
             }
         )
 
@@ -5638,16 +5634,12 @@ def update_scene(encounter_id: str):
 
         if "stardate" in data:
             scene.stardate = data["stardate"]
-        if "scene_picture_url" in data:
-            scene.scene_picture_url = data["scene_picture_url"]
         if "scene_traits" in data:
             scene.scene_traits_json = json.dumps(data["scene_traits"])
         if "challenges" in data:
             scene.challenges_json = json.dumps(data["challenges"])
         if "characters_present" in data:
             scene.characters_present_json = json.dumps(data["characters_present"])
-        if "show_picture" in data:
-            scene.show_picture = data["show_picture"]
         if "name" in data:
             scene.name = data["name"]
         if "scene_type" in data:
@@ -5665,11 +5657,9 @@ def update_scene(encounter_id: str):
                 "scene_type": scene.scene_type,
                 "status": scene.status,
                 "stardate": scene.stardate,
-                "scene_picture_url": scene.scene_picture_url,
                 "scene_traits": json.loads(scene.scene_traits_json),
                 "challenges": json.loads(scene.challenges_json),
                 "characters_present": json.loads(scene.characters_present_json),
-                "show_picture": scene.show_picture,
             }
         )
 
@@ -5719,14 +5709,10 @@ def update_scene_by_id(scene_id: int):
             scene.name = data["name"]
         if "stardate" in data:
             scene.stardate = data["stardate"]
-        if "scene_picture_url" in data:
-            scene.scene_picture_url = data["scene_picture_url"]
         if "scene_traits" in data:
             scene.scene_traits_json = json.dumps(data["scene_traits"])
         if "challenges" in data:
             scene.challenges_json = json.dumps(data["challenges"])
-        if "show_picture" in data:
-            scene.show_picture = data["show_picture"]
 
         session.commit()
 

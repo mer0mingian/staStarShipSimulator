@@ -16,7 +16,6 @@ class TestSceneRecord:
         test_session.flush()
         assert scene.id is not None
         assert scene.stardate is None
-        assert scene.scene_picture_url is None
         assert scene.scene_type == "narrative"
         assert scene.status == "draft"
 
@@ -125,10 +124,8 @@ class TestSceneAPI:
         assert response.status_code == 200
         data = response.get_json()
         assert data["stardate"] is None
-        assert data["scene_picture_url"] is None
         assert data["scene_traits"] == []
         assert data["challenges"] == []
-        assert data["show_picture"] is False
 
     def test_post_scene_creates_new_scene(self, client, sample_encounter):
         """POST /scene should create a new scene record."""
@@ -137,18 +134,14 @@ class TestSceneAPI:
             f"/api/encounter/{encounter_id}/scene",
             json={
                 "stardate": "47988.5",
-                "scene_picture_url": "https://example.com/image.png",
                 "scene_traits": ["Dark", "Foggy"],
-                "show_picture": True,
             },
         )
         assert response.status_code == 200
         data = response.get_json()
         assert data["success"] is True
         assert data["stardate"] == "47988.5"
-        assert data["scene_picture_url"] == "https://example.com/image.png"
         assert "Dark" in data["scene_traits"]
-        assert data["show_picture"] is True
 
     def test_post_scene_updates_existing(self, client, sample_encounter):
         """POST /scene should update an existing scene."""
@@ -863,134 +856,6 @@ class TestSceneNPCManagement:
         data = response.get_json()
         assert data["success"] is True
         assert data["is_visible"] is True
-
-
-class TestScenePictureManagement:
-    """Tests for picture management in scenes."""
-
-    def test_add_picture_by_url(self, client, sample_campaign, test_session):
-        """POST /scenes/<id>/pictures should add a picture by URL."""
-        campaign_id = sample_campaign["campaign"].id
-
-        scene = SceneRecord(
-            campaign_id=campaign_id,
-            name="Bridge",
-            scene_type="narrative",
-            status="active",
-        )
-        test_session.add(scene)
-        test_session.commit()
-        scene_id = scene.id
-
-        response = client.post(
-            f"/scenes/{scene_id}/pictures",
-            json={"url": "https://example.com/image.jpg"},
-        )
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["success"] is True
-        assert data["picture"]["url"] == "https://example.com/image.jpg"
-
-    def test_get_scene_pictures(self, client, sample_campaign, test_session):
-        """GET /scenes/<id>/pictures should list all pictures."""
-        from sta.database.schema import ScenePictureRecord
-
-        campaign_id = sample_campaign["campaign"].id
-
-        scene = SceneRecord(
-            campaign_id=campaign_id,
-            name="Ten Forward",
-            scene_type="narrative",
-            status="active",
-        )
-        test_session.add(scene)
-        test_session.flush()
-
-        pic1 = ScenePictureRecord(
-            scene_id=scene.id, url="https://example.com/pic1.jpg", is_active=True
-        )
-        pic2 = ScenePictureRecord(
-            scene_id=scene.id, url="https://example.com/pic2.jpg", is_active=False
-        )
-        test_session.add_all([pic1, pic2])
-        test_session.commit()
-        scene_id = scene.id
-
-        response = client.get(f"/scenes/{scene_id}/pictures")
-        assert response.status_code == 200
-        data = response.get_json()
-        assert len(data["pictures"]) == 2
-
-    def test_activate_picture(self, client, sample_campaign, test_session):
-        """POST /scenes/<id>/pictures/<id>/activate should set active picture."""
-        from sta.database.schema import ScenePictureRecord
-
-        campaign_id = sample_campaign["campaign"].id
-
-        scene = SceneRecord(
-            campaign_id=campaign_id,
-            name="Sickbay",
-            scene_type="narrative",
-            status="active",
-        )
-        test_session.add(scene)
-        test_session.flush()
-
-        pic1 = ScenePictureRecord(
-            scene_id=scene.id, url="https://example.com/old.jpg", is_active=True
-        )
-        pic2 = ScenePictureRecord(
-            scene_id=scene.id, url="https://example.com/new.jpg", is_active=False
-        )
-        test_session.add_all([pic1, pic2])
-        test_session.flush()
-
-        scene_id = scene.id
-        pic2_id = pic2.id
-        test_session.commit()
-
-        response = client.post(f"/scenes/{scene_id}/pictures/{pic2_id}/activate")
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["success"] is True
-
-        test_session.expire_all()
-        pic1 = test_session.get(ScenePictureRecord, pic1.id)
-        pic2 = test_session.get(ScenePictureRecord, pic2_id)
-        assert pic1.is_active is False
-        assert pic2.is_active is True
-
-    def test_delete_picture(self, client, sample_campaign, test_session):
-        """DELETE /scenes/<id>/pictures/<id> should remove picture."""
-        from sta.database.schema import ScenePictureRecord
-
-        campaign_id = sample_campaign["campaign"].id
-
-        scene = SceneRecord(
-            campaign_id=campaign_id,
-            name="Cargo Bay",
-            scene_type="narrative",
-            status="active",
-        )
-        test_session.add(scene)
-        test_session.flush()
-
-        pic = ScenePictureRecord(
-            scene_id=scene.id, url="https://example.com/delete-me.jpg"
-        )
-        test_session.add(pic)
-        test_session.flush()
-
-        scene_id = scene.id
-        pic_id = pic.id
-        test_session.commit()
-
-        response = client.delete(f"/scenes/{scene_id}/pictures/{pic_id}")
-        assert response.status_code == 200
-        assert response.get_json()["success"] is True
-
-        deleted = test_session.get(ScenePictureRecord, pic_id)
-        assert deleted is None
 
 
 class TestNarrativeSceneNoCombatAPI:

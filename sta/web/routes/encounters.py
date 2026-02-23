@@ -430,11 +430,9 @@ def combat(encounter_id: str):
         if scene:
             scene_data = {
                 "stardate": scene.stardate,
-                "scene_picture_url": scene.scene_picture_url,
                 "scene_traits": json.loads(scene.scene_traits_json or "[]"),
                 "challenges": json.loads(scene.challenges_json or "[]"),
                 "characters_present": json.loads(scene.characters_present_json or "[]"),
-                "show_picture": scene.show_picture,
             }
 
         # Load tactical map data

@@ -306,6 +306,7 @@ Scene
 ## Feature Ideas (Future)
 - **Pictures for Starships and Characters:** Add `picture_url` field to both for visual display on sheets/viewscreen
 - **Quickstart Presets:** Seed data for quick demo/development (restore after DB reset)
+- **GM Welcome Screen:** On the "Start a New Campaign" box, remove the extra labels "custom" and "quick start" BELOW the actual buttons. Keep only the explanation text.
 
 ---
 

@@ -461,7 +461,6 @@ class SceneRecord(Base):
     )  # draft, active, completed
 
     stardate: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    scene_picture_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     scene_traits_json: Mapped[str] = mapped_column(Text, default="[]")
     challenges_json: Mapped[str] = mapped_column(Text, default="[]")
@@ -470,36 +469,10 @@ class SceneRecord(Base):
     has_map: Mapped[bool] = mapped_column(default=False)
     tactical_map_json: Mapped[str] = mapped_column(Text, default="{}")
 
-    show_picture: Mapped[bool] = mapped_column(default=False)
-    active_picture_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("scene_pictures.id"), nullable=True
-    )
-
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
     )
-
-
-class ScenePictureRecord(Base):
-    """Pictures uploaded for a scene."""
-
-    __tablename__ = "scene_pictures"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    scene_id: Mapped[int] = mapped_column(ForeignKey("scenes.id"))
-
-    filename: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True
-    )  # Local storage
-    original_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    url: Mapped[Optional[str]] = mapped_column(
-        String(500), nullable=True
-    )  # External URL
-    is_active: Mapped[bool] = mapped_column(default=False)
-    order_index: Mapped[int] = mapped_column(Integer, default=0)
-
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
 class NPCRecord(Base):
