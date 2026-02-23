@@ -11,6 +11,8 @@ venv/
 .venv/
 env/
 .env
+.ruff_cache/
+.pytest_cache/
 
 # IDE
 .idea/
@@ -25,3 +27,9 @@ Thumbs.db
 
 # Reference files (large rulebook files)
 referenceFiles/
+
+# sta rules
+docs/sta2e_rules/
+
+# Uploaded files
+sta/web/uploads/

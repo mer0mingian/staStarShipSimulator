@@ -65,6 +65,7 @@ def mock_get_session():
 
 # ============== DATABASE FIXTURES ==============
 
+
 @pytest.fixture(scope="function", autouse=True)
 def reset_db():
     """Reset the database before each test."""
@@ -84,16 +85,22 @@ def test_session():
 def app():
     """Create a Flask app configured for testing."""
     # Patch get_session in all the places it's used
-    with patch('sta.database.get_session', mock_get_session):
-        with patch('sta.database.db.get_session', mock_get_session):
-            with patch('sta.web.routes.api.get_session', mock_get_session):
-                with patch('sta.web.routes.encounters.get_session', mock_get_session):
-                    with patch('sta.web.routes.campaigns.get_session', mock_get_session):
-                        # Import and create app after patching
-                        from sta.web.app import create_app
-                        flask_app = create_app()
-                        flask_app.config["TESTING"] = True
-                        yield flask_app
+    with patch("sta.database.get_session", mock_get_session):
+        with patch("sta.database.db.get_session", mock_get_session):
+            with patch("sta.web.routes.api.get_session", mock_get_session):
+                with patch("sta.web.routes.encounters.get_session", mock_get_session):
+                    with patch(
+                        "sta.web.routes.campaigns.get_session", mock_get_session
+                    ):
+                        with patch(
+                            "sta.web.routes.scenes.get_session", mock_get_session
+                        ):
+                            # Import and create app after patching
+                            from sta.web.app import create_app
+
+                            flask_app = create_app()
+                            flask_app.config["TESTING"] = True
+                            yield flask_app
 
 
 @pytest.fixture(scope="function")
@@ -104,6 +111,7 @@ def client(app):
 
 # ============== SAMPLE DATA FIXTURES ==============
 
+
 @pytest.fixture
 def sample_character_data():
     """Sample character data for tests."""
@@ -112,22 +120,26 @@ def sample_character_data():
         "species": "Human",
         "rank": "Captain",
         "role": "Commanding Officer",
-        "attributes_json": json.dumps({
-            "control": 10,
-            "daring": 9,
-            "fitness": 8,
-            "insight": 11,
-            "presence": 12,
-            "reason": 10,
-        }),
-        "disciplines_json": json.dumps({
-            "command": 5,
-            "conn": 3,
-            "engineering": 2,
-            "medicine": 2,
-            "science": 3,
-            "security": 4,
-        }),
+        "attributes_json": json.dumps(
+            {
+                "control": 10,
+                "daring": 9,
+                "fitness": 8,
+                "insight": 11,
+                "presence": 12,
+                "reason": 10,
+            }
+        ),
+        "disciplines_json": json.dumps(
+            {
+                "command": 5,
+                "conn": 3,
+                "engineering": 2,
+                "medicine": 2,
+                "science": 3,
+                "security": 4,
+            }
+        ),
         "talents_json": json.dumps(["Bold (Command)", "Inspirational"]),
         "focuses_json": json.dumps(["Leadership", "Tactics", "Diplomacy"]),
         "stress": 12,
@@ -145,40 +157,46 @@ def sample_player_ship_data():
         "ship_class": "Constitution",
         "registry": "NCC-1895",
         "scale": 4,
-        "systems_json": json.dumps({
-            "comms": 9,
-            "computers": 10,
-            "engines": 10,
-            "sensors": 11,
-            "structure": 9,
-            "weapons": 10,
-        }),
-        "departments_json": json.dumps({
-            "command": 3,
-            "conn": 3,
-            "engineering": 3,
-            "medicine": 2,
-            "science": 3,
-            "security": 3,
-        }),
-        "weapons_json": json.dumps([
+        "systems_json": json.dumps(
             {
-                "name": "Phaser Banks",
-                "weapon_type": "energy",
-                "damage": 7,
-                "range": "medium",
-                "qualities": ["versatile 2"],
-                "requires_calibration": False,
-            },
+                "comms": 9,
+                "computers": 10,
+                "engines": 10,
+                "sensors": 11,
+                "structure": 9,
+                "weapons": 10,
+            }
+        ),
+        "departments_json": json.dumps(
             {
-                "name": "Photon Torpedoes",
-                "weapon_type": "torpedo",
-                "damage": 5,
-                "range": "long",
-                "qualities": ["high yield"],
-                "requires_calibration": True,
-            },
-        ]),
+                "command": 3,
+                "conn": 3,
+                "engineering": 3,
+                "medicine": 2,
+                "science": 3,
+                "security": 3,
+            }
+        ),
+        "weapons_json": json.dumps(
+            [
+                {
+                    "name": "Phaser Banks",
+                    "weapon_type": "energy",
+                    "damage": 7,
+                    "range": "medium",
+                    "qualities": ["versatile 2"],
+                    "requires_calibration": False,
+                },
+                {
+                    "name": "Photon Torpedoes",
+                    "weapon_type": "torpedo",
+                    "damage": 5,
+                    "range": "long",
+                    "qualities": ["high yield"],
+                    "requires_calibration": True,
+                },
+            ]
+        ),
         "talents_json": json.dumps(["Redundant Systems", "Improved Warp Drive"]),
         "traits_json": json.dumps(["Federation Starship"]),
         "breaches_json": json.dumps([]),
@@ -200,32 +218,38 @@ def sample_enemy_ship_data():
         "ship_class": "D7 Battlecruiser",
         "registry": None,
         "scale": 4,
-        "systems_json": json.dumps({
-            "comms": 8,
-            "computers": 8,
-            "engines": 9,
-            "sensors": 8,
-            "structure": 10,
-            "weapons": 11,
-        }),
-        "departments_json": json.dumps({
-            "command": 2,
-            "conn": 3,
-            "engineering": 2,
-            "medicine": 1,
-            "science": 2,
-            "security": 4,
-        }),
-        "weapons_json": json.dumps([
+        "systems_json": json.dumps(
             {
-                "name": "Disruptor Cannons",
-                "weapon_type": "energy",
-                "damage": 8,
-                "range": "medium",
-                "qualities": ["vicious 1"],
-                "requires_calibration": False,
-            },
-        ]),
+                "comms": 8,
+                "computers": 8,
+                "engines": 9,
+                "sensors": 8,
+                "structure": 10,
+                "weapons": 11,
+            }
+        ),
+        "departments_json": json.dumps(
+            {
+                "command": 2,
+                "conn": 3,
+                "engineering": 2,
+                "medicine": 1,
+                "science": 2,
+                "security": 4,
+            }
+        ),
+        "weapons_json": json.dumps(
+            [
+                {
+                    "name": "Disruptor Cannons",
+                    "weapon_type": "energy",
+                    "damage": 8,
+                    "range": "medium",
+                    "qualities": ["vicious 1"],
+                    "requires_calibration": False,
+                },
+            ]
+        ),
         "talents_json": json.dumps([]),
         "traits_json": json.dumps(["Klingon Starship"]),
         "breaches_json": json.dumps([]),
@@ -240,8 +264,16 @@ def sample_enemy_ship_data():
 
 
 @pytest.fixture
-def sample_encounter(test_session, sample_character_data, sample_player_ship_data, sample_enemy_ship_data):
+def sample_encounter(
+    test_session,
+    sample_character_data,
+    sample_player_ship_data,
+    sample_enemy_ship_data,
+    sample_campaign,
+):
     """Create a sample encounter with ships and character."""
+    campaign = sample_campaign["campaign"]
+
     # Create character
     character = CharacterRecord(**sample_character_data)
     test_session.add(character)
@@ -262,6 +294,7 @@ def sample_encounter(test_session, sample_character_data, sample_player_ship_dat
         encounter_id="test-encounter-001",
         name="Test Combat",
         description="A test combat encounter",
+        campaign_id=campaign.id,
         player_ship_id=player_ship.id,
         player_character_id=character.id,
         player_position="captain",
@@ -279,16 +312,19 @@ def sample_encounter(test_session, sample_character_data, sample_player_ship_dat
         turn_claimed_at=None,
         active_effects_json=json.dumps([]),
         tactical_map_json=json.dumps({"radius": 3, "tiles": []}),
-        ship_positions_json=json.dumps({
-            "player": {"q": 0, "r": 0},
-            "enemy_0": {"q": 1, "r": 0},  # Medium range (1 hex)
-        }),
+        ship_positions_json=json.dumps(
+            {
+                "player": {"q": 0, "r": 0},
+                "enemy_0": {"q": 1, "r": 0},  # Medium range (1 hex)
+            }
+        ),
     )
     test_session.add(encounter)
     test_session.commit()
 
     return {
         "encounter": encounter,
+        "campaign": campaign,
         "character": character,
         "player_ship": player_ship,
         "enemy_ship": enemy_ship,
@@ -321,8 +357,8 @@ def sample_campaign(test_session, sample_player_ship_data):
         player = CampaignPlayerRecord(
             campaign_id=campaign.id,
             character_id=None,  # No linked character for simplicity
-            player_name=f"Player {i+1}",
-            session_token=f"test-token-{i+1}",
+            player_name=f"Player {i + 1}",
+            session_token=f"test-token-{i + 1}",
             position=pos,
             is_gm=(i == 0),  # First player is GM
             is_active=True,
@@ -374,10 +410,12 @@ def multiplayer_encounter(test_session, sample_campaign, sample_enemy_ship_data)
         turn_claimed_at=None,
         active_effects_json=json.dumps([]),
         tactical_map_json=json.dumps({"radius": 3, "tiles": []}),
-        ship_positions_json=json.dumps({
-            "player": {"q": 0, "r": 0},
-            "enemy_0": {"q": 1, "r": 0},
-        }),
+        ship_positions_json=json.dumps(
+            {
+                "player": {"q": 0, "r": 0},
+                "enemy_0": {"q": 1, "r": 0},
+            }
+        ),
     )
     test_session.add(encounter)
     test_session.commit()
@@ -393,39 +431,44 @@ def multiplayer_encounter(test_session, sample_campaign, sample_enemy_ship_data)
 
 # ============== DICE MOCKING FIXTURES ==============
 
+
 @pytest.fixture
 def mock_dice_success():
     """Mock dice to always succeed (roll 1s for criticals)."""
+
     def mock_randint(a, b):
         return 1  # Natural 1 = critical success (2 successes)
 
-    with patch('random.randint', mock_randint):
+    with patch("random.randint", mock_randint):
         yield
 
 
 @pytest.fixture
 def mock_dice_failure():
     """Mock dice to always fail (roll 20s for complications)."""
+
     def mock_randint(a, b):
         return 20  # Natural 20 = complication + failure
 
-    with patch('random.randint', mock_randint):
+    with patch("random.randint", mock_randint):
         yield
 
 
 @pytest.fixture
 def mock_dice_average():
     """Mock dice to roll average (success depends on target number)."""
+
     def mock_randint(a, b):
         return 10  # Middle roll - succeeds if target >= 10
 
-    with patch('random.randint', mock_randint):
+    with patch("random.randint", mock_randint):
         yield
 
 
 @pytest.fixture
 def mock_dice_controlled():
     """Provide a context manager for controlling specific dice results."""
+
     class DiceController:
         def __init__(self):
             self.results = []
@@ -444,15 +487,17 @@ def mock_dice_controlled():
             return random.randint(a, b)  # Fall back to random
 
     controller = DiceController()
-    with patch('random.randint', controller):
+    with patch("random.randint", controller):
         yield controller
 
 
 # ============== HELPER FIXTURES ==============
 
+
 @pytest.fixture
 def execute_action(client):
     """Helper function to execute an action via API."""
+
     def _execute(encounter_id, action_name, role="player", **kwargs):
         data = {
             "action_name": action_name,
@@ -472,6 +517,7 @@ def execute_action(client):
 @pytest.fixture
 def claim_turn(client):
     """Helper function to claim a turn via API."""
+
     def _claim(encounter_id, player_id):
         response = client.post(
             f"/api/encounter/{encounter_id}/claim-turn",
@@ -486,6 +532,7 @@ def claim_turn(client):
 @pytest.fixture
 def release_turn(client):
     """Helper function to release a turn via API."""
+
     def _release(encounter_id, force=False):
         response = client.post(
             f"/api/encounter/{encounter_id}/release-turn",
@@ -500,6 +547,7 @@ def release_turn(client):
 @pytest.fixture
 def next_turn(client):
     """Helper function to pass/end turn via API."""
+
     def _next(encounter_id):
         response = client.post(
             f"/api/encounter/{encounter_id}/next-turn",
@@ -513,6 +561,7 @@ def next_turn(client):
 @pytest.fixture
 def get_encounter_status(client):
     """Helper function to get encounter status via API."""
+
     def _status(encounter_id, role="player"):
         response = client.get(
             f"/api/encounter/{encounter_id}/status?role={role}",
@@ -525,6 +574,7 @@ def get_encounter_status(client):
 @pytest.fixture
 def get_combat_log(client):
     """Helper function to get combat log via API."""
+
     def _log(encounter_id, since_id=None, round_filter=None, limit=50):
         params = [f"limit={limit}"]
         if since_id:

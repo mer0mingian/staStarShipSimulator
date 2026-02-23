@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  test:
+    build: .
+    container_name: sta-starship-simulator-test
+    volumes:
+      - .:/app
+    environment:
+      - FLASK_ENV=testing
+    command: >
+      sh -c "pip install -r requirements-dev.txt &&
+             pytest"

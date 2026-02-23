@@ -1,0 +1,113 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "exa-search": {
+      "type": "local",
+      "command": ["npx", "-y", "exa-mcp-server"],
+      "enabled": true,
+      "environment": {
+        "EXA_API_KEY": "{env:EXA_API_KEY}"
+      },
+      "timeout": 10000
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "playwright-mcp"],
+      "enabled": true,
+      "environment": {
+        "PLAYWRIGHT_API_KEY": "{env:PLAYWRIGHT_API_KEY}"
+      },
+      "timeout": 15000
+    },
+    "context7": {
+      "type": "local",
+      "command": ["npx", "-y", "context7-mcp"],
+      "enabled": true,
+      "environment": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      },
+      "timeout": 10000
+    },
+    "perplexity": {
+      "type": "local",
+      "command": ["npx", "-y", "perplexity-mcp"],
+      "enabled": true,
+      "environment": {
+        "PERPLEXITY_API_KEY": "{env:PERPLEXITY_API_KEY}"
+      },
+      "timeout": 10000
+    },
+    "tavily": {
+      "type": "local",
+      "command": ["npx", "-y", "tavily-mcp"],
+      "enabled": true,
+      "environment": {
+        "TAVILY_API_KEY": "{env:TAVILY_API_KEY}"
+      },
+      "timeout": 10000
+    },
+    "obsidian": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-obsidian"],
+      "enabled": true,
+      "environment": {
+        "OBSIDIAN_API_KEY": "{env:OBSIDIAN_API_KEY}",
+        "OBSIDIAN_VAULT_PATH": "{env:OBSIDIAN_VAULT_PATH}"
+      },
+      "timeout": 10000
+    },
+    "imagemagick": {
+      "type": "local",
+      "command": ["npx", "-y", "imagemagic-mcp"],
+      "enabled": true,
+      "environment": {
+        "IMAGEMAGICK_API_KEY": "{env:IMAGEMAGICK_API_KEY}"
+      },
+      "timeout": 15000
+    },
+    "simplemem": {
+      "type": "local",
+      "command": ["npx", "-y", "simplemem-mcp"],
+      "enabled": true,
+      "environment": {
+        "SIMPLEMEM_API_KEY": "{env:SIMPLEMEM_API_KEY}"
+      },
+      "timeout": 10000
+    },
+    "gcp": {
+      "type": "local",
+      "command": ["npx", "-y", "gcp-mcp"],
+      "enabled": false,
+      "environment": {
+        "GCP_PROJECT_ID": "{env:GCP_PROJECT_ID}",
+        "GCP_CREDENTIALS": "{env:GCP_CREDENTIALS}"
+      },
+      "timeout": 15000
+    },
+    "actor-critical-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "actor-critical-thinking"],
+      "enabled": true,
+      "timeout": 20000
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "sequential-thinking"],
+      "enabled": true,
+      "timeout": 20000
+    }
+  },
+  "tools": {
+    "exa-search_*": true,
+    "playwright_*": true,
+    "context7_*": true,
+    "perplexity_*": true,
+    "tavily_*": true,
+    "obsidian_*": true,
+    "imagemagick_*": true,
+    "simplemem_*": true,
+    "gcp_*": false,
+    "actor-critical-thinking_*": true,
+    "sequential-thinking_*": true
+  }
+}

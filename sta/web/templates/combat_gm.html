@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ encounter.name }} - Game Master View</title>
+    <title>{% if is_narrative %}{{ scene.name }} - Narrative Scene{% else %}{{ encounter.name }} - Game Master View{% endif %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/lcars.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/announcements.css') }}">
     <style>
@@ -845,11 +845,13 @@
             </div>
             <div class="gm-nav-tabs">
                 <button class="gm-nav-tab tab-main active" onclick="showTab('main')">Overview</button>
+                {% if not is_narrative %}
                 <button class="gm-nav-tab tab-map" onclick="showTab('map')">Map</button>
                 <button class="gm-nav-tab tab-log" onclick="showTab('log')">Battle Log</button>
+                <button class="gm-nav-tab tab-npc" onclick="showTab('npc')">NPC Actions</button>
+                {% endif %}
                 <button class="gm-nav-tab tab-players" onclick="showTab('players')">Players</button>
                 <button class="gm-nav-tab tab-ships" onclick="showTab('ships')">Ships</button>
-                <button class="gm-nav-tab tab-npc" onclick="showTab('npc')">NPC Actions</button>
                 <button class="gm-nav-tab tab-override" onclick="showTab('override')">Override</button>
                 <div class="gm-nav-spacer"></div>
                 {% if campaign %}
@@ -866,11 +868,13 @@
             <!-- Header -->
             <header class="gm-header">
                 <div class="gm-header-bar">
-                    <span class="gm-header-title">{{ encounter.name }}</span>
+                    <span class="gm-header-title">{% if is_narrative and scene %}{{ scene.name }}{% else %}{{ encounter.name }}{% endif %}</span>
+                    {% if not is_narrative %}
                     <span class="gm-header-round">Round <span id="round-number">{{ encounter.round }}</span></span>
+                    {% endif %}
                 </div>
                 <div class="gm-header-cap">
-                    {% if campaign %}
+                    {% if campaign and not is_narrative %}
                     <button class="btn btn-small btn-danger" onclick="endEncounter()">End</button>
                     {% endif %}
                 </div>
@@ -880,7 +884,8 @@
             <div class="gm-content">
                 <!-- MAIN TAB (Overview) -->
                 <div id="tab-main" class="tab-panel active">
-                    <!-- Big Turn Indicator - VERY PROMINENT -->
+                    <!-- Big Turn Indicator - VERY PROMINENT (only for combat) -->
+                    {% if not is_narrative %}
                     <div id="turn-banner" class="turn-banner {% if encounter.current_turn == 'enemy' %}your-turn{% else %}player-turn{% endif %}">
                         <div style="display: flex; align-items: center; justify-content: space-between; gap: 30px; flex-wrap: wrap;">
                             <div style="flex: 1; text-align: left;">
@@ -920,8 +925,10 @@
                             </button>
                         </div>
                     </div>
+                    {% endif %}
 
-                    <!-- Resources Row -->
+                    <!-- Resources Row (only for combat) -->
+                    {% if not is_narrative %}
                     <div class="resources-row">
                         <div class="resource-box momentum">
                             <span class="resource-label">Momentum</span>
@@ -946,6 +953,176 @@
                             <button class="btn btn-small" onclick="closeChannel()" id="close-channel-btn" style="display: none; margin-top: 8px; background: var(--lcars-tomato); color: var(--lcars-text-dark);">Close Channel</button>
                         </div>
                     </div>
+                    {% endif %}
+
+                    <!-- Scene Settings Row -->
+                    <div class="scene-row" style="margin-top: 15px; padding: 16px; background: rgba(255, 170, 0, 0.1); border: 2px solid var(--lcars-butterscotch); border-radius: 10px;">
+                        <h4 style="color: var(--lcars-butterscotch); margin: 0 0 12px 0; font-size: 1.3rem;">🎬 SCENE SETTINGS</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <label style="color: var(--lcars-almond); font-size: 1.1rem;">Scene Name:</label>
+                                <div style="display: flex; gap: 8px; margin-top: 4px;">
+                                    <input type="text" id="scene-name" placeholder="Scene name" style="flex: 1; padding: 10px; font-size: 1.1rem;" value="{% if scene %}{{ scene.name }}{% endif %}">
+                                    <button class="btn" onclick="saveSceneName()" style="background: var(--lcars-success); color: #000; font-size: 1rem; padding: 8px 16px;">Save</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label style="color: var(--lcars-almond); font-size: 1.1rem;">Stardate:</label>
+                                <div style="display: flex; gap: 8px; margin-top: 4px;">
+                                    <input type="text" id="scene-stardate" placeholder="e.g., 47988.5" style="flex: 1; padding: 10px; font-size: 1.1rem;" value="{% if scene %}{{ scene.stardate }}{% endif %}">
+                                    <button class="btn" onclick="updateScene()" style="background: var(--lcars-success); color: #000; font-size: 1rem; padding: 8px 16px;">Save</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <label style="color: var(--lcars-almond); font-size: 1.1rem;">Description:</label>
+                            <div style="display: flex; gap: 8px; margin-top: 4px;">
+                                <textarea id="scene-description" placeholder="Scene description..." style="width: 100%; padding: 10px; font-size: 1.1rem; min-height: 60px; resize: vertical;">{% if scene %}{{ scene.description }}{% endif %}</textarea>
+                                <button class="btn" onclick="saveSceneDescription()" style="background: var(--lcars-success); color: #000; font-size: 1rem; padding: 8px 16px; align-self: flex-start;">Save</button>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <label style="color: var(--lcars-almond); font-size: 1.1rem;">Scene Traits:</label>
+                                <button class="btn" onclick="showAddSceneTraitModal()" style="background: var(--lcars-butterscotch); color: #000; font-size: 1.1rem; padding: 8px 20px;">+ Add Trait</button>
+                            </div>
+                            <div id="scene-traits-display" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 32px;">
+                                {% if scene and scene.scene_traits %}
+                                    {% for trait in scene.scene_traits %}
+                                    <span style="background: var(--lcars-butterscotch); color: #000; padding: 8px 14px; border-radius: 12px; font-size: 1rem; display: inline-flex; align-items: center; gap: 8px;">
+                                        {{ trait.name if trait.name else trait }}
+                                        <button onclick="removeSceneTrait({{ loop.index0 }})" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold; padding: 0; font-size: 1.2rem;">&times;</button>
+                                    </span>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Extended Tasks (for narrative scenes) -->
+                    {% if is_narrative %}
+                    <div class="extended-tasks-row" style="margin-top: 15px; padding: 16px; background: rgba(255, 153, 0, 0.1); border: 2px solid var(--lcars-orange); border-radius: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h4 style="color: var(--lcars-orange); margin: 0; font-size: 1.2rem;">📋 EXTENDED TASKS</h4>
+                            <button class="btn" onclick="showAddExtendedTaskModal()" style="background: var(--lcars-orange); color: #000; font-size: 1rem; padding: 8px 20px;">+ Add Task</button>
+                        </div>
+                        <div id="extended-tasks-list">
+                            {% if scene and scene.challenges %}
+                            {% for task in scene.challenges %}
+                            {% set track_length = task.track_length | default(10) %}
+                            {% set difficulty = task.difficulty | default(2) %}
+                            <div class="extended-task-item" data-task-index="{{ loop.index0 }}" style="background: #1a1a1a; border-radius: 8px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--lcars-orange);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <strong style="color: var(--lcars-text); font-size: 1.1rem;">{{ task.name }}</strong>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <span style="color: var(--lcars-almond); font-size: 1rem;">{{ task.progress | default(0) }}/{{ track_length }}</span>
+                                        <button class="btn" onclick="adjustExtendedTaskProgress({{ loop.index0 }}, 1)" style="padding: 6px 16px; font-size: 1rem; background: var(--lcars-success);">+</button>
+                                        <button class="btn" onclick="adjustExtendedTaskProgress({{ loop.index0 }}, -1)" style="padding: 6px 16px; font-size: 1rem; background: var(--lcars-tomato);">-</button>
+                                        <button class="btn" onclick="removeExtendedTask({{ loop.index0 }})" style="padding: 6px 16px; font-size: 1rem; background: #666;">×</button>
+                                    </div>
+                                </div>
+                                <div style="display: flex; flex-wrap: wrap; gap: 15px; font-size: 0.95rem; color: var(--lcars-almond); margin-bottom: 10px;">
+                                    <span><strong>Difficulty:</strong> {{ difficulty }}</span>
+                                    <span><strong>Track:</strong> {{ track_length }} spaces</span>
+                                    {% if task.resistance %}<span><strong>Resistance:</strong> {{ task.resistance }}</span>{% endif %}
+                                    {% if task.time_intervals and task.time_intervals.enabled %}
+                                    <span style="color: var(--lcars-tomato);"><strong>⏱ Time:</strong> {{ task.time_intervals.remaining | default(task.time_intervals.total) }}/{{ task.time_intervals.total }} {{ task.time_intervals.interval_length }}</span>
+                                    {% endif %}
+                                </div>
+                                <div style="background: #333; border-radius: 6px; height: 20px; position: relative;">
+                                    <div style="background: var(--lcars-orange); height: 100%; border-radius: 6px; width: {{ (task.progress / track_length * 100) | int if track_length > 0 else 0 }}%;"></div>
+                                    {% set breakthrough_1_pos = (track_length * 0.5) | int %}
+                                    {% set breakthrough_2_pos = (track_length * 0.75) | int %}
+                                    {% if track_length > 0 %}
+                                    <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: {% if task.progress >= breakthrough_1_pos %}var(--lcars-success){% else %}#555{% endif %};"></div>
+                                    <div style="position: absolute; left: 75%; top: 0; bottom: 0; width: 3px; background: {% if task.progress >= breakthrough_2_pos %}var(--lcars-success){% else %}#555{% endif %};"></div>
+                                    {% endif %}
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #888; margin-top: 6px;">
+                                    <span>50% {% if task.breakthrough_1 %}✓ {{ task.breakthrough_1.effect if task.breakthrough_1.effect else 'Breakthrough' }}{% endif %}</span>
+                                    <span>75% {% if task.breakthrough_2 %}✓ {{ task.breakthrough_2.effect if task.breakthrough_2.effect else 'Breakthrough' }}{% endif %}</span>
+                                </div>
+                                {% if task.breakthrough_1 and task.breakthrough_1.effect and task.progress >= breakthrough_1_pos %}
+                                <div style="margin-top: 8px; padding: 8px 12px; background: rgba(255, 170, 0, 0.15); border-radius: 6px; font-size: 0.9rem; color: var(--lcars-butterscotch);">
+                                    <strong>50% Breakthrough:</strong> {{ task.breakthrough_1.effect }}
+                                </div>
+                                {% endif %}
+                                {% if task.breakthrough_2 and task.breakthrough_2.effect and task.progress >= breakthrough_2_pos %}
+                                <div style="margin-top: 8px; padding: 8px 12px; background: rgba(255, 170, 0, 0.15); border-radius: 6px; font-size: 0.9rem; color: var(--lcars-butterscotch);">
+                                    <strong>75% Breakthrough:</strong> {{ task.breakthrough_2.effect }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <p style="color: #666; padding: 20px; text-align: center; font-size: 1rem;">No extended tasks. Add tasks to track progress on challenges.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Add Extended Task Modal -->
+                    <div id="add-extended-task-modal" class="modal-overlay">
+                        <div class="modal-content" style="max-width: 600px;">
+                            <h3 style="color: var(--lcars-orange); font-size: 1.3rem;">ADD EXTENDED TASK</h3>
+                            <label class="gm-select-label" for="task-name" style="font-size: 1rem;">Task Name</label>
+                            <input type="text" id="task-name" placeholder="e.g., Repair the Warp Core" class="gm-select" style="background: #1a1a1a; padding: 12px; font-size: 1.1rem;">
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 15px;">
+                                <div>
+                                    <label class="gm-select-label" for="task-difficulty" style="font-size: 0.95rem;">Difficulty (0-5)</label>
+                                    <select id="task-difficulty" class="gm-select select-tomato" style="padding: 10px; font-size: 1rem;">
+                                        <option value="0">0 (Automatic)</option>
+                                        <option value="1">1 (Simple)</option>
+                                        <option value="2" selected>2 (Routine)</option>
+                                        <option value="3">3 (Challenging)</option>
+                                        <option value="4">4 (Difficult)</option>
+                                        <option value="5">5 (Extreme)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="gm-select-label" for="task-track-length" style="font-size: 0.95rem;">Progress Track (4-25)</label>
+                                    <input type="number" id="task-track-length" value="10" min="4" max="25" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                                </div>
+                                <div>
+                                    <label class="gm-select-label" for="task-resistance" style="font-size: 0.95rem;">Resistance</label>
+                                    <input type="number" id="task-resistance" value="0" min="0" max="5" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top: 15px; padding: 12px; background: rgba(255, 102, 102, 0.1); border-radius: 8px; border: 1px solid var(--lcars-tomato);">
+                                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 1rem;">
+                                    <input type="checkbox" id="task-time-enabled" onchange="toggleTimeIntervals(this.checked)" style="width: 20px; height: 20px;">
+                                    <span style="color: var(--lcars-tomato);">⏱ Enable Time Intervals (Extended Consequence)</span>
+                                </label>
+                                <div id="time-intervals-fields" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #444;">
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                        <div>
+                                            <label class="gm-select-label" for="task-interval-length" style="font-size: 0.9rem;">Interval Length</label>
+                                            <input type="text" id="task-interval-length" placeholder="e.g., 1 minute" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                                        </div>
+                                        <div>
+                                            <label class="gm-select-label" for="task-intervals-total" style="font-size: 0.9rem;">Total Intervals</label>
+                                            <input type="number" id="task-intervals-total" value="6" min="1" max="20" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #444;">
+                                <label class="gm-select-label" for="task-breakthrough-1" style="font-size: 0.95rem;">50% Breakthrough Effect (optional)</label>
+                                <input type="text" id="task-breakthrough-1" placeholder="e.g., Situation changes..." class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                            </div>
+                            <div style="margin-top: 12px;">
+                                <label class="gm-select-label" for="task-breakthrough-2" style="font-size: 0.95rem;">75% Breakthrough Effect (optional)</label>
+                                <input type="text" id="task-breakthrough-2" placeholder="e.g., Final stretch..." class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                            </div>
+                            <div class="modal-buttons" style="margin-top: 20px;">
+                                <button class="btn" onclick="hideAddExtendedTaskModal()" style="background: #555; font-size: 1rem; padding: 12px 24px;">Cancel</button>
+                                <button class="btn" onclick="addExtendedTask()" style="background: var(--lcars-orange); color: #000; font-size: 1rem; padding: 12px 24px;">Add Task</button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
 
                     <!-- Two Column Layout: Player Ship & Crew | Enemy Ships -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
@@ -988,15 +1165,47 @@
                             </div>
                         </div>
 
-                        <!-- Enemy Ships Column -->
-                        <div class="ship-panel enemy-ship" style="border-color: var(--lcars-tomato);">
-                            <h3 style="color: var(--lcars-tomato); display: flex; justify-content: space-between; align-items: center;">
-                                <span>ENEMY SHIPS</span>
+                        <!-- Enemy Ships / NPC Column -->
+                        <div class="ship-panel enemy-ship" style="border-color: {% if is_narrative %}var(--lcars-purple){% else %}var(--lcars-tomato){% endif %};">
+                            <h3 style="color: {% if is_narrative %}var(--lcars-purple){% else %}var(--lcars-tomato){% endif %}; display: flex; justify-content: space-between; align-items: center;">
+                                <span>{% if is_narrative %}NPC SHIPS & CHARACTERS{% else %}ENEMY SHIPS{% endif %}</span>
+                                {% if not is_narrative %}
                                 <span id="enemy-turn-count" style="font-size: 0.9rem; background: rgba(255, 102, 102, 0.2); padding: 4px 12px; border-radius: 10px;">
                                     <span id="overview-enemy-turns-used">0</span>/<span id="overview-enemy-turns-total">0</span> turns
                                 </span>
+                                {% endif %}
                             </h3>
 
+                            {% if is_narrative %}
+                            <div id="npc-list">
+                                <div style="margin-bottom: 12px;">
+                                    <button class="btn" onclick="showAddNpcModal()" style="background: var(--lcars-purple); color: #fff; font-size: 1rem; padding: 10px 24px;">+ Add NPC</button>
+                                </div>
+                                <div id="npc-items">
+                                {% if npcs %}
+                                {% for npc in npcs %}
+                                <div class="npc-overview" data-npc-id="{{ npc.id }}" style="background: #1a1a2a; border-radius: 8px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--lcars-purple);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <div style="color: var(--lcars-purple); font-weight: 700; font-size: 1.1rem;">{{ npc.name }}</div>
+                                            <div style="color: var(--lcars-almond); font-size: 0.95rem;">{{ npc.npc_type }}</div>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 12px;">
+                                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" onchange="toggleNpcVisibility({{ npc.id }}, this.checked)" {% if npc.is_visible %}checked{% endif %} style="width: 18px; height: 18px;">
+                                                <span style="color: var(--lcars-almond); font-size: 0.95rem;">Visible</span>
+                                            </label>
+                                            <button class="btn" onclick="removeNpcFromScene({{ npc.id }})" style="background: #666; padding: 6px 14px; font-size: 1rem;">×</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                                {% else %}
+                                <p style="color: #666; padding: 20px; background: #1a1a1a; border-radius: 8px; text-align: center; font-size: 1rem;">No NPCs in this scene.</p>
+                                {% endif %}
+                                </div>
+                            </div>
+                            {% else %}
                             <div id="enemy-ships-list">
                                 {% if enemy_ships %}
                                 {% for enemy in enemy_ships %}
@@ -1024,6 +1233,7 @@
                                 <p style="color: #666; padding: 20px; background: #1a1a1a; border-radius: 8px; text-align: center;">No enemy ships. Add one from the Ships tab.</p>
                                 {% endif %}
                             </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -1548,16 +1758,65 @@
         </div>
     </div>
 
+    <!-- Add NPC Modal (for narrative scenes) -->
+    {% if is_narrative %}
+    <div id="add-npc-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 600px;">
+            <h3 style="color: var(--lcars-purple); font-size: 1.3rem;">ADD NPC TO SCENE</h3>
+            
+            <div style="margin-bottom: 18px;">
+                <label class="gm-select-label" style="font-size: 1rem;">Add from Campaign</label>
+                <select id="campaign-npc-select" class="gm-select" style="background: #1a1a1a; padding: 12px; font-size: 1rem;">
+                    <option value="">-- Select NPC --</option>
+                </select>
+                <button class="btn" onclick="addSelectedNpc()" style="margin-top: 10px; background: var(--lcars-purple); color: #fff; font-size: 1rem; padding: 10px 24px;">Add Selected</button>
+            </div>
+            
+            <div style="border-top: 1px solid #444; padding-top: 18px; margin-top: 18px;">
+                <label class="gm-select-label" style="font-size: 1rem;">Or Create Quick NPC</label>
+                <input type="text" id="quick-npc-name" placeholder="NPC Name" class="gm-select" style="background: #1a1a1a; padding: 12px; margin-bottom: 10px; font-size: 1rem;">
+                <input type="text" id="quick-npc-desc" placeholder="Brief description (optional)" class="gm-select" style="background: #1a1a1a; padding: 12px; margin-bottom: 10px; font-size: 1rem;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 10px;">
+                    <div>
+                        <label class="gm-select-label" style="font-size: 0.95rem;">NPC Type</label>
+                        <select id="quick-npc-type" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                            <option value="minor">Minor</option>
+                            <option value="notable">Notable</option>
+                            <option value="major">Major</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="gm-select-label" style="font-size: 0.95rem;">Affiliation</label>
+                        <input type="text" id="quick-npc-affiliation" placeholder="e.g., Starfleet, Klingon" class="gm-select" style="background: #1a1a1a; padding: 10px; font-size: 1rem;">
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; margin-top: 12px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="quick-npc-visible" style="width: 20px; height: 20px;">
+                        <span style="color: var(--lcars-almond); font-size: 1rem;">Visible to players</span>
+                    </label>
+                </div>
+                <button class="btn" onclick="addQuickNpc()" style="margin-top: 15px; background: var(--lcars-purple); color: #fff; font-size: 1rem; padding: 12px 28px;">Create & Add</button>
+            </div>
+            
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button class="btn" onclick="hideAddNpcModal()" style="background: #555; font-size: 1rem; padding: 12px 28px;">Done</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Scripts -->
     <script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
     <script src="{{ url_for('static', filename='js/announcements.js') }}"></script>
     <script>
         // Constants
-        const encounterId = '{{ encounter.encounter_id }}';
+        const encounterId = {% if encounter and encounter.encounter_id %}'{{ encounter.encounter_id }}'{% else %}null{% endif %};
+        const isNarrative = {{ 'true' if is_narrative else 'false' }};
         const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
         const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
-        let currentTurn = '{{ encounter.current_turn }}';
-        let hasReservePower = {{ 'true' if player_ship.has_reserve_power else 'false' }};
+        let currentTurn = '{{ encounter.current_turn if encounter else "player" }}';
+        let hasReservePower = {{ 'true' if player_ship and player_ship.has_reserve_power else 'false' }};
 
         // Visibility settings
         let showAllShips = false;  // God mode - shows all ships regardless of fog
@@ -1668,10 +1927,101 @@
             document.getElementById('threat').textContent = data.threat;
         }
 
+        // ===== SCENE MANAGEMENT =====
+        let sceneData = {
+            name: null,
+            description: null,
+            stardate: null,
+            scene_traits: [],
+            challenges: [],
+            characters_present: []
+        };
+
+        async function loadScene() {
+            if (!encounterId) return;
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/scene`);
+                if (response.ok) {
+                    sceneData = await response.json();
+                    document.getElementById('scene-name').value = sceneData.name || '';
+                    document.getElementById('scene-stardate').value = sceneData.stardate || '';
+                    document.getElementById('scene-description').value = sceneData.description || '';
+                    document.getElementById('scene-traits').value = (sceneData.scene_traits || []).join(', ');
+                }
+            } catch (err) {
+                console.error('Failed to load scene:', err);
+            }
+        }
+
+        async function saveSceneName() {
+            if (!encounterId) return;
+            const name = document.getElementById('scene-name').value.trim() || null;
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/scene`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name: name })
+                });
+                if (response.ok) {
+                    showToast('Scene name saved', 'success');
+                }
+            } catch (err) {
+                console.error('Failed to save scene name:', err);
+                showToast('Failed to save scene name', 'error');
+            }
+        }
+
+        async function saveSceneDescription() {
+            if (!encounterId) return;
+            const description = document.getElementById('scene-description').value.trim() || null;
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/scene`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ description: description })
+                });
+                if (response.ok) {
+                    showToast('Scene description saved', 'success');
+                }
+            } catch (err) {
+                console.error('Failed to save scene description:', err);
+                showToast('Failed to save scene description', 'error');
+            }
+        }
+
+        async function updateScene() {
+            if (!encounterId) return;
+            const stardate = document.getElementById('scene-stardate').value.trim() || null;
+            const traitsText = document.getElementById('scene-traits').value.trim();
+            const traits = traitsText ? traitsText.split(',').map(t => t.trim()).filter(t => t) : [];
+
+            try {
+                const response = await fetch(`/api/encounter/${encounterId}/scene`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        stardate: stardate,
+                        scene_traits: traits
+                    })
+                });
+                if (response.ok) {
+                    sceneData = await response.json();
+                }
+            } catch (err) {
+                console.error('Failed to update scene:', err);
+            }
+        }
+
+        // Load scene on page load (only for combat encounters)
+        if (encounterId) {
+            loadScene();
+        }
+
         // Viewscreen Audio Toggle
-        let viewscreenAudioEnabled = {{ 'true' if encounter.viewscreen_audio_enabled is not defined or encounter.viewscreen_audio_enabled else 'false' }};
+        let viewscreenAudioEnabled = {{ 'true' if encounter and (encounter.viewscreen_audio_enabled is not defined or encounter.viewscreen_audio_enabled) else 'false' }};
 
         async function toggleViewscreenAudio() {
+            if (!encounterId) return;
             viewscreenAudioEnabled = !viewscreenAudioEnabled;
             try {
                 const response = await fetch(`/api/encounter/${encounterId}/viewscreen-audio`, {
@@ -2773,24 +3123,360 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
-            initNpcActionPanel();
-            initTacticalMap();
-            refreshCombatLog();
-            fetchStatus();
-            fetchRoundActions();  // Fetch initial round actions
-            updatePlayerVisibilityStatus();  // Show initial visibility status
+            if (encounterId) {
+                initNpcActionPanel();
+                initTacticalMap();
+                refreshCombatLog();
+                fetchStatus();
+                fetchRoundActions();
+                updatePlayerVisibilityStatus();
 
-            // Initialize announcements system with banner mode
-            const announcements = new CombatAnnouncements(encounterId, {
-                displayMode: 'banner',   // Use persistent banner at top
-                pollInterval: 2000,      // Poll every 2 seconds
-                role: 'gm'               // GM sees all actions including hidden enemies
-            });
+                const announcements = new CombatAnnouncements(encounterId, {
+                    displayMode: 'banner',
+                    pollInterval: 2000,
+                    role: 'gm'
+                });
+            } else if (isNarrative) {
+                // For narrative scenes, update crew actions with "no crew" message
+                const crewActionsList = document.getElementById('crew-actions-list');
+                if (crewActionsList) {
+                    crewActionsList.innerHTML = '<div style="color: #666; padding: 15px; background: #111; border-radius: 8px; text-align: center;">No crew members assigned to this scene.</div>';
+                }
+            }
         });
 
-        setInterval(fetchStatus, 3000);
-        setInterval(refreshCombatLog, 5000);
-        setInterval(fetchRoundActions, 4000);  // Poll round actions
+        // Only set intervals for combat encounters
+        if (encounterId) {
+            setInterval(fetchStatus, 3000);
+            setInterval(refreshCombatLog, 5000);
+            setInterval(fetchRoundActions, 4000);
+        }
+
+        // ===== NARRATIVE SCENE FUNCTIONS =====
+        let sceneTraits = {% if scene and scene.scene_traits %}{{ scene.scene_traits | tojson }}{% else %}[]{% endif %};
+        let challenges = {% if scene and scene.challenges %}{{ scene.challenges | tojson }}{% else %}[]{% endif %};
+        let sceneId = {% if scene %}{{ scene.id }}{% else %}null{% endif %};
+
+        function showAddSceneTraitModal() {
+            const modal = document.createElement('div');
+            modal.id = 'add-trait-modal';
+            modal.style.cssText = 'display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 2000; align-items: center; justify-content: center;';
+            modal.innerHTML = `
+                <div class="panel" style="max-width: 400px; width: 90%;">
+                    <h2>Add Scene Trait</h2>
+                    <form onsubmit="addSceneTrait(event)">
+                        <div style="margin-bottom: 15px;">
+                            <label style="color: var(--lcars-almond);">Trait Name</label>
+                            <input type="text" id="trait-name-input" required style="width: 100%; margin-top: 4px;" placeholder="e.g., Dark, Dangerous">
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label style="color: var(--lcars-almond);">Description (optional)</label>
+                            <textarea id="trait-desc-input" rows="2" style="width: 100%; margin-top: 4px;" placeholder="Shown on hover"></textarea>
+                        </div>
+                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                            <button type="button" class="btn btn-small" style="background: #666;" onclick="document.getElementById('add-trait-modal').remove()">Cancel</button>
+                            <button type="submit" class="btn btn-small" style="background: var(--lcars-butterscotch);">Add</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        async function addSceneTrait(event) {
+            event.preventDefault();
+            const name = document.getElementById('trait-name-input').value.trim();
+            const description = document.getElementById('trait-desc-input').value.trim();
+            
+            if (!name) return;
+            
+            sceneTraits.push({
+                name: name,
+                description: description || null
+            });
+            
+            await updateSceneData();
+            document.getElementById('add-trait-modal').remove();
+            location.reload();
+        }
+
+        async function removeSceneTrait(index) {
+            sceneTraits.splice(index, 1);
+            await updateSceneData();
+            location.reload();
+        }
+
+        async function updateSceneData() {
+            if (!sceneId) return;
+            
+            await fetch(`/api/scene/${sceneId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    scene_traits: sceneTraits,
+                    challenges: challenges,
+                    stardate: document.getElementById('scene-stardate')?.value || null
+                })
+            });
+        }
+
+        async function toggleNpcVisibility(npcId, isVisible) {
+            await fetch(`/scenes/${sceneId}/npcs/${npcId}/visibility`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_visible: isVisible })
+            });
+        }
+
+        // ===== NPC MANAGEMENT FOR NARRATIVE SCENES =====
+        function showAddNpcModal() {
+            loadAvailableNpcs();
+            document.getElementById('add-npc-modal').classList.add('active');
+        }
+
+        function hideAddNpcModal() {
+            document.getElementById('add-npc-modal').classList.remove('active');
+        }
+
+        async function loadAvailableNpcs() {
+            const select = document.getElementById('campaign-npc-select');
+            select.innerHTML = '<option value="">Loading...</option>';
+            
+            try {
+                const response = await fetch(`/scenes/${sceneId}/npcs/available`);
+                const data = await response.json();
+                
+                if (data.npcs && data.npcs.length > 0) {
+                    select.innerHTML = '<option value="">-- Select NPC --</option>';
+                    data.npcs.forEach(npc => {
+                        const opt = document.createElement('option');
+                        opt.value = npc.id;
+                        opt.textContent = `${npc.name} (${npc.npc_type})`;
+                        select.appendChild(opt);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">No NPCs in campaign manifest</option>';
+                }
+            } catch (err) {
+                select.innerHTML = '<option value="">Error loading NPCs</option>';
+                console.error('Failed to load NPCs:', err);
+            }
+        }
+
+        async function addSelectedNpc() {
+            const select = document.getElementById('campaign-npc-select');
+            const npcId = select.value;
+            
+            if (!npcId) {
+                showToast('Please select an NPC', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/scenes/${sceneId}/npcs`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ npc_id: parseInt(npcId), is_visible: false })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`Added ${data.name} to scene`, 'success');
+                    select.value = '';
+                    addNpcToList(data);
+                } else {
+                    showToast(data.error || 'Failed to add NPC', 'error');
+                }
+            } catch (err) {
+                showToast('Error adding NPC', 'error');
+                console.error(err);
+            }
+        }
+
+        async function addQuickNpc() {
+            const name = document.getElementById('quick-npc-name').value.trim();
+            const desc = document.getElementById('quick-npc-desc').value.trim();
+            const type = document.getElementById('quick-npc-type').value;
+            const affiliation = document.getElementById('quick-npc-affiliation').value.trim();
+            const visible = document.getElementById('quick-npc-visible').checked;
+            
+            if (!name) {
+                showToast('NPC name is required', 'error');
+                return;
+            }
+            
+            let fullDesc = desc;
+            if (affiliation) {
+                fullDesc = affiliation + (desc ? ' - ' + desc : '');
+            }
+            
+            try {
+                const response = await fetch(`/scenes/${sceneId}/npcs`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        quick_name: name, 
+                        quick_description: fullDesc,
+                        is_visible: visible 
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`Added ${data.name} to scene`, 'success');
+                    document.getElementById('quick-npc-name').value = '';
+                    document.getElementById('quick-npc-desc').value = '';
+                    document.getElementById('quick-npc-type').value = 'minor';
+                    document.getElementById('quick-npc-affiliation').value = '';
+                    document.getElementById('quick-npc-visible').checked = false;
+                    addNpcToList(data);
+                } else {
+                    showToast(data.error || 'Failed to add NPC', 'error');
+                }
+            } catch (err) {
+                showToast('Error adding NPC', 'error');
+                console.error(err);
+            }
+        }
+
+        function addNpcToList(npcData) {
+            const container = document.getElementById('npc-items');
+            const emptyMsg = container.querySelector('p');
+            if (emptyMsg) emptyMsg.remove();
+            
+            const div = document.createElement('div');
+            div.className = 'npc-overview';
+            div.dataset.npcId = npcData.scene_npc_id;
+            div.style.cssText = 'background: #1a1a2a; border-radius: 8px; padding: 14px; margin-bottom: 10px; border-left: 4px solid var(--lcars-purple);';
+            div.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="color: var(--lcars-purple); font-weight: 700;">${npcData.name}</div>
+                        <div style="color: var(--lcars-almond); font-size: 0.8em;">${npcData.npc_type}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="checkbox" onchange="toggleNpcVisibility(${npcData.scene_npc_id}, this.checked)" ${npcData.is_visible ? 'checked' : ''}>
+                            <span style="color: var(--lcars-almond); font-size: 0.75rem;">Visible</span>
+                        </label>
+                        <button class="btn btn-small" onclick="removeNpcFromScene(${npcData.scene_npc_id})" style="background: #555; padding: 4px 8px; font-size: 0.7rem;">×</button>
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+        }
+
+        async function removeNpcFromScene(sceneNpcId) {
+            if (!confirm('Remove this NPC from the scene?')) return;
+            
+            try {
+                const response = await fetch(`/scenes/${sceneId}/npcs/${sceneNpcId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const npcDiv = document.querySelector(`.npc-overview[data-npc-id="${sceneNpcId}"]`);
+                    if (npcDiv) npcDiv.remove();
+                    showToast('NPC removed from scene', 'success');
+                } else {
+                    showToast(data.error || 'Failed to remove NPC', 'error');
+                }
+            } catch (err) {
+                showToast('Error removing NPC', 'error');
+                console.error(err);
+            }
+        }
+
+        // ===== EXTENDED TASKS MANAGEMENT =====
+        function showAddExtendedTaskModal() {
+            document.getElementById('add-extended-task-modal').classList.add('active');
+        }
+
+        function hideAddExtendedTaskModal() {
+            document.getElementById('add-extended-task-modal').classList.remove('active');
+            document.getElementById('task-name').value = '';
+            document.getElementById('task-difficulty').value = '2';
+            document.getElementById('task-track-length').value = '10';
+            document.getElementById('task-resistance').value = '0';
+            document.getElementById('task-time-enabled').checked = false;
+            document.getElementById('task-interval-length').value = '';
+            document.getElementById('task-intervals-total').value = '6';
+            document.getElementById('time-intervals-fields').style.display = 'none';
+            document.getElementById('task-breakthrough-1').value = '';
+            document.getElementById('task-breakthrough-2').value = '';
+        }
+
+        function toggleTimeIntervals(enabled) {
+            document.getElementById('time-intervals-fields').style.display = enabled ? 'block' : 'none';
+        }
+
+        async function addExtendedTask() {
+            const name = document.getElementById('task-name').value.trim();
+            const difficulty = parseInt(document.getElementById('task-difficulty').value) || 2;
+            const trackLength = parseInt(document.getElementById('task-track-length').value) || 10;
+            const resistance = parseInt(document.getElementById('task-resistance').value) || 0;
+            const timeEnabled = document.getElementById('task-time-enabled').checked;
+            const intervalLength = document.getElementById('task-interval-length').value.trim();
+            const intervalsTotal = parseInt(document.getElementById('task-intervals-total').value) || 6;
+            const breakthrough1 = document.getElementById('task-breakthrough-1').value.trim();
+            const breakthrough2 = document.getElementById('task-breakthrough-2').value.trim();
+            
+            if (!name) {
+                showToast('Task name is required', 'error');
+                return;
+            }
+            
+            const clampedTrackLength = Math.max(4, Math.min(25, trackLength));
+            
+            const newTask = {
+                name: name,
+                progress: 0,
+                difficulty: difficulty,
+                track_length: clampedTrackLength,
+                resistance: resistance,
+                time_intervals: timeEnabled ? {
+                    enabled: true,
+                    interval_length: intervalLength || '1 interval',
+                    total: intervalsTotal,
+                    remaining: intervalsTotal
+                } : null,
+                breakthrough_1: breakthrough1 ? { at_progress: Math.floor(clampedTrackLength * 0.5), effect: breakthrough1 } : null,
+                breakthrough_2: breakthrough2 ? { at_progress: Math.floor(clampedTrackLength * 0.75), effect: breakthrough2 } : null
+            };
+            
+            challenges.push(newTask);
+            await updateSceneData();
+            hideAddExtendedTaskModal();
+            location.reload();
+        }
+
+        async function adjustExtendedTaskProgress(index, change) {
+            if (!challenges[index]) return;
+            
+            const task = challenges[index];
+            const maxProgress = task.track_length || 10;
+            task.progress = Math.max(0, Math.min(maxProgress, (task.progress || 0) + change));
+            
+            await updateSceneData();
+            location.reload();
+        }
+
+        async function removeExtendedTask(index) {
+            if (!challenges[index]) return;
+            
+            challenges.splice(index, 1);
+            await updateSceneData();
+            location.reload();
+        }
+
+        // Override updateScene for narrative scenes
+        if (sceneId) {
+            window.updateScene = updateSceneData;
+        }
     </script>
 </body>
 </html>

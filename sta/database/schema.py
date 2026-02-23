@@ -18,6 +18,7 @@ class Base(DeclarativeBase):
 
 class CharacterRecord(Base):
     """Database record for a character."""
+
     __tablename__ = "characters"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -40,7 +41,9 @@ class CharacterRecord(Base):
     determination_max: Mapped[int] = mapped_column(Integer, default=3)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
 
     def to_model(self) -> Character:
         """Convert database record to Character model."""
@@ -70,22 +73,26 @@ class CharacterRecord(Base):
             species=char.species,
             rank=char.rank,
             role=char.role,
-            attributes_json=json.dumps({
-                "control": char.attributes.control,
-                "fitness": char.attributes.fitness,
-                "daring": char.attributes.daring,
-                "insight": char.attributes.insight,
-                "presence": char.attributes.presence,
-                "reason": char.attributes.reason,
-            }),
-            disciplines_json=json.dumps({
-                "command": char.disciplines.command,
-                "conn": char.disciplines.conn,
-                "engineering": char.disciplines.engineering,
-                "medicine": char.disciplines.medicine,
-                "science": char.disciplines.science,
-                "security": char.disciplines.security,
-            }),
+            attributes_json=json.dumps(
+                {
+                    "control": char.attributes.control,
+                    "fitness": char.attributes.fitness,
+                    "daring": char.attributes.daring,
+                    "insight": char.attributes.insight,
+                    "presence": char.attributes.presence,
+                    "reason": char.attributes.reason,
+                }
+            ),
+            disciplines_json=json.dumps(
+                {
+                    "command": char.disciplines.command,
+                    "conn": char.disciplines.conn,
+                    "engineering": char.disciplines.engineering,
+                    "medicine": char.disciplines.medicine,
+                    "science": char.disciplines.science,
+                    "security": char.disciplines.security,
+                }
+            ),
             talents_json=json.dumps(char.talents),
             focuses_json=json.dumps(char.focuses),
             stress=char.stress,
@@ -97,12 +104,13 @@ class CharacterRecord(Base):
 
 class StarshipRecord(Base):
     """Database record for a starship."""
+
     __tablename__ = "starships"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
     ship_class: Mapped[str] = mapped_column(String(50))
-    registry: Mapped[Optional[str]] = mapped_column(String(20))
+    ship_registry: Mapped[Optional[str]] = mapped_column(String(20))
     scale: Mapped[int] = mapped_column(Integer)
 
     # Systems stored as JSON
@@ -125,7 +133,9 @@ class StarshipRecord(Base):
     crew_quality: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
 
     def to_model(self) -> Starship:
         """Convert database record to Starship model."""
@@ -172,7 +182,7 @@ class StarshipRecord(Base):
             has_reserve_power=self.has_reserve_power,
             shields_raised=self.shields_raised,
             weapons_armed=self.weapons_armed,
-            registry=self.registry,
+            registry=self.ship_registry,
             crew_quality=crew_quality_enum,
         )
         return ship
@@ -193,31 +203,34 @@ class StarshipRecord(Base):
         ]
 
         breaches_data = [
-            {"system": b.system.value, "potency": b.potency}
-            for b in ship.breaches
+            {"system": b.system.value, "potency": b.potency} for b in ship.breaches
         ]
 
         return cls(
             name=ship.name,
             ship_class=ship.ship_class,
-            registry=ship.registry,
+            ship_registry=ship.registry,
             scale=ship.scale,
-            systems_json=json.dumps({
-                "comms": ship.systems.comms,
-                "computers": ship.systems.computers,
-                "engines": ship.systems.engines,
-                "sensors": ship.systems.sensors,
-                "structure": ship.systems.structure,
-                "weapons": ship.systems.weapons,
-            }),
-            departments_json=json.dumps({
-                "command": ship.departments.command,
-                "conn": ship.departments.conn,
-                "engineering": ship.departments.engineering,
-                "medicine": ship.departments.medicine,
-                "science": ship.departments.science,
-                "security": ship.departments.security,
-            }),
+            systems_json=json.dumps(
+                {
+                    "comms": ship.systems.comms,
+                    "computers": ship.systems.computers,
+                    "engines": ship.systems.engines,
+                    "sensors": ship.systems.sensors,
+                    "structure": ship.systems.structure,
+                    "weapons": ship.systems.weapons,
+                }
+            ),
+            departments_json=json.dumps(
+                {
+                    "command": ship.departments.command,
+                    "conn": ship.departments.conn,
+                    "engineering": ship.departments.engineering,
+                    "medicine": ship.departments.medicine,
+                    "science": ship.departments.science,
+                    "security": ship.departments.security,
+                }
+            ),
             weapons_json=json.dumps(weapons_data),
             talents_json=json.dumps(ship.talents),
             traits_json=json.dumps(ship.traits),
@@ -234,6 +247,7 @@ class StarshipRecord(Base):
 
 class EncounterRecord(Base):
     """Database record for a combat encounter."""
+
     __tablename__ = "encounters"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -242,13 +256,17 @@ class EncounterRecord(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Campaign association (nullable for backward compatibility)
-    campaign_id: Mapped[Optional[int]] = mapped_column(ForeignKey("campaigns.id"), nullable=True)
+    campaign_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("campaigns.id"), nullable=True
+    )
     # Encounter lifecycle status: draft, active, completed
     status: Mapped[str] = mapped_column(String(20), default="active")
 
     # Foreign keys
     player_ship_id: Mapped[Optional[int]] = mapped_column(ForeignKey("starships.id"))
-    player_character_id: Mapped[Optional[int]] = mapped_column(ForeignKey("characters.id"))
+    player_character_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("characters.id")
+    )
     player_position: Mapped[str] = mapped_column(String(20), default="captain")
 
     # Enemy ships stored as JSON array of ship IDs
@@ -264,22 +282,32 @@ class EncounterRecord(Base):
     # Turn tracking - ships_turns_used is JSON dict: {"ship_id": turns_used}
     # Each ship gets Scale turns per round
     ships_turns_used_json: Mapped[str] = mapped_column(Text, default="{}")
-    player_turns_used: Mapped[int] = mapped_column(Integer, default=0)  # Legacy: kept for backward compat
-    player_turns_total: Mapped[int] = mapped_column(Integer, default=1)  # Legacy: kept for backward compat
+    player_turns_used: Mapped[int] = mapped_column(
+        Integer, default=0
+    )  # Legacy: kept for backward compat
+    player_turns_total: Mapped[int] = mapped_column(
+        Integer, default=1
+    )  # Legacy: kept for backward compat
 
     # Multi-player turn tracking - JSON dict: {"player_id": {"acted": bool, "acted_at": "timestamp"}}
     players_turns_used_json: Mapped[str] = mapped_column(Text, default="{}")
 
     # Track who currently has claimed the turn (for race condition prevention)
-    current_player_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
-    turn_claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+    current_player_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, default=None
+    )
+    turn_claimed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, default=None
+    )
 
     # Active effects stored as JSON
     active_effects_json: Mapped[str] = mapped_column(Text, default="[]")
 
     # Pending attack waiting for player defensive roll (JSON or null)
     # Structure: {"attacker_index": int, "weapon_index": int, "bonus_dice": int, "timestamp": str}
-    pending_attack_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+    pending_attack_json: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, default=None
+    )
 
     # Tactical map data (hex grid with terrain)
     # Structure: {"radius": int, "tiles": [{"coord": {"q": int, "r": int}, "terrain": str, "traits": []}]}
@@ -294,14 +322,19 @@ class EncounterRecord(Base):
 
     # Hailing state (JSON or null)
     # Structure: {"active": bool, "initiator": "player|gm", "target": str, "from_ship": str, "to_ship": str, "channel_open": bool, "timestamp": str}
-    hailing_state_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+    hailing_state_json: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, default=None
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
 
 
 class CombatLogRecord(Base):
     """Database record for combat log entries."""
+
     __tablename__ = "combat_log"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -328,6 +361,7 @@ class CombatLogRecord(Base):
 
 class CampaignRecord(Base):
     """Database record for a campaign."""
+
     __tablename__ = "campaigns"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -336,7 +370,9 @@ class CampaignRecord(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Active ship assignment (FK to starships)
-    active_ship_id: Mapped[Optional[int]] = mapped_column(ForeignKey("starships.id"), nullable=True)
+    active_ship_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("starships.id"), nullable=True
+    )
 
     # Campaign state
     is_active: Mapped[bool] = mapped_column(default=True)
@@ -346,29 +382,40 @@ class CampaignRecord(Base):
 
     # Enemy turn multiplier - scales enemy ship turns (default 0.5 = half of Scale)
     # e.g., Scale 6 ship with 0.5 multiplier gets 3 turns per round
-    enemy_turn_multiplier: Mapped[Optional[float]] = mapped_column(default=0.5, nullable=True)
+    enemy_turn_multiplier: Mapped[Optional[float]] = mapped_column(
+        default=0.5, nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
 
 
 class CampaignPlayerRecord(Base):
     """A player in a campaign (session-based, no auth)."""
+
     __tablename__ = "campaign_players"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"))
-    character_id: Mapped[Optional[int]] = mapped_column(ForeignKey("characters.id"), nullable=True)
+    character_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("characters.id"), nullable=True
+    )
 
     # Player identity (session-based)
     player_name: Mapped[str] = mapped_column(String(50))  # Display name
     # session_token is None for unclaimed characters, set when a player claims them
-    session_token: Mapped[Optional[str]] = mapped_column(String(100), unique=True, nullable=True)
+    session_token: Mapped[Optional[str]] = mapped_column(
+        String(100), unique=True, nullable=True
+    )
 
     # Bridge position assignment
     position: Mapped[str] = mapped_column(String(20), default="captain")
     # Pending position change (takes effect at start of next turn)
-    pending_position: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default=None)
+    pending_position: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, default=None
+    )
 
     is_gm: Mapped[bool] = mapped_column(default=False)
     is_active: Mapped[bool] = mapped_column(default=True)
@@ -379,6 +426,7 @@ class CampaignPlayerRecord(Base):
 
 class CampaignShipRecord(Base):
     """A ship available to a campaign (ship pool)."""
+
     __tablename__ = "campaign_ships"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -386,5 +434,129 @@ class CampaignShipRecord(Base):
     ship_id: Mapped[int] = mapped_column(ForeignKey("starships.id"))
 
     # Metadata
-    is_available: Mapped[bool] = mapped_column(default=True)  # Can be assigned as active
+    is_available: Mapped[bool] = mapped_column(
+        default=True
+    )  # Can be assigned as active
     added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class SceneRecord(Base):
+    """Scene information - first-class entity for narrative context."""
+
+    __tablename__ = "scenes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), nullable=False)
+    encounter_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("encounters.id"), nullable=True, unique=True
+    )
+
+    name: Mapped[str] = mapped_column(String(100), default="New Scene")
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    scene_type: Mapped[str] = mapped_column(
+        String(30), default="narrative"
+    )  # narrative, starship_encounter, personal_encounter, social_encounter
+    status: Mapped[str] = mapped_column(
+        String(20), default="draft"
+    )  # draft, active, completed
+
+    stardate: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+
+    scene_traits_json: Mapped[str] = mapped_column(Text, default="[]")
+    challenges_json: Mapped[str] = mapped_column(Text, default="[]")
+    characters_present_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    has_map: Mapped[bool] = mapped_column(default=False)
+    tactical_map_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
+
+
+class NPCRecord(Base):
+    """NPC Archive - global NPC database."""
+
+    __tablename__ = "npc_archive"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    npc_type: Mapped[str] = mapped_column(
+        String(20), default="minor"
+    )  # major, notable, minor, npc_crew
+
+    attributes_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    disciplines_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    stress: Mapped[int] = mapped_column(Integer, default=5)
+    stress_max: Mapped[int] = mapped_column(Integer, default=5)
+
+    appearance: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    motivation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    affiliation: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    location: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    picture_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    ship_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("starships.id"), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
+
+
+class CampaignNPCRecord(Base):
+    """NPCs assigned to a campaign (manifest)."""
+
+    __tablename__ = "campaign_npcs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"))
+    npc_id: Mapped[int] = mapped_column(ForeignKey("npc_archive.id"))
+
+    is_visible_to_players: Mapped[bool] = mapped_column(default=False)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class SceneNPCRecord(Base):
+    """NPCs present in a scene."""
+
+    __tablename__ = "scene_npcs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scene_id: Mapped[int] = mapped_column(ForeignKey("scenes.id"))
+    npc_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("npc_archive.id"), nullable=True
+    )
+
+    quick_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    quick_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    is_visible_to_players: Mapped[bool] = mapped_column(default=False)
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CharacterTraitRecord(Base):
+    """Traits assigned to characters."""
+
+    __tablename__ = "character_traits"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    character_id: Mapped[int] = mapped_column(ForeignKey("characters.id"))
+
+    trait_name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(
+        String(50), default="gm"
+    )  # gm, player, scene, campaign
+
+    scene_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("scenes.id"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

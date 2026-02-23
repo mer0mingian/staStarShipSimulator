@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}{{ scene.name }} - Viewscreen{% endblock %}
+
+{% block content %}
+<div class="viewscreen-container" style="height: 100vh; display: flex; flex-direction: column;">
+    <!-- Header -->
+    <div style="display: flex; justify-content: space-between; padding: 20px; background: linear-gradient(90deg, #000 0%, #1a1a1a 50%, #000 100%);">
+        <div style="font-size: 1.5em; color: var(--lcars-butterscotch);">
+            {% if scene.scene_type == 'narrative' %}🎬{% elif scene.scene_type == 'personal_encounter' %}👤{% elif scene.scene_type == 'social_encounter' %}💬{% endif %}
+            {{ scene.name }}
+        </div>
+        {% if scene.stardate %}
+        <div style="font-size: 1.2em; color: var(--lcars-ice);">
+            STARDATE {{ scene.stardate }}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Main Content -->
+    <div style="flex: 1; display: flex; padding: 20px; gap: 20px;">
+        <!-- Scene Info -->
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
+            <!-- Scene Traits -->
+            {% if scene.scene_traits %}
+            <div class="panel" style="border-color: var(--lcars-butterscotch);">
+                <h3 style="color: var(--lcars-butterscotch); margin: 0 0 10px 0;">Scene Traits</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    {% for trait in scene.scene_traits %}
+                    <span class="trait-tooltip" style="background: var(--lcars-butterscotch); color: #000; padding: 6px 14px; border-radius: 15px; font-size: 0.95em; cursor: help;">
+                        {{ trait }}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Extended Tasks -->
+            {% if scene.challenges %}
+            <div class="panel" style="border-color: var(--lcars-ice);">
+                <h3 style="color: var(--lcars-ice); margin: 0 0 10px 0;">Extended Tasks</h3>
+                {% for task in scene.challenges %}
+                <div style="background: #1a1a1a; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 4px solid var(--lcars-ice);">
+                    <div style="color: var(--lcars-ice); margin-bottom: 6px;">{{ task.name }}</div>
+                    <div style="display: flex; gap: 4px;">
+                        {% for i in range(task.progress | default(0)) %}
+                        <span style="width: 16px; height: 16px; background: var(--lcars-ice); border-radius: 3px;"></span>
+                        {% endfor %}
+                        {% for i in range((task.resistance | default(5)) - (task.progress | default(0))) %}
+                        <span style="width: 16px; height: 16px; background: #333; border-radius: 3px;"></span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
