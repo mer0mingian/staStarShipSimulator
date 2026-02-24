@@ -6574,6 +6574,7 @@ def import_ships():
 
 # ===== PERSONNEL ENCOUNTER API =====
 
+
 @api_bp.route("/personnel/<int:scene_id>/create", methods=["POST"])
 def create_personnel_encounter(scene_id: int):
     """Create a personnel encounter from a scene."""
@@ -6586,9 +6587,16 @@ def create_personnel_encounter(scene_id: int):
         if scene.scene_type != "personal_encounter":
             return jsonify({"error": "Scene is not a personal encounter"}), 400
 
-        existing = session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        existing = (
+            session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        )
         if existing:
-            return jsonify({"error": "Personnel encounter already exists", "encounter_id": existing.id}), 400
+            return jsonify(
+                {
+                    "error": "Personnel encounter already exists",
+                    "encounter_id": existing.id,
+                }
+            ), 400
 
         encounter = PersonnelEncounterRecord(
             scene_id=scene_id,
@@ -6606,11 +6614,13 @@ def create_personnel_encounter(scene_id: int):
         session.add(encounter)
         session.commit()
 
-        return jsonify({
-            "success": True,
-            "encounter_id": encounter.id,
-            "scene_id": scene_id,
-        })
+        return jsonify(
+            {
+                "success": True,
+                "encounter_id": encounter.id,
+                "scene_id": scene_id,
+            }
+        )
     except Exception as e:
         session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -6622,48 +6632,54 @@ def create_personnel_encounter(scene_id: int):
 def get_personnel_status(scene_id: int):
     """Get current personnel encounter status."""
     role = request.args.get("role", "player")
-    
+
     session = get_session()
     try:
-        encounter = session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        encounter = (
+            session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        )
         if not encounter:
             return jsonify({"error": "Personnel encounter not found"}), 404
 
         character_states = json.loads(encounter.character_states_json or "[]")
         character_positions = json.loads(encounter.character_positions_json or "{}")
         active_effects = json.loads(encounter.active_effects_json or "[]")
-        
+
         characters_info = []
         for i, char_state in enumerate(character_states):
             char_key = f"character_{i}"
             pos = character_positions.get(char_key, {"q": 0, "r": 0})
-            
+
             is_player = char_state.get("is_player", False)
             visible = (role == "gm") or is_player
-            
-            if visible:
-                characters_info.append({
-                    "index": i,
-                    "name": char_state.get("name", f"Character {i}"),
-                    "is_player": is_player,
-                    "stress": char_state.get("stress", 5),
-                    "stress_max": char_state.get("stress_max", 5),
-                    "injuries": char_state.get("injuries", []),
-                    "is_defeated": char_state.get("is_defeated", False),
-                    "protection": char_state.get("protection", 0),
-                    "position": pos,
-                })
 
-        return jsonify({
-            "current_turn": encounter.current_turn,
-            "round": encounter.round,
-            "momentum": encounter.momentum,
-            "threat": encounter.threat,
-            "characters": characters_info,
-            "active_effects": active_effects,
-            "tactical_map": json.loads(encounter.tactical_map_json or "{}"),
-            "is_active": encounter.is_active,
-        })
+            if visible:
+                characters_info.append(
+                    {
+                        "index": i,
+                        "name": char_state.get("name", f"Character {i}"),
+                        "is_player": is_player,
+                        "stress": char_state.get("stress", 5),
+                        "stress_max": char_state.get("stress_max", 5),
+                        "injuries": char_state.get("injuries", []),
+                        "is_defeated": char_state.get("is_defeated", False),
+                        "protection": char_state.get("protection", 0),
+                        "position": pos,
+                    }
+                )
+
+        return jsonify(
+            {
+                "current_turn": encounter.current_turn,
+                "round": encounter.round,
+                "momentum": encounter.momentum,
+                "threat": encounter.threat,
+                "characters": characters_info,
+                "active_effects": active_effects,
+                "tactical_map": json.loads(encounter.tactical_map_json or "{}"),
+                "is_active": encounter.is_active,
+            }
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -6675,7 +6691,9 @@ def add_character_to_personnel(scene_id: int):
     """Add a character to the personnel encounter."""
     session = get_session()
     try:
-        encounter = session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        encounter = (
+            session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        )
         if not encounter:
             return jsonify({"error": "Personnel encounter not found"}), 404
 
@@ -6684,7 +6702,7 @@ def add_character_to_personnel(scene_id: int):
         is_player = data.get("is_player", False)
         character_id = data.get("character_id")
         npc_id = data.get("npc_id")
-        
+
         stress_max = data.get("stress_max", 5)
         if is_player and character_id:
             char = session.get(CharacterRecord, character_id)
@@ -6692,7 +6710,7 @@ def add_character_to_personnel(scene_id: int):
                 stress_max = char.stress_max or 5
 
         character_states = json.loads(encounter.character_states_json or "[]")
-        
+
         new_character = {
             "name": character_name,
             "is_player": is_player,
@@ -6705,22 +6723,24 @@ def add_character_to_personnel(scene_id: int):
             "protection": data.get("protection", 0),
         }
         character_states.append(new_character)
-        
+
         encounter.character_states_json = json.dumps(character_states)
-        
+
         char_index = len(character_states) - 1
         char_key = f"character_{char_index}"
         character_positions = json.loads(encounter.character_positions_json or "{}")
         character_positions[char_key] = data.get("position", {"q": 0, "r": 0})
         encounter.character_positions_json = json.dumps(character_positions)
-        
+
         session.commit()
-        
-        return jsonify({
-            "success": True,
-            "character_index": char_index,
-            "character": new_character,
-        })
+
+        return jsonify(
+            {
+                "success": True,
+                "character_index": char_index,
+                "character": new_character,
+            }
+        )
     except Exception as e:
         session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -6733,23 +6753,38 @@ def get_personnel_actions(scene_id: int):
     """Get available actions for personnel combat."""
     session = get_session()
     try:
-        encounter = session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        encounter = (
+            session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        )
         if not encounter:
             return jsonify({"error": "Personnel encounter not found"}), 404
 
         character_states = json.loads(encounter.character_states_json or "[]")
-        
-        return jsonify({
-            "minor_actions": [
-                "Personnel Aim", "Draw Item", "Personnel Interact", "Personnel Movement",
-                "Personnel Prepare", "Stand/Drop Prone"
-            ],
-            "major_actions": [
-                "Personnel Attack", "First Aid", "Guard", "Sprint",
-                "Personnel Assist", "Create Trait", "Personnel Direct", "Ready", "Personnel Pass"
-            ],
-            "can_act": len(character_states) > 0,
-        })
+
+        return jsonify(
+            {
+                "minor_actions": [
+                    "Personnel Aim",
+                    "Draw Item",
+                    "Personnel Interact",
+                    "Personnel Movement",
+                    "Personnel Prepare",
+                    "Stand/Drop Prone",
+                ],
+                "major_actions": [
+                    "Personnel Attack",
+                    "First Aid",
+                    "Guard",
+                    "Sprint",
+                    "Personnel Assist",
+                    "Create Trait",
+                    "Personnel Direct",
+                    "Ready",
+                    "Personnel Pass",
+                ],
+                "can_act": len(character_states) > 0,
+            }
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -6761,14 +6796,16 @@ def execute_personnel_action(scene_id: int):
     """Execute a personnel action."""
     session = get_session()
     try:
-        encounter = session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        encounter = (
+            session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        )
         if not encounter:
             return jsonify({"error": "Personnel encounter not found"}), 404
 
         data = request.json
         action_name = data.get("action")
         character_index = data.get("character_index", 0)
-        
+
         if not action_name:
             return jsonify({"error": "Action name required"}), 400
 
@@ -6785,45 +6822,47 @@ def execute_personnel_action(scene_id: int):
             return jsonify({"error": f"Unknown action: {action_name}"}), 400
 
         is_minor = action_config.get("is_minor", False)
-        
+
         if action_name == "Personnel Attack":
             attribute = data.get("attribute", "daring")
             discipline = data.get("discipline", "security")
             difficulty = data.get("difficulty", 1)
-            
+
             result = task_roll(attribute, discipline, difficulty)
-            
+
             if result["successes"] >= 1:
                 target_index = data.get("target_index")
                 if target_index is not None and target_index < len(character_states):
                     target = character_states[target_index]
                     severity = data.get("severity", 2)
                     injury_type = data.get("injury_type", "stun")
-                    
+
                     stress_cost = min(severity, target["stress"])
                     if stress_cost > 0:
                         target["stress"] -= stress_cost
                         if target["stress"] <= 0:
                             target["is_defeated"] = True
-                    
-                    target["injuries"].append({
-                        "name": f"{injury_type.title()} Injury",
-                        "type": injury_type,
-                        "severity": severity,
-                    })
-                    
+
+                    target["injuries"].append(
+                        {
+                            "name": f"{injury_type.title()} Injury",
+                            "type": injury_type,
+                            "severity": severity,
+                        }
+                    )
+
                     character_states[target_index] = target
-            
+
             encounter.character_states_json = json.dumps(character_states)
             encounter.momentum = min(encounter.momentum + result.get("momentum", 0), 6)
-            
+
         elif action_name == "First Aid":
             attribute = data.get("attribute", "daring")
             discipline = data.get("discipline", "medicine")
             difficulty = data.get("difficulty", 2)
-            
+
             result = task_roll(attribute, discipline, difficulty)
-            
+
             target_index = data.get("target_index")
             if target_index is not None and target_index < len(character_states):
                 target = character_states[target_index]
@@ -6833,38 +6872,42 @@ def execute_personnel_action(scene_id: int):
                     elif target.get("injuries"):
                         target["injuries"].pop(0)
                 character_states[target_index] = target
-            
+
             encounter.character_states_json = json.dumps(character_states)
             encounter.momentum = min(encounter.momentum + result.get("momentum", 0), 6)
-            
+
         elif action_name == "Guard":
             active_effects = json.loads(encounter.active_effects_json or "[]")
-            active_effects.append({
-                "character_index": character_index,
-                "type": "guard",
-                "difficulty_bonus": 1,
-                "duration": "end_of_turn",
-            })
+            active_effects.append(
+                {
+                    "character_index": character_index,
+                    "type": "guard",
+                    "difficulty_bonus": 1,
+                    "duration": "end_of_turn",
+                }
+            )
             encounter.active_effects_json = json.dumps(active_effects)
-            
+
         elif action_name in ["Sprint", "Personnel Movement"]:
             new_pos = data.get("position", {"q": 0, "r": 0})
             character_positions = json.loads(encounter.character_positions_json or "{}")
             character_positions[f"character_{character_index}"] = new_pos
             encounter.character_positions_json = json.dumps(character_positions)
-            
+
         elif action_name == "Personnel Pass":
             pass
 
         session.commit()
 
-        return jsonify({
-            "success": True,
-            "action": action_name,
-            "is_minor": is_minor,
-            "character_states": character_states,
-            "momentum": encounter.momentum,
-        })
+        return jsonify(
+            {
+                "success": True,
+                "action": action_name,
+                "is_minor": is_minor,
+                "character_states": character_states,
+                "momentum": encounter.momentum,
+            }
+        )
     except Exception as e:
         session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -6877,7 +6920,9 @@ def personnel_next_turn(scene_id: int):
     """Advance to next turn in personnel encounter."""
     session = get_session()
     try:
-        encounter = session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        encounter = (
+            session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        )
         if not encounter:
             return jsonify({"error": "Personnel encounter not found"}), 404
 
@@ -6891,18 +6936,22 @@ def personnel_next_turn(scene_id: int):
         for char_key in chars_turns:
             chars_turns[char_key]["acted"] = False
         encounter.characters_turns_used_json = json.dumps(chars_turns)
-        
+
         active_effects = json.loads(encounter.active_effects_json or "[]")
-        active_effects = [e for e in active_effects if e.get("duration") != "end_of_turn"]
+        active_effects = [
+            e for e in active_effects if e.get("duration") != "end_of_turn"
+        ]
         encounter.active_effects_json = json.dumps(active_effects)
 
         session.commit()
 
-        return jsonify({
-            "success": True,
-            "current_turn": encounter.current_turn,
-            "round": encounter.round,
-        })
+        return jsonify(
+            {
+                "success": True,
+                "current_turn": encounter.current_turn,
+                "round": encounter.round,
+            }
+        )
     except Exception as e:
         session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -6915,7 +6964,9 @@ def update_personnel_position(scene_id: int):
     """Update character position on tactical map."""
     session = get_session()
     try:
-        encounter = session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        encounter = (
+            session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        )
         if not encounter:
             return jsonify({"error": "Personnel encounter not found"}), 404
 
@@ -6929,10 +6980,12 @@ def update_personnel_position(scene_id: int):
 
         session.commit()
 
-        return jsonify({
-            "success": True,
-            "position": position,
-        })
+        return jsonify(
+            {
+                "success": True,
+                "position": position,
+            }
+        )
     except Exception as e:
         session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -6945,7 +6998,9 @@ def delete_personnel_encounter(scene_id: int):
     """Delete a personnel encounter."""
     session = get_session()
     try:
-        encounter = session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        encounter = (
+            session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        )
         if not encounter:
             return jsonify({"error": "Personnel encounter not found"}), 404
 
@@ -6953,6 +7008,56 @@ def delete_personnel_encounter(scene_id: int):
         session.commit()
 
         return jsonify({"success": True})
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/personnel/<int:scene_id>/momentum", methods=["POST"])
+def update_personnel_momentum(scene_id: int):
+    """Update momentum for personnel encounter."""
+    session = get_session()
+    try:
+        encounter = (
+            session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        )
+        if not encounter:
+            return jsonify({"error": "Personnel encounter not found"}), 404
+
+        data = request.json
+        change = data.get("change", 0)
+
+        encounter.momentum = max(0, min(6, encounter.momentum + change))
+        session.commit()
+
+        return jsonify({"success": True, "momentum": encounter.momentum})
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/personnel/<int:scene_id>/threat", methods=["POST"])
+def update_personnel_threat(scene_id: int):
+    """Update threat for personnel encounter."""
+    session = get_session()
+    try:
+        encounter = (
+            session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        )
+        if not encounter:
+            return jsonify({"error": "Personnel encounter not found"}), 404
+
+        data = request.json
+        change = data.get("change", 0)
+
+        encounter.threat = max(0, encounter.threat + change)
+        session.commit()
+
+        return jsonify({"success": True, "threat": encounter.threat})
     except Exception as e:
         session.rollback()
         return jsonify({"error": str(e)}), 500

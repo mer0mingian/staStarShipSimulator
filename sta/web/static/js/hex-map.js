@@ -51,6 +51,14 @@ const HexMap = {
     // Terrain types that are hazardous (damage if using Threat)
     hazardousTerrain: ['debris_field', 'asteroid_field'],
 
+    // Character faction colors
+    characterColors: {
+        player: '#00ff88',
+        enemy: '#ff4444',
+        npc: '#4488ff',
+        defeated: '#666666',
+    },
+
     /**
      * Convert axial coordinates to pixel position (flat-top hex)
      * @param {number} q - Column coordinate
@@ -248,6 +256,9 @@ const HexMap = {
 
         const shipGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         shipGroup.setAttribute('id', 'ships');
+
+        const characterGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        characterGroup.setAttribute('id', 'characters');
 
         // Get player ship position for showing terrain info on current hex
         const playerShip = ships?.find(s => s.faction === 'player');
@@ -449,12 +460,116 @@ const HexMap = {
             });
         }
 
+        // Render character tokens (personnel combat)
+        const characters = options.characters || null;
+        const characterPositions = options.characterPositions || {};
+        const onCharacterClick = options.onCharacterClick || null;
+        const selectedCharacterId = options.selectedCharacterId || null;
+
+        if (characters && characters.length > 0) {
+            characters.forEach((character, index) => {
+                const charKey = `character_${character.id || index}`;
+                const pos = characterPositions[charKey];
+                if (!pos) return;
+
+                const pixelPos = this.axialToPixel(pos.q, pos.r);
+                const px = centerX + pixelPos.x;
+                const py = centerY + pixelPos.y;
+
+                const isDefeated = character.status === 'defeated';
+                const faction = character.faction || 'npc';
+                const isSelected = selectedCharacterId === (character.id || index);
+
+                // Determine color based on faction and status
+                let tokenColor = this.characterColors[faction] || this.characterColors.npc;
+                if (isDefeated) {
+                    tokenColor = this.characterColors.defeated;
+                }
+
+                const tokenRadius = 10;
+
+                // Character token (circle)
+                const token = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                token.setAttribute('cx', px);
+                token.setAttribute('cy', py);
+                token.setAttribute('r', tokenRadius);
+                token.setAttribute('fill', tokenColor);
+                token.setAttribute('stroke', isSelected ? '#ffffff' : '#000000');
+                token.setAttribute('stroke-width', isSelected ? '3' : '2');
+                token.setAttribute('data-character-id', character.id || index);
+                token.classList.add('character-token');
+
+                if (isDefeated) {
+                    token.setAttribute('opacity', '0.5');
+                }
+
+                if (onCharacterClick) {
+                    token.style.cursor = 'pointer';
+                    token.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        onCharacterClick(character, index);
+                    });
+                }
+
+                characterGroup.appendChild(token);
+
+                // Character name label
+                const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', px);
+                label.setAttribute('y', py + tokenRadius + 12);
+                label.setAttribute('text-anchor', 'middle');
+                label.setAttribute('fill', isDefeated ? '#888888' : tokenColor);
+                label.setAttribute('font-size', '9');
+                label.setAttribute('font-weight', 'bold');
+                label.textContent = character.name?.substring(0, 12) || `Character ${index + 1}`;
+
+                if (isDefeated) {
+                    label.setAttribute('text-decoration', 'line-through');
+                }
+
+                characterGroup.appendChild(label);
+
+                // Show stress/injury indicators if not defeated
+                if (!isDefeated && character.stress !== undefined) {
+                    const stressLevel = character.stress || 0;
+                    const injuries = character.injuries || 0;
+
+                    // Stress indicator (small circle)
+                    if (stressLevel > 0) {
+                        const stressIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        stressIndicator.setAttribute('cx', px + tokenRadius - 2);
+                        stressIndicator.setAttribute('cy', py - tokenRadius + 2);
+                        stressIndicator.setAttribute('r', '3');
+                        stressIndicator.setAttribute('fill', stressLevel >= 5 ? '#ff4444' : (stressLevel >= 3 ? '#ffaa00' : '#44aaff'));
+                        stressIndicator.setAttribute('stroke', '#000000');
+                        stressIndicator.setAttribute('stroke-width', '1');
+                        stressIndicator.setAttribute('pointer-events', 'none');
+                        characterGroup.appendChild(stressIndicator);
+                    }
+
+                    // Injury indicator (small X)
+                    if (injuries > 0) {
+                        const injuryIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        injuryIndicator.setAttribute('x', px - tokenRadius + 2);
+                        injuryIndicator.setAttribute('y', py - tokenRadius + 5);
+                        injuryIndicator.setAttribute('fill', '#ff4444');
+                        injuryIndicator.setAttribute('font-size', '8');
+                        injuryIndicator.setAttribute('font-weight', 'bold');
+                        injuryIndicator.setAttribute('pointer-events', 'none');
+                        injuryIndicator.textContent = 'X'.repeat(Math.min(injuries, 3));
+                        characterGroup.appendChild(injuryIndicator);
+                    }
+                }
+            });
+        }
+
         // Assemble SVG (order matters for layering)
         svg.appendChild(hexGroup);
         svg.appendChild(hindranceGroup);  // Hindrance under fog
         svg.appendChild(fogGroup);
         svg.appendChild(highlightGroup);
         svg.appendChild(shipGroup);
+        svg.appendChild(characterGroup);
 
         // Clear container and add SVG
         container.innerHTML = '';
@@ -518,6 +633,25 @@ const HexMap = {
         // Re-render with updated ships
         const { mapData, options } = container._hexMapData;
         this.render(containerId, mapData, ships, options);
+    },
+
+    /**
+     * Update character positions and status without full re-render
+     * @param {string} containerId - Container element ID
+     * @param {array} characters - Array of character objects
+     * @param {object} characterPositions - Object mapping character keys to {q, r} positions
+     */
+    updateCharacterPositions(containerId, characters, characterPositions) {
+        const container = document.getElementById(containerId);
+        if (!container?._hexMapData) return;
+
+        const { mapData, ships, options } = container._hexMapData;
+        const newOptions = {
+            ...options,
+            characters: characters,
+            characterPositions: characterPositions,
+        };
+        this.render(containerId, mapData, ships, newOptions);
     },
 
     /**

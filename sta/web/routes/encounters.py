@@ -11,6 +11,7 @@ from sta.database import (
     CampaignRecord,
     CampaignPlayerRecord,
     SceneRecord,
+    PersonnelEncounterRecord,
 )
 from sta.generators import generate_character, generate_starship
 from sta.generators.starship import generate_enemy_ship
@@ -702,6 +703,108 @@ def combat(encounter_id: str):
             pending_position=pending_position,
             # Scene info
             scene=scene_data,
+        )
+    finally:
+        session.close()
+
+
+@encounters_bp.route("/personnel/<int:scene_id>")
+def personnel_combat(scene_id: int):
+    """Personnel combat view (character vs character on hex grid)."""
+    role = request.args.get("role", "player")
+    if role not in ("player", "gm", "viewscreen"):
+        role = "player"
+
+    session = get_session()
+    try:
+        encounter = (
+            session.query(PersonnelEncounterRecord).filter_by(scene_id=scene_id).first()
+        )
+        if not encounter:
+            flash("Personnel encounter not found")
+            return redirect(url_for("main.index"))
+
+        scene = session.get(SceneRecord, scene_id)
+        if not scene:
+            flash("Scene not found")
+            return redirect(url_for("main.index"))
+
+        # Parse character states
+        character_states = json.loads(encounter.character_states_json or "[]")
+        character_positions = json.loads(encounter.character_positions_json or "{}")
+
+        # Build characters list for template
+        characters = []
+        for i, char_state in enumerate(character_states):
+            char_key = f"character_{i}"
+            pos = character_positions.get(char_key, {"q": 0, "r": 0})
+
+            characters.append(
+                {
+                    "index": i,
+                    "name": char_state.get("name", f"Character {i}"),
+                    "is_player": char_state.get("is_player", False),
+                    "stress": char_state.get("stress", 5),
+                    "stress_max": char_state.get("stress_max", 5),
+                    "injuries": char_state.get("injuries", []),
+                    "is_defeated": char_state.get("is_defeated", False),
+                    "position": pos,
+                }
+            )
+
+        # Get available actions
+        minor_actions = [
+            "Personnel Aim",
+            "Draw Item",
+            "Personnel Interact",
+            "Personnel Movement",
+            "Personnel Prepare",
+            "Stand/Drop Prone",
+        ]
+        major_actions = [
+            "Personnel Attack",
+            "First Aid",
+            "Guard",
+            "Sprint",
+            "Personnel Assist",
+            "Create Trait",
+            "Personnel Direct",
+            "Ready",
+            "Personnel Pass",
+        ]
+
+        # Determine active character (first player character by default)
+        active_character_index = 0
+        active_character = (
+            characters[0]
+            if characters
+            else {
+                "name": "None",
+                "is_defeated": True,
+                "stress": 0,
+                "stress_max": 5,
+                "injuries": [],
+            }
+        )
+
+        # Parse tactical map
+        tactical_map = json.loads(encounter.tactical_map_json or "{}")
+
+        return render_template(
+            "personnel_combat.html",
+            scene_id=scene_id,
+            scene_name=scene.name,
+            current_turn=encounter.current_turn,
+            round=encounter.round,
+            momentum=encounter.momentum,
+            threat=encounter.threat,
+            characters=characters,
+            active_character_index=active_character_index,
+            active_character=active_character,
+            minor_actions=minor_actions,
+            major_actions=major_actions,
+            tactical_map=tactical_map,
+            role=role,
         )
     finally:
         session.close()
