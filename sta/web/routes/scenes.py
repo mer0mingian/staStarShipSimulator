@@ -301,6 +301,24 @@ def view_scene(scene_id: int):
                     )
                 )
 
+        # For personal encounters, redirect to personnel combat view
+        if scene.scene_type == "personal_encounter":
+            from sta.database import PersonnelEncounterRecord
+
+            personnel_encounter = (
+                session.query(PersonnelEncounterRecord)
+                .filter_by(scene_id=scene.id)
+                .first()
+            )
+            if personnel_encounter:
+                return redirect(
+                    url_for(
+                        "encounters.personnel_combat",
+                        scene_id=scene.id,
+                        role=role,
+                    )
+                )
+
         # Use combat templates for narrative scenes
         if role == "viewscreen":
             template = "combat_viewscreen.html"

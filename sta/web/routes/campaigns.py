@@ -2266,6 +2266,31 @@ def api_update_scene_status(scene_id: int):
             if existing_active:
                 existing_active.status = "draft"
 
+        # For personal encounters, create PersonnelEncounterRecord if needed
+        if new_status == "active" and scene.scene_type == "personal_encounter":
+            from sta.database import PersonnelEncounterRecord
+
+            existing_personnel = (
+                session.query(PersonnelEncounterRecord)
+                .filter_by(scene_id=scene.id)
+                .first()
+            )
+            if not existing_personnel:
+                personnel_encounter = PersonnelEncounterRecord(
+                    scene_id=scene.id,
+                    momentum=0,
+                    threat=0,
+                    round=1,
+                    current_turn="player",
+                    is_active=True,
+                    character_positions_json="{}",
+                    character_states_json="[]",
+                    characters_turns_used_json="{}",
+                    active_effects_json="[]",
+                    tactical_map_json=scene.tactical_map_json or "{}",
+                )
+                session.add(personnel_encounter)
+
         scene.status = new_status
         session.commit()
         return jsonify({"success": True, "status": scene.status})
