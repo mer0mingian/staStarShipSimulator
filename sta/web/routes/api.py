@@ -6809,6 +6809,9 @@ def execute_personnel_action(scene_id: int):
         if not action_name:
             return jsonify({"error": "Action name required"}), 400
 
+        if not isinstance(character_index, int) or character_index < 0:
+            return jsonify({"error": "Invalid character_index"}), 400
+
         character_states = json.loads(encounter.character_states_json or "[]")
         if character_index >= len(character_states):
             return jsonify({"error": "Character not found"}), 400
@@ -6824,6 +6827,15 @@ def execute_personnel_action(scene_id: int):
         is_minor = action_config.get("is_minor", False)
 
         if action_name == "Personnel Attack":
+            target_index = data.get("target_index")
+            if target_index is not None:
+                if not isinstance(target_index, int):
+                    return jsonify({"error": "Invalid target_index"}), 400
+                if target_index == character_index:
+                    return jsonify({"error": "Cannot target yourself"}), 400
+                if target_index < 0 or target_index >= len(character_states):
+                    return jsonify({"error": "Target not found"}), 400
+
             attribute = data.get("attribute", "daring")
             discipline = data.get("discipline", "security")
             difficulty = data.get("difficulty", 1)
@@ -6831,8 +6843,7 @@ def execute_personnel_action(scene_id: int):
             result = task_roll(attribute, discipline, difficulty)
 
             if result["successes"] >= 1:
-                target_index = data.get("target_index")
-                if target_index is not None and target_index < len(character_states):
+                if target_index is not None:
                     target = character_states[target_index]
                     severity = data.get("severity", 2)
                     injury_type = data.get("injury_type", "stun")
@@ -6864,7 +6875,14 @@ def execute_personnel_action(scene_id: int):
             result = task_roll(attribute, discipline, difficulty)
 
             target_index = data.get("target_index")
-            if target_index is not None and target_index < len(character_states):
+            if target_index is not None:
+                if not isinstance(target_index, int):
+                    return jsonify({"error": "Invalid target_index"}), 400
+                if target_index == character_index:
+                    return jsonify({"error": "Cannot target yourself"}), 400
+                if target_index < 0 or target_index >= len(character_states):
+                    return jsonify({"error": "Target not found"}), 400
+
                 target = character_states[target_index]
                 if result["successes"] >= 1:
                     if target.get("is_defeated"):
@@ -6973,6 +6991,15 @@ def update_personnel_position(scene_id: int):
         data = request.json
         character_index = data.get("character_index")
         position = data.get("position", {"q": 0, "r": 0})
+
+        if character_index is None:
+            return jsonify({"error": "character_index required"}), 400
+        if not isinstance(character_index, int) or character_index < 0:
+            return jsonify({"error": "Invalid character_index"}), 400
+
+        character_states = json.loads(encounter.character_states_json or "[]")
+        if character_index >= len(character_states):
+            return jsonify({"error": "Character not found"}), 400
 
         character_positions = json.loads(encounter.character_positions_json or "{}")
         character_positions[f"character_{character_index}"] = position

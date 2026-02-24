@@ -84,28 +84,24 @@ class TestPersonnelEncounterAPI:
         assert "First Aid" in data["major_actions"]
         assert "Guard" in data["major_actions"]
 
-    def test_execute_attack_action(
+    def test_self_targeting_prevention(
         self, client, test_session, sample_campaign, scene_personal
     ):
-        """Test executing a personnel attack action."""
+        """Test that characters cannot target themselves."""
         # Create encounter and add two characters
         client.post(f"/api/personnel/{scene_personal.id}/create")
         client.post(
             f"/api/personnel/{scene_personal.id}/add-character",
             json={"name": "Attacker", "is_player": True, "stress_max": 5},
         )
-        client.post(
-            f"/api/personnel/{scene_personal.id}/add-character",
-            json={"name": "Target", "is_player": False, "stress_max": 5},
-        )
 
-        # Test the endpoint responds (may error due to task_roll dependencies in test env)
+        # Try to attack self - should fail
         response = client.post(
             f"/api/personnel/{scene_personal.id}/execute-action",
             json={
                 "action": "Personnel Attack",
                 "character_index": 0,
-                "target_index": 1,
+                "target_index": 0,  # Same as attacker!
                 "attribute": "daring",
                 "discipline": "security",
                 "difficulty": 1,
@@ -113,7 +109,39 @@ class TestPersonnelEncounterAPI:
                 "injury_type": "stun",
             },
         )
-        assert response.status_code in (200, 500)
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "Cannot target yourself" in data["error"]
+
+    def test_invalid_character_index(
+        self, client, test_session, sample_campaign, scene_personal
+    ):
+        """Test that invalid character_index is rejected."""
+        client.post(f"/api/personnel/{scene_personal.id}/create")
+        client.post(
+            f"/api/personnel/{scene_personal.id}/add-character",
+            json={"name": "Character", "is_player": True, "stress_max": 5},
+        )
+
+        # Test negative index
+        response = client.post(
+            f"/api/personnel/{scene_personal.id}/execute-action",
+            json={
+                "action": "Guard",
+                "character_index": -1,
+            },
+        )
+        assert response.status_code == 400
+
+        # Test out of bounds index
+        response = client.post(
+            f"/api/personnel/{scene_personal.id}/execute-action",
+            json={
+                "action": "Guard",
+                "character_index": 999,
+            },
+        )
+        assert response.status_code == 400
 
     def test_update_character_position(
         self, client, test_session, sample_campaign, scene_personal
