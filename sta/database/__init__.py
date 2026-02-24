@@ -14,6 +14,7 @@ from .schema import (
     CampaignNPCRecord,
     SceneNPCRecord,
     CharacterTraitRecord,
+    PersonnelEncounterRecord,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "CampaignNPCRecord",
     "SceneNPCRecord",
     "CharacterTraitRecord",
+    "PersonnelEncounterRecord",
 ]
