@@ -310,6 +310,55 @@ Scene
 
 ---
 
+## Milestone 2A: Unified Scene System (Migration from Encounter System)
+
+### Problem
+Currently there are two parallel workflows:
+- **New (Scene)**: Narrative scenes created via API → Edit page
+- **Old (Encounter)**: Combat encounters created via dedicated form page
+
+This creates maintenance overhead and confusion for GMs.
+
+### Goal
+Migrate encounter creation to the scene system so all content uses a unified workflow:
+- Dashboard → Create Scene (any type) → Edit Scene → Activate
+
+### Changes Required
+
+#### 1. Database
+- Add enemy ships and tactical map fields to `SceneRecord`:
+  - `enemy_ships_json` (Text) - Enemy ship configurations
+  - `tactical_map_json` (Text) - Map configuration
+  - `player_position_id` (FK to starships) - Player's ship
+  - `scene_position` (String) - Player's bridge position
+
+#### 2. Backend
+- Create `/scenes/new` route that handles all scene types
+- Add enemy ship generation/capture in scene creation
+- Add tactical map setup in scene creation  
+- Deprecate `/encounters/new` route (keep for backwards compatibility)
+- Update scene activation to start combat for `starship_encounter` type
+
+#### 3. Frontend
+- Create `new_scene.html` template (similar to old `new_encounter.html`)
+- Update `campaign_dashboard.html` dropdown to use `/scenes/new`
+- Update edit scene page to include enemy ships and tactical map
+- Update scene activation to handle combat initialization
+
+### UI Flow After Migration
+1. GM Home → Campaign Dashboard
+2. Click "Create Scene" dropdown → Choose "Narrative" or "Starship Combat"
+3. New unified form: Name, Description, Stardate, Scene Type, Enemy Ships, Tactical Map
+4. Save → Edit Scene (optional)
+5. Activate → Combat/Narrative View
+
+### Backwards Compatibility
+- Keep old encounter URLs working but hidden
+- Redirect old "New Encounter" button to new scene workflow
+- Migrate existing encounters to scenes (optional, can be done later)
+
+---
+
 ## Reference Files
 - Rules: See `docs/rules_reference.md` for STA 2E rule locations.
 - BC Holmes Generator: `~/repositories/StarTrek2d20`
