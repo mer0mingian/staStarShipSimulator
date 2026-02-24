@@ -10,8 +10,11 @@ from typing import Literal, TypedDict, Optional
 
 class EffectConfig(TypedDict, total=False):
     """Configuration for an active effect."""
-    applies_to: str  # "attack", "defense", "sensor", "movement", "all"
-    duration: Literal["next_action", "end_of_turn", "end_of_round"]
+
+    applies_to: Literal[
+        "attack", "defense", "sensor", "movement", "all", "next_attack", "next_target"
+    ]
+    duration: Literal["next_action", "end_of_turn", "end_of_round", "next_turn"]
     damage_bonus: int
     resistance_bonus: int
     difficulty_modifier: int
@@ -22,16 +25,20 @@ class EffectConfig(TypedDict, total=False):
 
 class TaskRollConfig(TypedDict, total=False):
     """Configuration for a task roll."""
+
     attribute: str  # e.g., "control", "presence", "reason"
     discipline: str  # e.g., "security", "command", "science"
     difficulty: int
     focus_eligible: bool
     ship_assist_system: str  # e.g., "structure", "weapons" - ship system for assist die
-    ship_assist_department: str  # e.g., "engineering", "security" - ship department for assist die
+    ship_assist_department: (
+        str  # e.g., "engineering", "security" - ship department for assist die
+    )
 
 
 class ActionSuccessConfig(TypedDict, total=False):
     """What happens on successful task roll."""
+
     generate_momentum: bool
     patch_breach: bool
     restore_power: bool
@@ -40,7 +47,11 @@ class ActionSuccessConfig(TypedDict, total=False):
 
 class ActionConfig(TypedDict, total=False):
     """Configuration for a complete action."""
+
     type: Literal["buff", "task_roll", "resource_action", "toggle", "special"]
+
+    # Whether this action is minor (doesn't end turn) or major (ends turn)
+    is_minor: bool
 
     # For buff actions
     effect: Optional[EffectConfig]
@@ -72,13 +83,16 @@ class ActionConfig(TypedDict, total=False):
     momentum_cost: int
     threat_cost: int
 
+    # Action blocking
+    blocks: list[str]  # Actions this action blocks when active
+    blocked_by: list[str]  # Actions that block this action when active
+
 
 # ===== ACTION CONFIGURATIONS =====
 # Define all actions as declarative configurations
 
 ACTION_CONFIGS: dict[str, ActionConfig] = {
     # ===== TACTICAL ACTIONS =====
-
     "Calibrate Weapons": {
         "type": "buff",
         "requires_system": "weapons",
@@ -86,9 +100,8 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
             "applies_to": "attack",
             "duration": "next_action",
             "damage_bonus": 1,
-        }
+        },
     },
-
     "Targeting Solution": {
         "type": "buff",
         "requires_system": "weapons",
@@ -97,9 +110,8 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
             "duration": "next_action",
             "can_reroll": True,
             "can_choose_system": True,
-        }
+        },
     },
-
     "Modulate Shields": {
         "type": "task_roll",
         "requires_system": "structure",
@@ -117,11 +129,9 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
                 "duration": "end_of_turn",
                 "resistance_bonus": 2,
             }
-        }
+        },
     },
-
     # ===== SCIENCE ACTIONS =====
-
     "Calibrate Sensors": {
         "type": "buff",
         "requires_system": "sensors",
@@ -129,9 +139,8 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
             "applies_to": "sensor",
             "duration": "next_action",
             "can_reroll": True,
-        }
+        },
     },
-
     "Scan For Weakness": {
         "type": "task_roll",
         "requires_system": "sensors",
@@ -151,9 +160,8 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
                 "damage_bonus": 2,
                 "piercing": True,
             }
-        }
+        },
     },
-
     "Sensor Sweep": {
         "type": "task_roll",
         "requires_system": "sensors",
@@ -168,11 +176,9 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         },
         "on_success": {
             "generate_momentum": True,
-        }
+        },
     },
-
     # ===== CONN/HELM ACTIONS =====
-
     "Attack Pattern": {
         "type": "buff",
         "is_major": True,  # This is a major action per STA 2e rules
@@ -181,9 +187,8 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
             "applies_to": "all",  # Affects ship's attacks and enemies attacking the ship
             "duration": "end_of_round",
             "difficulty_modifier": -1,  # Allies get -1 difficulty on attacks (easier)
-        }
+        },
     },
-
     "Evasive Action": {
         "type": "buff",
         "is_major": True,  # This is a major action per STA 2e rules
@@ -193,9 +198,8 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
             "duration": "end_of_round",
             # This is complex - enemy attacks become opposed, ship's attacks get +1 difficulty
             # We'll handle this specially in the fire endpoint
-        }
+        },
     },
-
     "Defensive Fire": {
         "type": "special",  # Special because it requires weapon selection and stores weapon_index
         "requires_system": "weapons",
@@ -210,7 +214,6 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         "blocks": ["Evasive Action"],
         "blocked_by": ["Evasive Action"],
     },
-
     "Maneuver": {
         "type": "task_roll",
         "requires_system": "engines",
@@ -224,9 +227,8 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         },
         "on_success": {
             "generate_momentum": True,
-        }
+        },
     },
-
     "Ram": {
         "type": "special",  # Special because it deals damage to BOTH ships
         "requires_system": "engines",
@@ -242,9 +244,7 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         # Collision damage is calculated dynamically based on Scale
         # Ramming adds Intense quality, and collision has Piercing + Devastating
     },
-
     # ===== ENGINEERING ACTIONS =====
-
     "Damage Control": {
         "type": "task_roll",
         # Note: Damage Control doesn't require a specific system - it's about patching breaches
@@ -257,9 +257,8 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         },
         "on_success": {
             "patch_breach": True,
-        }
+        },
     },
-
     "Regain Power": {
         "type": "task_roll",
         "requires_system": "engines",
@@ -271,9 +270,8 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         },
         "on_success": {
             "restore_power": True,
-        }
+        },
     },
-
     "Regenerate Shields": {
         "type": "task_roll",
         "requires_reserve_power": True,
@@ -290,9 +288,8 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         "on_success": {
             "restore_shields": True,  # Restore shields = Engineering discipline
             # Momentum spend: +2 shields per Momentum (Repeatable) - handled in UI
-        }
+        },
     },
-
     "Reroute Power": {
         "type": "special",  # Special because it requires selecting a target system
         "requires_reserve_power": True,
@@ -300,25 +297,20 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         # Player selects a system (comms, computers, engines, sensors, structure, weapons)
         # Next action using that system gets -1 Difficulty
     },
-
     # ===== STANDARD ACTIONS =====
-
     "Change Position": {
         "type": "special",  # Special because it sets pending_position on player record
         # No roll required - this is a minor action
         # Player selects new position from dropdown
         # Position change takes effect at start of player's next turn
     },
-
     "Override": {
         "type": "special",  # Special because it executes another action with +1 difficulty
         # Player selects: target_station and target_action
         # The underlying action is then executed with +1 to its base difficulty
         # Not available to Captain (filtered in actions.py)
     },
-
     # ===== COMMAND ACTIONS (Beta) =====
-
     "Rally": {
         "type": "task_roll",
         "roll": {
@@ -329,37 +321,121 @@ ACTION_CONFIGS: dict[str, ActionConfig] = {
         },
         "on_success": {
             "generate_momentum": True,
-        }
+        },
     },
-
     # ===== STANDARD ACTIONS =====
-
     "Pass": {
         "type": "special",
         "is_major": True,  # Pass is a major action - it ends the turn without doing anything
         # No roll, no effect - just logs the action and ends the turn
     },
-
     # ===== TOGGLE ACTIONS =====
-
     "Raise Shields": {
         "type": "toggle",
         "toggles": "shields_raised",
     },
-
     "Lower Shields": {
         "type": "toggle",
         "toggles": "shields_raised",
     },
-
     "Arm Weapons": {
         "type": "toggle",
         "toggles": "weapons_armed",
     },
-
     "Disarm Weapons": {
         "type": "toggle",
         "toggles": "weapons_armed",
+    },
+    # ===== PERSONAL CONFLICT ACTIONS (Chapter 8.3) =====
+    # Minor Actions
+    "Personnel Aim": {
+        "type": "buff",
+        "is_minor": True,
+        "effect": {
+            "applies_to": "next_attack",
+            "duration": "end_of_turn",
+            "can_reroll": True,
+        },
+    },
+    "Draw Item": {
+        "type": "special",
+        "is_minor": True,
+    },
+    "Personnel Interact": {
+        "type": "special",
+        "is_minor": True,
+    },
+    "Personnel Movement": {
+        "type": "special",
+        "is_minor": True,
+        "max_range": 1,  # Move 1 zone (Medium range)
+    },
+    "Personnel Prepare": {
+        "type": "special",
+        "is_minor": True,
+    },
+    "Stand/Drop Prone": {
+        "type": "special",
+        "is_minor": True,
+    },
+    # Major Actions
+    "Personnel Attack": {
+        "type": "special",
+        "roll": {
+            "attribute": "daring",  # or control for ranged
+            "discipline": "security",
+            "difficulty": 1,  # Melee: 1, Ranged: 2
+            "focus_eligible": True,
+        },
+    },
+    "First Aid": {
+        "type": "task_roll",
+        "roll": {
+            "attribute": "daring",
+            "discipline": "medicine",
+            "difficulty": 2,  # Revive: 2, Treat injury: equals severity
+            "focus_eligible": True,
+        },
+    },
+    "Guard": {
+        "type": "task_roll",
+        "roll": {
+            "attribute": "insight",
+            "discipline": "security",
+            "difficulty": 0,
+            "focus_eligible": True,
+        },
+        "effect": {
+            "applies_to": "defense",
+            "duration": "end_of_turn",
+            "difficulty_modifier": 1,
+        },
+    },
+    "Sprint": {
+        "type": "special",
+        "max_range": 2,  # Move 2 zones (Long range)
+    },
+    "Personnel Assist": {
+        "type": "special",
+    },
+    "Create Trait": {
+        "type": "task_roll",
+        "roll": {
+            "attribute": "reason",  # Varies by context
+            "discipline": "command",  # Varies by context
+            "difficulty": 2,
+            "focus_eligible": True,
+        },
+    },
+    "Personnel Direct": {
+        "type": "special",
+        "momentum_cost": 1,
+    },
+    "Ready": {
+        "type": "special",
+    },
+    "Personnel Pass": {
+        "type": "special",
     },
 }
 
@@ -621,7 +697,9 @@ def get_all_actions_availability(ship) -> dict[str, dict]:
         result[action_name] = {
             "available": available,
             "reason": reason,
-            "breach_modifier": get_breach_difficulty_modifier(action_name, ship) if available else 0,
+            "breach_modifier": get_breach_difficulty_modifier(action_name, ship)
+            if available
+            else 0,
             "required_system": get_action_required_system(action_name),
         }
 
@@ -631,7 +709,9 @@ def get_all_actions_availability(ship) -> dict[str, dict]:
         result[action_name] = {
             "available": available,
             "reason": reason,
-            "breach_modifier": get_breach_difficulty_modifier(action_name, ship) if available else 0,
+            "breach_modifier": get_breach_difficulty_modifier(action_name, ship)
+            if available
+            else 0,
             "required_system": get_action_required_system(action_name),
         }
 
@@ -639,6 +719,7 @@ def get_all_actions_availability(ship) -> dict[str, dict]:
 
 
 # ===== RANGE HELPERS =====
+
 
 def get_action_max_range(action_name: str) -> Optional[int]:
     """
@@ -667,7 +748,9 @@ def get_action_difficulty_per_range(action_name: str) -> int:
     return 0
 
 
-def check_action_range(action_name: str, hex_distance: int) -> tuple[bool, Optional[str]]:
+def check_action_range(
+    action_name: str, hex_distance: int
+) -> tuple[bool, Optional[str]]:
     """
     Check if an action can be performed at the given hex distance.
 
@@ -687,9 +770,16 @@ def check_action_range(action_name: str, hex_distance: int) -> tuple[bool, Optio
 
     if hex_distance > max_range:
         range_names = {0: "Close", 1: "Medium", 2: "Long", 999: "Extreme"}
-        max_range_name = range_names.get(max_range, f"{max_range} hex{'es' if max_range != 1 else ''}")
-        current_range_name = range_names.get(hex_distance, f"{hex_distance} hex{'es' if hex_distance != 1 else ''}")
-        return (False, f"Target is out of range! {action_name} requires {max_range_name} range, but target is at {current_range_name} range.")
+        max_range_name = range_names.get(
+            max_range, f"{max_range} hex{'es' if max_range != 1 else ''}"
+        )
+        current_range_name = range_names.get(
+            hex_distance, f"{hex_distance} hex{'es' if hex_distance != 1 else ''}"
+        )
+        return (
+            False,
+            f"Target is out of range! {action_name} requires {max_range_name} range, but target is at {current_range_name} range.",
+        )
 
     return (True, None)
 
