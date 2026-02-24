@@ -23,6 +23,7 @@ from sta.database.schema import (
     CombatLogRecord,
     CampaignRecord,
     CampaignPlayerRecord,
+    SceneRecord,
 )
 
 
@@ -586,3 +587,53 @@ def get_combat_log(client):
         return response
 
     return _log
+
+
+@pytest.fixture
+def scene(test_session, sample_campaign):
+    """Create a sample narrative scene."""
+    from sta.database.schema import SceneRecord
+
+    campaign = sample_campaign["campaign"]
+
+    scene = SceneRecord(
+        campaign_id=campaign.id,
+        name="Test Narrative Scene",
+        description="A test scene",
+        scene_type="narrative",
+        status="draft",
+    )
+    test_session.add(scene)
+    test_session.commit()
+
+    return scene
+
+
+@pytest.fixture
+def scene_personal(test_session, sample_campaign):
+    """Create a sample personal encounter scene."""
+    from sta.database.schema import SceneRecord
+
+    campaign = sample_campaign["campaign"]
+
+    scene = SceneRecord(
+        campaign_id=campaign.id,
+        name="Test Personal Combat",
+        description="A test personnel encounter",
+        scene_type="personal_encounter",
+        status="draft",
+    )
+    test_session.add(scene)
+    test_session.commit()
+
+    return scene
+
+
+@pytest.fixture
+def gm_session(sample_campaign):
+    """Get the GM player session."""
+    players = sample_campaign["players"]
+    for player in players:
+        if player.is_gm:
+            return player
+    return players[0]
