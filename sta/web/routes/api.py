@@ -11,6 +11,7 @@ from sta.database import (
     CombatLogRecord,
     CampaignRecord,
     SceneRecord,
+    NPCRecord,
 )
 from sta.mechanics import task_roll, assisted_task_roll
 from sta.models.enums import SystemType, TerrainType, Range
@@ -5723,6 +5724,15 @@ def update_scene_by_id(scene_id: int):
             scene.challenges_json = json.dumps(data["challenges"])
         if "characters_present" in data:
             scene.characters_present_json = json.dumps(data["characters_present"])
+        if "player_ship_id" in data:
+            scene.player_ship_id = data["player_ship_id"]
+        if "scene_position" in data:
+            scene.scene_position = data["scene_position"]
+        if "enemy_ships" in data:
+            scene.enemy_ships_json = json.dumps(data["enemy_ships"])
+        if "tactical_map" in data:
+            scene.tactical_map_json = json.dumps(data["tactical_map"])
+            scene.has_map = bool(data["tactical_map"])
 
         session.commit()
 
@@ -5738,6 +5748,613 @@ def update_scene_by_id(scene_id: int):
                 "scene_traits": json.loads(scene.scene_traits_json),
                 "challenges": json.loads(scene.challenges_json),
                 "characters_present": json.loads(scene.characters_present_json),
+            }
+        )
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+# ========== EXPORT/IMPORT ENDPOINTS ==========
+
+
+def character_to_dict(record: CharacterRecord) -> dict:
+    """Convert a CharacterRecord to a dictionary for export."""
+    return {
+        "name": record.name,
+        "species": record.species,
+        "rank": record.rank,
+        "role": record.role,
+        "attributes": json.loads(record.attributes_json),
+        "disciplines": json.loads(record.disciplines_json),
+        "talents": json.loads(record.talents_json) if record.talents_json else [],
+        "focuses": json.loads(record.focuses_json) if record.focuses_json else [],
+        "stress": record.stress,
+        "stress_max": record.stress_max,
+        "determination": record.determination,
+        "determination_max": record.determination_max,
+        "character_type": record.character_type,
+        "pronouns": record.pronouns,
+        "avatar_url": record.avatar_url,
+        "description": record.description,
+        "values": json.loads(record.values_json) if record.values_json else [],
+        "equipment": json.loads(record.equipment_json) if record.equipment_json else [],
+        "environment": record.environment,
+        "upbringing": record.upbringing,
+        "career_path": record.career_path,
+    }
+
+
+def dict_to_character(
+    data: dict, existing_record: CharacterRecord = None
+) -> CharacterRecord:
+    """Convert a dictionary to a CharacterRecord (for import).
+
+    Args:
+        data: Dictionary containing character data
+        existing_record: If provided, update this record; otherwise create new
+
+    Returns:
+        CharacterRecord
+    """
+    if existing_record:
+        record = existing_record
+    else:
+        record = CharacterRecord(name=data.get("name", "Unknown"))
+
+    record.name = data.get("name", record.name)
+    record.species = data.get("species")
+    record.rank = data.get("rank")
+    record.role = data.get("role")
+    record.attributes_json = json.dumps(data.get("attributes", {}))
+    record.disciplines_json = json.dumps(data.get("disciplines", {}))
+    record.talents_json = json.dumps(data.get("talents", []))
+    record.focuses_json = json.dumps(data.get("focuses", []))
+    record.stress = data.get("stress", 5)
+    record.stress_max = data.get("stress_max", 5)
+    record.determination = data.get("determination", 1)
+    record.determination_max = data.get("determination_max", 3)
+    record.character_type = data.get("character_type", "support")
+    record.pronouns = data.get("pronouns")
+    record.avatar_url = data.get("avatar_url")
+    record.description = data.get("description")
+    record.values_json = json.dumps(data.get("values", []))
+    record.equipment_json = json.dumps(data.get("equipment", []))
+    record.environment = data.get("environment")
+    record.upbringing = data.get("upbringing")
+    record.career_path = data.get("career_path")
+
+    return record
+
+
+def npc_to_dict(record: NPCRecord) -> dict:
+    """Convert an NPCRecord to a dictionary for export."""
+    return {
+        "name": record.name,
+        "npc_type": record.npc_type,
+        "attributes": json.loads(record.attributes_json)
+        if record.attributes_json
+        else None,
+        "disciplines": json.loads(record.disciplines_json)
+        if record.disciplines_json
+        else None,
+        "stress": record.stress,
+        "stress_max": record.stress_max,
+        "appearance": record.appearance,
+        "motivation": record.motivation,
+        "affiliation": record.affiliation,
+        "location": record.location,
+        "picture_url": record.picture_url,
+        "notes": record.notes,
+    }
+
+
+def dict_to_npc(data: dict, existing_record: NPCRecord = None) -> NPCRecord:
+    """Convert a dictionary to an NPCRecord (for import).
+
+    Args:
+        data: Dictionary containing NPC data
+        existing_record: If provided, update this record; otherwise create new
+
+    Returns:
+        NPCRecord
+    """
+    if existing_record:
+        record = existing_record
+    else:
+        record = NPCRecord(
+            name=data.get("name", "Unknown"), npc_type=data.get("npc_type", "minor")
+        )
+
+    record.name = data.get("name", record.name)
+    record.npc_type = data.get("npc_type", record.npc_type)
+    record.attributes_json = (
+        json.dumps(data.get("attributes")) if data.get("attributes") else None
+    )
+    record.disciplines_json = (
+        json.dumps(data.get("disciplines")) if data.get("disciplines") else None
+    )
+    record.stress = data.get("stress", 5)
+    record.stress_max = data.get("stress_max", 5)
+    record.appearance = data.get("appearance")
+    record.motivation = data.get("motivation")
+    record.affiliation = data.get("affiliation")
+    record.location = data.get("location")
+    record.picture_url = data.get("picture_url")
+    record.notes = data.get("notes")
+
+    return record
+
+
+def ship_to_dict(record: StarshipRecord) -> dict:
+    """Convert a StarshipRecord to a dictionary for export."""
+    return {
+        "name": record.name,
+        "ship_class": record.ship_class,
+        "ship_registry": record.ship_registry,
+        "scale": record.scale,
+        "systems": json.loads(record.systems_json),
+        "departments": json.loads(record.departments_json),
+        "weapons": json.loads(record.weapons_json) if record.weapons_json else [],
+        "talents": json.loads(record.talents_json) if record.talents_json else [],
+        "traits": json.loads(record.traits_json) if record.traits_json else [],
+        "breaches": json.loads(record.breaches_json) if record.breaches_json else [],
+        "shields": record.shields,
+        "shields_max": record.shields_max,
+        "resistance": record.resistance,
+        "has_reserve_power": record.has_reserve_power,
+        "shields_raised": record.shields_raised,
+        "weapons_armed": record.weapons_armed,
+        "crew_quality": record.crew_quality,
+    }
+
+
+def dict_to_ship(data: dict, existing_record: StarshipRecord = None) -> StarshipRecord:
+    """Convert a dictionary to a StarshipRecord (for import).
+
+    Args:
+        data: Dictionary containing ship data
+        existing_record: If provided, update this record; otherwise create new
+
+    Returns:
+        StarshipRecord
+    """
+    if existing_record:
+        record = existing_record
+    else:
+        record = StarshipRecord(
+            name=data.get("name", "Unknown"),
+            ship_class=data.get("ship_class", "Unknown"),
+            scale=data.get("scale", 1),
+            systems_json=json.dumps(
+                {
+                    "comms": 7,
+                    "computers": 7,
+                    "engines": 7,
+                    "sensors": 7,
+                    "structure": 7,
+                    "weapons": 7,
+                }
+            ),
+            departments_json=json.dumps(
+                {
+                    "command": 0,
+                    "conn": 0,
+                    "engineering": 0,
+                    "medicine": 0,
+                    "science": 0,
+                    "security": 0,
+                }
+            ),
+        )
+
+    record.name = data.get("name", record.name)
+    record.ship_class = data.get("ship_class", record.ship_class)
+    record.ship_registry = (
+        data.get("ship_registry") if "ship_registry" in data else record.ship_registry
+    )
+    record.scale = data.get("scale", record.scale)
+    record.systems_json = json.dumps(data.get("systems", {}))
+    record.departments_json = json.dumps(data.get("departments", {}))
+    record.weapons_json = json.dumps(data.get("weapons", []))
+    record.talents_json = json.dumps(data.get("talents", []))
+    record.traits_json = json.dumps(data.get("traits", []))
+    record.breaches_json = json.dumps(data.get("breaches", []))
+    record.shields = data.get("shields", 0)
+    record.shields_max = data.get("shields_max", 0)
+    record.resistance = data.get("resistance", 0)
+    record.has_reserve_power = data.get("has_reserve_power", True)
+    record.shields_raised = data.get("shields_raised", False)
+    record.weapons_armed = data.get("weapons_armed", False)
+    record.crew_quality = data.get("crew_quality")
+
+    return record
+
+
+@api_bp.route("/backup", methods=["GET"])
+def export_backup():
+    """Export ALL data: global characters, NPCs, ships + all campaigns with their linked entities."""
+    session = get_session()
+    try:
+        # Export global characters
+        characters = session.query(CharacterRecord).all()
+        characters_data = [character_to_dict(c) for c in characters]
+
+        # Export global NPCs
+        npcs = session.query(NPCRecord).all()
+        npcs_data = [npc_to_dict(n) for n in npcs]
+
+        # Export global ships
+        ships = session.query(StarshipRecord).all()
+        ships_data = [ship_to_dict(s) for s in ships]
+
+        # Export campaigns with their linked entities
+        campaigns = session.query(CampaignRecord).all()
+        campaigns_data = []
+        for campaign in campaigns:
+            campaign_info = {
+                "campaign_id": campaign.campaign_id,
+                "name": campaign.name,
+                "description": campaign.description,
+                "is_active": campaign.is_active,
+                "enemy_turn_multiplier": campaign.enemy_turn_multiplier,
+                "characters": [],
+                "ships": [],
+                "npcs": [],
+            }
+
+            # Get campaign characters
+            from sta.database.schema import CampaignPlayerRecord
+
+            campaign_players = (
+                session.query(CampaignPlayerRecord)
+                .filter_by(campaign_id=campaign.id)
+                .all()
+            )
+            for cp in campaign_players:
+                if cp.character_id:
+                    char = (
+                        session.query(CharacterRecord)
+                        .filter_by(id=cp.character_id)
+                        .first()
+                    )
+                    if char:
+                        char_data = character_to_dict(char)
+                        char_data["position"] = cp.position
+                        campaign_info["characters"].append(char_data)
+
+            # Get campaign ships
+            from sta.database.schema import CampaignShipRecord
+
+            campaign_ships = (
+                session.query(CampaignShipRecord)
+                .filter_by(campaign_id=campaign.id)
+                .all()
+            )
+            for cs in campaign_ships:
+                ship = session.query(StarshipRecord).filter_by(id=cs.ship_id).first()
+                if ship:
+                    ship_data = ship_to_dict(ship)
+                    ship_data["is_available"] = cs.is_available
+                    campaign_info["ships"].append(ship_data)
+
+            # Get campaign NPCs
+            from sta.database.schema import CampaignNPCRecord
+
+            campaign_npcs = (
+                session.query(CampaignNPCRecord)
+                .filter_by(campaign_id=campaign.id)
+                .all()
+            )
+            for cn in campaign_npcs:
+                npc = session.query(NPCRecord).filter_by(id=cn.npc_id).first()
+                if npc:
+                    npc_data = npc_to_dict(npc)
+                    campaign_info["npcs"].append(npc_data)
+
+            campaigns_data.append(campaign_info)
+
+        return jsonify(
+            {
+                "version": "1.0",
+                "exported_at": datetime.now().isoformat(),
+                "characters": characters_data,
+                "npcs": npcs_data,
+                "ships": ships_data,
+                "campaigns": campaigns_data,
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/characters/export", methods=["GET"])
+def export_characters():
+    """Export all global characters as JSON."""
+    session = get_session()
+    try:
+        characters = session.query(CharacterRecord).all()
+        characters_data = [character_to_dict(c) for c in characters]
+
+        return jsonify(
+            {
+                "version": "1.0",
+                "exported_at": datetime.now().isoformat(),
+                "characters": characters_data,
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/characters/import", methods=["POST"])
+def import_characters():
+    """Import characters from JSON.
+
+    Request body:
+    {
+        "characters": [
+            {
+                "name": "Captain Picard",
+                "species": "Human",
+                "rank": "Captain",
+                ...
+            },
+            ...
+        ]
+    }
+
+    Creates new records if they don't exist, updates existing records if they do (by name match).
+
+    Returns:
+    {
+        "success": true,
+        "imported": 2,
+        "updated": 1,
+        "errors": []
+    }
+    """
+    session = get_session()
+    try:
+        data = request.json
+        if not data or "characters" not in data:
+            return jsonify({"error": "Missing 'characters' key in request body"}), 400
+
+        characters_data = data["characters"]
+        imported = 0
+        updated = 0
+        errors = []
+
+        for char_data in characters_data:
+            if not char_data.get("name"):
+                errors.append("Character missing name, skipping")
+                continue
+
+            # Check if character already exists by name
+            existing = (
+                session.query(CharacterRecord).filter_by(name=char_data["name"]).first()
+            )
+
+            if existing:
+                # Update existing record
+                record = dict_to_character(char_data, existing)
+                updated += 1
+            else:
+                # Create new record
+                record = dict_to_character(char_data)
+                session.add(record)
+                imported += 1
+
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "imported": imported,
+                "updated": updated,
+                "errors": errors,
+            }
+        )
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/npcs/export", methods=["GET"])
+def export_npcs():
+    """Export all global NPCs as JSON."""
+    session = get_session()
+    try:
+        npcs = session.query(NPCRecord).all()
+        npcs_data = [npc_to_dict(n) for n in npcs]
+
+        return jsonify(
+            {
+                "version": "1.0",
+                "exported_at": datetime.now().isoformat(),
+                "npcs": npcs_data,
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/npcs/import", methods=["POST"])
+def import_npcs():
+    """Import NPCs from JSON.
+
+    Request body:
+    {
+        "npcs": [
+            {
+                "name": "Ambassador Spock",
+                "npc_type": "major",
+                ...
+            },
+            ...
+        ]
+    }
+
+    Creates new records if they don't exist, updates existing records if they do (by name match).
+
+    Returns:
+    {
+        "success": true,
+        "imported": 2,
+        "updated": 1,
+        "errors": []
+    }
+    """
+    session = get_session()
+    try:
+        data = request.json
+        if not data or "npcs" not in data:
+            return jsonify({"error": "Missing 'npcs' key in request body"}), 400
+
+        npcs_data = data["npcs"]
+        imported = 0
+        updated = 0
+        errors = []
+
+        for npc_data in npcs_data:
+            if not npc_data.get("name"):
+                errors.append("NPC missing name, skipping")
+                continue
+
+            # Check if NPC already exists by name
+            existing = session.query(NPCRecord).filter_by(name=npc_data["name"]).first()
+
+            if existing:
+                # Update existing record
+                record = dict_to_npc(npc_data, existing)
+                updated += 1
+            else:
+                # Create new record
+                record = dict_to_npc(npc_data)
+                session.add(record)
+                imported += 1
+
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "imported": imported,
+                "updated": updated,
+                "errors": errors,
+            }
+        )
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/ships/export", methods=["GET"])
+def export_ships():
+    """Export all global ships as JSON."""
+    session = get_session()
+    try:
+        ships = session.query(StarshipRecord).all()
+        ships_data = [ship_to_dict(s) for s in ships]
+
+        return jsonify(
+            {
+                "version": "1.0",
+                "exported_at": datetime.now().isoformat(),
+                "ships": ships_data,
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/ships/import", methods=["POST"])
+def import_ships():
+    """Import ships from JSON.
+
+    Request body:
+    {
+        "ships": [
+            {
+                "name": "USS Enterprise",
+                "ship_class": "Constitution-class",
+                "scale": 6,
+                ...
+            },
+            ...
+        ]
+    }
+
+    Creates new records if they don't exist, updates existing records if they do (by name match).
+
+    Returns:
+    {
+        "success": true,
+        "imported": 2,
+        "updated": 1,
+        "errors": []
+    }
+    """
+    session = get_session()
+    try:
+        data = request.json
+        if not data or "ships" not in data:
+            return jsonify({"error": "Missing 'ships' key in request body"}), 400
+
+        ships_data = data["ships"]
+        imported = 0
+        updated = 0
+        errors = []
+
+        for ship_data in ships_data:
+            if not ship_data.get("name"):
+                errors.append("Ship missing name, skipping")
+                continue
+
+            # Check if ship already exists by name
+            existing = (
+                session.query(StarshipRecord).filter_by(name=ship_data["name"]).first()
+            )
+
+            if existing:
+                # Update existing record
+                record = dict_to_ship(ship_data, existing)
+                updated += 1
+            else:
+                # Create new record
+                record = dict_to_ship(ship_data)
+                session.add(record)
+                imported += 1
+
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "imported": imported,
+                "updated": updated,
+                "errors": errors,
             }
         )
 

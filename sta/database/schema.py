@@ -505,6 +505,13 @@ class SceneRecord(Base):
     has_map: Mapped[bool] = mapped_column(default=False)
     tactical_map_json: Mapped[str] = mapped_column(Text, default="{}")
 
+    # Starship combat specific fields
+    player_ship_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("starships.id"), nullable=True
+    )
+    scene_position: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    enemy_ships_json: Mapped[str] = mapped_column(Text, default="[]")
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now

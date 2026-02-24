@@ -38,6 +38,7 @@
             <label for="scene_type" style="margin-top: 10px;">Scene Type</label>
             <select name="scene_type" id="scene_type" style="width: 100%;">
                 <option value="narrative" {% if scene.scene_type == 'narrative' %}selected{% endif %}>Narrative</option>
+                <option value="starship_encounter" {% if scene.scene_type == 'starship_encounter' %}selected{% endif %}>Starship Combat</option>
                 <option value="social_encounter" {% if scene.scene_type == 'social_encounter' %}selected{% endif %}>Social Encounter</option>
                 <option value="personal_encounter" {% if scene.scene_type == 'personal_encounter' %}selected{% endif %}>Personal Encounter</option>
             </select>
@@ -166,6 +167,71 @@
         </div>
     </div>
 
+    <!-- Starship Combat Configuration -->
+    <div class="panel" style="border-color: var(--lcars-blue);" id="starship-config-panel">
+        <h2 style="color: var(--lcars-blue);">Starship Combat Configuration</h2>
+        
+        <div class="grid" style="gap: 15px;">
+            <div>
+                <label for="player_ship_id">Player Ship</label>
+                <select name="player_ship_id" id="player_ship_id" style="width: 100%;">
+                    {% if available_ships %}
+                        {% for ship in available_ships %}
+                        <option value="{{ ship.id }}" {% if scene.player_ship_id == ship.id %}selected{% endif %}>
+                            {{ ship.name }} ({{ ship.ship_class }}) - Scale {{ ship.scale }}
+                        </option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="">No ships available</option>
+                    {% endif %}
+                </select>
+            </div>
+            <div>
+                <label for="scene_position">Bridge Position</label>
+                <select name="scene_position" id="scene_position" style="width: 100%;">
+                    {% for pos in positions %}
+                    <option value="{{ pos }}" {% if scene.scene_position == pos %}selected{% endif %}>
+                        {{ pos.title() }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        
+        <div style="margin-top: 15px;">
+            <label>Enemy Ships ({{ scene.enemy_ships|length }})</label>
+            {% if scene.enemy_ships %}
+            <div id="enemy-ships-list" style="margin-top: 10px;">
+                {% for ship in scene.enemy_ships %}
+                <div style="background: #222; padding: 10px; border-radius: 5px; margin-bottom: 8px; border-left: 3px solid var(--lcars-red);">
+                    <strong style="color: var(--lcars-red);">{{ ship.name }}</strong>
+                    <span style="color: var(--lcars-tan); font-size: 0.85em; margin-left: 10px;">
+                        {{ ship.ship_class }} | Scale {{ ship.scale }}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p style="color: var(--lcars-tan); font-style: italic;">No enemy ships configured</p>
+            {% endif %}
+        </div>
+        
+        {% if scene.tactical_map and scene.tactical_map.radius %}
+        <div style="margin-top: 15px;">
+            <label>Tactical Map</label>
+            <p style="color: var(--lcars-tan); font-size: 0.9em;">
+                Map radius: {{ scene.tactical_map.radius }} | 
+                Tiles: {{ scene.tactical_map.tiles|length }} |
+                {% if scene.tactical_map.positions %}
+                Positions configured
+                {% else %}
+                No positions set
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
     <!-- Player Crew (only available when not draft) -->
     <div class="panel" style="border-color: var(--lcars-green);" id="player-crew-panel">
         <h2 style="color: var(--lcars-green);">Player Crew</h2>
@@ -245,9 +311,14 @@ const campaignId = {{ campaign.id }};
 let sceneTraits = {{ scene.scene_traits | tojson }};
 let extendedTasks = {{ scene.challenges | tojson }};
 let charactersPresent = {{ scene.characters_present | tojson }};
+let enemyShips = {{ scene.enemy_ships | tojson }};
+let tacticalMap = {{ scene.tactical_map | tojson }};
 
 // Save scene details
 async function saveScene() {
+    const playerShipSelect = document.getElementById('player_ship_id');
+    const playerShipId = playerShipSelect ? playerShipSelect.value : null;
+    
     const data = {
         name: document.getElementById('name').value,
         description: document.getElementById('description').value,
@@ -256,7 +327,11 @@ async function saveScene() {
         status: document.getElementById('status').value,
         scene_traits: sceneTraits,
         challenges: extendedTasks,
-        characters_present: charactersPresent
+        characters_present: charactersPresent,
+        player_ship_id: playerShipId ? parseInt(playerShipId) : null,
+        scene_position: document.getElementById('scene_position') ? document.getElementById('scene_position').value : null,
+        enemy_ships: enemyShips,
+        tactical_map: tacticalMap
     };
     
     try {
