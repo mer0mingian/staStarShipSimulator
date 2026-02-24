@@ -7,6 +7,7 @@ from typing import Optional
 @dataclass
 class Attributes:
     """Character attributes (typically 7-12 each, max 15)."""
+
     control: int = 7
     fitness: int = 7
     daring: int = 7
@@ -17,8 +18,12 @@ class Attributes:
     def total(self) -> int:
         """Sum of all attributes."""
         return (
-            self.control + self.fitness + self.daring +
-            self.insight + self.presence + self.reason
+            self.control
+            + self.fitness
+            + self.daring
+            + self.insight
+            + self.presence
+            + self.reason
         )
 
     def get(self, name: str) -> int:
@@ -29,6 +34,7 @@ class Attributes:
 @dataclass
 class Disciplines:
     """Character disciplines (typically 1-5 each)."""
+
     command: int = 1
     conn: int = 1
     engineering: int = 1
@@ -39,8 +45,12 @@ class Disciplines:
     def total(self) -> int:
         """Sum of all disciplines."""
         return (
-            self.command + self.conn + self.engineering +
-            self.medicine + self.science + self.security
+            self.command
+            + self.conn
+            + self.engineering
+            + self.medicine
+            + self.science
+            + self.security
         )
 
     def get(self, name: str) -> int:
@@ -51,6 +61,7 @@ class Disciplines:
 @dataclass
 class Character:
     """A player or NPC character."""
+
     name: str
     attributes: Attributes
     disciplines: Disciplines
@@ -63,6 +74,17 @@ class Character:
     rank: Optional[str] = None
     species: Optional[str] = None
     role: Optional[str] = None
+
+    # Extended fields
+    character_type: str = "support"  # main, support, npc
+    pronouns: Optional[str] = None
+    avatar_url: Optional[str] = None
+    description: Optional[str] = None
+    values: list[str] = field(default_factory=list)
+    equipment: list[str] = field(default_factory=list)
+    environment: Optional[str] = None
+    upbringing: Optional[str] = None
+    career_path: Optional[str] = None
 
     def target_number(self, attribute: str, discipline: str) -> int:
         """Calculate target number for a task (attribute + discipline)."""

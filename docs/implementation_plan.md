@@ -145,11 +145,10 @@ Scene
 - ✅ `CharacterTraitRecord` - Persistent character traits
 
 ### Implementation Tasks
-1. [ ] Analyze BC Holmes export format (check `~/repositories/StarTrek2d20`)
-2. [ ] Create NPC management UI (archive, campaign manifest)
-3. [ ] Add "Add NPC" button to narrative scene GM view
-4. [ ] Create character list/edit pages
-5. [ ] Implement BC Holmes import
+1. [ ] Create NPC management UI (archive, campaign manifest)
+2. [ ] Add "Add NPC" button to narrative scene GM view
+3. [ ] Create character list/edit pages
+4. [ ] Implement BC Holmes import (low priority - can be done later when exports available)
 
 ---
 
@@ -361,4 +360,8 @@ Migrate encounter creation to the scene system so all content uses a unified wor
 
 ## Reference Files
 - Rules: See `docs/rules_reference.md` for STA 2E rule locations.
-- BC Holmes Generator: `~/repositories/StarTrek2d20`
+
+## Future: BC Holmes Import
+- Generator: `~/repositories/StarTrek2d20`
+- Import character exports when GM has existing characters to migrate
+- Low priority - can be implemented when needed
