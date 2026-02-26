@@ -1220,3 +1220,171 @@ class TestSceneCharactersPresent:
         test_session.add(scene)
         test_session.flush()
         assert json.loads(scene.characters_present_json) == []
+
+
+class TestSceneCombatFields:
+    """Tests for scene combat-related fields."""
+
+    def test_scene_record_combat_fields(self, test_session, sample_campaign):
+        """SceneRecord should have combat fields."""
+        from sta.database.schema import StarshipRecord
+        from sta.models.starship import Starship, Systems, Departments
+
+        campaign_id = sample_campaign["campaign"].id
+
+        ship = Starship(
+            name="USS Enterprise",
+            ship_class="Constitution-class",
+            registry="NCC-1701",
+            scale=4,
+            systems=Systems(
+                comms=9, computers=9, engines=9, sensors=9, structure=9, weapons=9
+            ),
+            departments=Departments(
+                command=2, conn=2, engineering=2, medicine=2, science=2, security=2
+            ),
+            weapons=[],
+            talents=[],
+            traits=[],
+        )
+        ship_record = StarshipRecord.from_model(ship)
+        test_session.add(ship_record)
+        test_session.flush()
+
+        enemy_ships = [{"name": "Klingon Bird-of-Prey", "scale": 3}]
+
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Battle Scene",
+            scene_type="starship_encounter",
+            status="draft",
+            enemy_ships_json=json.dumps(enemy_ships),
+            player_ship_id=ship_record.id,
+            scene_position="tactical",
+        )
+        test_session.add(scene)
+        test_session.flush()
+
+        assert json.loads(scene.enemy_ships_json) == enemy_ships
+        assert scene.player_ship_id == ship_record.id
+        assert scene.scene_position == "tactical"
+
+    def test_scene_combat_fields_default(self, test_session, sample_campaign):
+        """Combat fields should have sensible defaults."""
+        campaign_id = sample_campaign["campaign"].id
+        scene = SceneRecord(
+            campaign_id=campaign_id,
+            name="Peaceful Scene",
+            scene_type="narrative",
+        )
+        test_session.add(scene)
+        test_session.flush()
+
+        assert scene.player_ship_id is None
+        assert scene.scene_position is None
+        assert json.loads(scene.enemy_ships_json or "[]") == []
+
+
+class TestCampaignNPCAPI:
+    """Tests for campaign NPC management API."""
+
+    def test_list_campaign_npcs(self, client, sample_campaign, test_session):
+        """GET /api/campaign/<id>/npcs should list NPCs in campaign."""
+        from sta.database.schema import NPCRecord, CampaignNPCRecord
+
+        campaign_id = sample_campaign["campaign"].id
+
+        npc = NPCRecord(name="Gul Dukat", npc_type="major", affiliation="Cardassian")
+        test_session.add(npc)
+        test_session.flush()
+
+        campaign_npc = CampaignNPCRecord(
+            campaign_id=campaign_id,
+            npc_id=npc.id,
+            is_visible_to_players=False,
+        )
+        test_session.add(campaign_npc)
+        test_session.commit()
+
+        response = client.get(
+            f"/campaigns/api/campaign/{sample_campaign['campaign'].campaign_id}/npcs"
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data) == 1
+        assert data[0]["name"] == "Gul Dukat"
+        assert data[0]["is_visible"] is False
+
+    def test_add_npc_to_campaign(self, client, sample_campaign, test_session):
+        """POST /api/campaign/<id>/npcs should add NPC to campaign."""
+        gm_token = sample_campaign["players"][0].session_token
+        client.set_cookie("sta_session_token", gm_token)
+
+        response = client.post(
+            f"/campaigns/api/campaign/{sample_campaign['campaign'].campaign_id}/npcs",
+            json={
+                "action": "create",
+                "name": "Worf",
+                "npc_type": "major",
+                "affiliation": "Federation",
+            },
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["npc_id"] is not None
+
+    def test_remove_npc_from_campaign(self, client, sample_campaign, test_session):
+        """DELETE /api/campaign/<id>/npcs/<id> should remove NPC."""
+        from sta.database.schema import NPCRecord, CampaignNPCRecord
+
+        campaign_id = sample_campaign["campaign"].id
+        gm_token = sample_campaign["players"][0].session_token
+        client.set_cookie("sta_session_token", gm_token)
+
+        npc = NPCRecord(name="Q", npc_type="major")
+        test_session.add(npc)
+        test_session.flush()
+
+        campaign_npc = CampaignNPCRecord(
+            campaign_id=campaign_id,
+            npc_id=npc.id,
+        )
+        test_session.add(campaign_npc)
+        test_session.commit()
+        cnpc_id = campaign_npc.id
+
+        response = client.delete(
+            f"/campaigns/api/campaign/{sample_campaign['campaign'].campaign_id}/npcs/{cnpc_id}",
+        )
+        assert response.status_code == 200
+        assert response.get_json()["success"] is True
+
+    def test_toggle_npc_visibility(self, client, sample_campaign, test_session):
+        """PUT /api/campaign/<id>/npcs/<id>/visibility should toggle visibility."""
+        from sta.database.schema import NPCRecord, CampaignNPCRecord
+
+        campaign_id = sample_campaign["campaign"].id
+        gm_token = sample_campaign["players"][0].session_token
+        client.set_cookie("sta_session_token", gm_token)
+
+        npc = NPCRecord(name="Locutus", npc_type="major", affiliation="Borg")
+        test_session.add(npc)
+        test_session.flush()
+
+        campaign_npc = CampaignNPCRecord(
+            campaign_id=campaign_id,
+            npc_id=npc.id,
+            is_visible_to_players=False,
+        )
+        test_session.add(campaign_npc)
+        test_session.commit()
+        cnpc_id = campaign_npc.id
+
+        response = client.put(
+            f"/campaigns/api/campaign/{sample_campaign['campaign'].campaign_id}/npcs/{cnpc_id}/visibility",
+            json={"is_visible": True},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["is_visible"] is True

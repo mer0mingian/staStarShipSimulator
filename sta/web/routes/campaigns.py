@@ -25,7 +25,9 @@ from sta.database import (
     CampaignRecord,
     CampaignPlayerRecord,
     CampaignShipRecord,
+    CampaignNPCRecord,
     SceneRecord,
+    NPCRecord,
 )
 from sta.generators import generate_character, generate_starship
 from sta.models.enums import Position
@@ -246,6 +248,9 @@ def campaign_dashboard(campaign_id: str):
                         "ship_id": ship_record.id,
                         "name": ship_record.name,
                         "ship_class": ship_record.ship_class,
+                        "registry": ship_record.ship_registry or "N/A",
+                        "scale": ship_record.scale,
+                        "is_enemy": ship_record.crew_quality is not None,
                         "is_active": campaign.active_ship_id == ship_record.id,
                         "is_available": cs.is_available,
                     }
@@ -1518,6 +1523,224 @@ def api_add_ship(campaign_id: str):
                 "ship_id": ship_id,
                 "campaign_ship_id": campaign_ship.id,
             }
+        )
+    finally:
+        session.close()
+
+
+# =============================================================================
+# NPC Pool Management API
+# =============================================================================
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/npcs", methods=["GET"])
+def api_list_npcs(campaign_id: str):
+    """API: List NPCs in campaign pool."""
+    session = get_session()
+    try:
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        campaign_npcs = (
+            session.query(CampaignNPCRecord).filter_by(campaign_id=campaign.id).all()
+        )
+
+        npcs = []
+        for cn in campaign_npcs:
+            npc_record = session.query(NPCRecord).filter_by(id=cn.npc_id).first()
+            if npc_record:
+                npcs.append(
+                    {
+                        "id": cn.id,
+                        "npc_id": npc_record.id,
+                        "name": npc_record.name,
+                        "npc_type": npc_record.npc_type,
+                        "affiliation": npc_record.affiliation,
+                        "is_visible": cn.is_visible_to_players,
+                    }
+                )
+
+        return jsonify(npcs)
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/npcs", methods=["POST"])
+def api_add_npc(campaign_id: str):
+    """API: Add NPC to campaign pool (GM only)."""
+    session = get_session()
+    try:
+        # Verify GM
+        session_token = request.cookies.get("sta_session_token")
+        if not session_token:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        gm = (
+            session.query(CampaignPlayerRecord)
+            .filter_by(session_token=session_token, campaign_id=campaign.id, is_gm=True)
+            .first()
+        )
+
+        if not gm:
+            return jsonify({"error": "Only GM can add NPCs"}), 403
+
+        data = request.get_json()
+        action = data.get("action", "create")
+
+        if action == "link":
+            # Link existing global NPC to campaign
+            npc_id = data.get("npc_id")
+            if not npc_id:
+                return jsonify({"error": "npc_id required for link action"}), 400
+
+            # Check if already linked
+            existing = (
+                session.query(CampaignNPCRecord)
+                .filter_by(campaign_id=campaign.id, npc_id=npc_id)
+                .first()
+            )
+            if existing:
+                return jsonify({"error": "NPC already in campaign"}), 400
+
+        elif action == "create":
+            # Create new NPC from provided data
+            npc = NPCRecord(
+                name=data.get("name", "New NPC"),
+                npc_type=data.get("npc_type", "minor"),
+                appearance=data.get("appearance"),
+                motivation=data.get("motivation"),
+                affiliation=data.get("affiliation"),
+                location=data.get("location"),
+                picture_url=data.get("picture_url"),
+                notes=data.get("notes"),
+            )
+            session.add(npc)
+            session.flush()
+            npc_id = npc.id
+        else:
+            return jsonify({"error": "Invalid action. Use 'link' or 'create'"}), 400
+
+        # Add to campaign pool
+        campaign_npc = CampaignNPCRecord(
+            campaign_id=campaign.id,
+            npc_id=npc_id,
+            is_visible_to_players=data.get("is_visible", False),
+        )
+        session.add(campaign_npc)
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "npc_id": npc_id,
+                "campaign_npc_id": campaign_npc.id,
+            }
+        )
+    finally:
+        session.close()
+
+
+@campaigns_bp.route(
+    "/api/campaign/<campaign_id>/npcs/<int:campaign_npc_id>", methods=["DELETE"]
+)
+def api_remove_npc(campaign_id: str, campaign_npc_id: int):
+    """API: Remove NPC from campaign pool (GM only)."""
+    session = get_session()
+    try:
+        # Verify GM
+        session_token = request.cookies.get("sta_session_token")
+        if not session_token:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        gm = (
+            session.query(CampaignPlayerRecord)
+            .filter_by(session_token=session_token, campaign_id=campaign.id, is_gm=True)
+            .first()
+        )
+
+        if not gm:
+            return jsonify({"error": "Only GM can remove NPCs"}), 403
+
+        campaign_npc = (
+            session.query(CampaignNPCRecord)
+            .filter_by(id=campaign_npc_id, campaign_id=campaign.id)
+            .first()
+        )
+
+        if not campaign_npc:
+            return jsonify({"error": "NPC not in campaign"}), 404
+
+        session.delete(campaign_npc)
+        session.commit()
+
+        return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+@campaigns_bp.route(
+    "/api/campaign/<campaign_id>/npcs/<int:campaign_npc_id>/visibility", methods=["PUT"]
+)
+def api_toggle_npc_visibility(campaign_id: str, campaign_npc_id: int):
+    """API: Toggle NPC visibility in campaign (GM only)."""
+    session = get_session()
+    try:
+        # Verify GM
+        session_token = request.cookies.get("sta_session_token")
+        if not session_token:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        gm = (
+            session.query(CampaignPlayerRecord)
+            .filter_by(session_token=session_token, campaign_id=campaign.id, is_gm=True)
+            .first()
+        )
+
+        if not gm:
+            return jsonify({"error": "Only GM can toggle visibility"}), 403
+
+        campaign_npc = (
+            session.query(CampaignNPCRecord)
+            .filter_by(id=campaign_npc_id, campaign_id=campaign.id)
+            .first()
+        )
+
+        if not campaign_npc:
+            return jsonify({"error": "NPC not in campaign"}), 404
+
+        data = request.get_json()
+        campaign_npc.is_visible_to_players = data.get(
+            "is_visible", not campaign_npc.is_visible_to_players
+        )
+        session.commit()
+
+        return jsonify(
+            {"success": True, "is_visible": campaign_npc.is_visible_to_players}
         )
     finally:
         session.close()

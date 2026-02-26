@@ -11,6 +11,7 @@ from sta.database import (
     CombatLogRecord,
     CampaignRecord,
     SceneRecord,
+    NPCRecord,
 )
 from sta.mechanics import task_roll, assisted_task_roll
 from sta.models.enums import SystemType, TerrainType, Range
@@ -4614,7 +4615,7 @@ def get_combat_log(encounter_id: str):
             # Get enemy ship names and check visibility
             enemy_ids = json.loads(encounter.enemy_ship_ids_json or "[]")
             for i, enemy_id in enumerate(enemy_ids):
-                enemy_ship = session.query(StarshipRecord).get(enemy_id)
+                enemy_ship = session.get(StarshipRecord, enemy_id)
                 if enemy_ship:
                     enemy_pos = ship_positions.get(f"enemy_{i}", {"q": 0, "r": 0})
                     if not is_ship_visible_to_player(
@@ -4735,7 +4736,7 @@ def get_round_actions(encounter_id: str):
 
         enemy_ships_info = []
         for i, enemy_id in enumerate(enemy_ids):
-            enemy_ship = session.query(StarshipRecord).get(enemy_id)
+            enemy_ship = session.get(StarshipRecord, enemy_id)
             if enemy_ship:
                 turns_used = ships_turns_used.get(str(enemy_id), 0)
                 # Apply multiplier and round up (minimum 1 turn)
@@ -4756,7 +4757,7 @@ def get_round_actions(encounter_id: str):
         # Get player ship info
         player_ship = None
         if encounter.player_ship_id:
-            ps = session.query(StarshipRecord).get(encounter.player_ship_id)
+            ps = session.get(StarshipRecord, encounter.player_ship_id)
             if ps:
                 player_ship = {
                     "name": ps.name,
@@ -4844,9 +4845,7 @@ def get_tactical_map(encounter_id: str):
         # Player ship position
         player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
         if encounter_record.player_ship_id:
-            player_ship = session.query(StarshipRecord).get(
-                encounter_record.player_ship_id
-            )
+            player_ship = session.get(StarshipRecord, encounter_record.player_ship_id)
             ship_positions.append(
                 {
                     "id": "player",
@@ -4868,7 +4867,7 @@ def get_tactical_map(encounter_id: str):
         # Enemy ship positions
         enemy_ids = json.loads(encounter_record.enemy_ship_ids_json or "[]")
         for i, enemy_id in enumerate(enemy_ids):
-            enemy_ship = session.query(StarshipRecord).get(enemy_id)
+            enemy_ship = session.get(StarshipRecord, enemy_id)
             enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
 
             # For player role, filter by visibility
@@ -5016,9 +5015,7 @@ def update_ship_position(encounter_id: str):
         player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
         player_ship = None
         if encounter_record.player_ship_id:
-            player_ship = session.query(StarshipRecord).get(
-                encounter_record.player_ship_id
-            )
+            player_ship = session.get(StarshipRecord, encounter_record.player_ship_id)
             ship_positions.append(
                 {
                     "id": "player",
@@ -5032,7 +5029,7 @@ def update_ship_position(encounter_id: str):
         enemy_ids = json.loads(encounter_record.enemy_ship_ids_json or "[]")
         enemy_ships = {}
         for i, enemy_id in enumerate(enemy_ids):
-            enemy_ship = session.query(StarshipRecord).get(enemy_id)
+            enemy_ship = session.get(StarshipRecord, enemy_id)
             enemy_ships[f"enemy_{i}"] = enemy_ship
             enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
             ship_positions.append(
@@ -5144,7 +5141,7 @@ def add_enemy_ship(encounter_id: str):
         # Build response with all enemy ship data
         all_enemies = []
         for i, eid in enumerate(enemy_ids):
-            enemy_ship = session.query(StarshipRecord).get(eid)
+            enemy_ship = session.get(StarshipRecord, eid)
             if enemy_ship:
                 enemy_model = enemy_ship.to_model()
                 all_enemies.append(
@@ -5209,7 +5206,7 @@ def remove_enemy_ship(encounter_id: str, enemy_index: int):
 
         # Get ship name before removing
         removed_id = enemy_ids[enemy_index]
-        removed_ship = session.query(StarshipRecord).get(removed_id)
+        removed_ship = session.get(StarshipRecord, removed_id)
         removed_name = removed_ship.name if removed_ship else f"Enemy {enemy_index + 1}"
 
         # Remove from list
@@ -5396,9 +5393,7 @@ def execute_impulse_move(encounter_id: str):
         # Player ship
         player_pos = ship_positions_data.get("player", {"q": 0, "r": 0})
         if encounter_record.player_ship_id:
-            player_ship = session.query(StarshipRecord).get(
-                encounter_record.player_ship_id
-            )
+            player_ship = session.get(StarshipRecord, encounter_record.player_ship_id)
             ship_positions.append(
                 {
                     "id": "player",
@@ -5411,7 +5406,7 @@ def execute_impulse_move(encounter_id: str):
         # Enemy ships
         enemy_ids = json.loads(encounter_record.enemy_ship_ids_json or "[]")
         for i, enemy_id in enumerate(enemy_ids):
-            enemy_ship = session.query(StarshipRecord).get(enemy_id)
+            enemy_ship = session.get(StarshipRecord, enemy_id)
             enemy_pos = ship_positions_data.get(f"enemy_{i}", {"q": 2, "r": -1 + i})
             ship_positions.append(
                 {
@@ -5541,7 +5536,7 @@ def get_valid_thrusters_actions(encounter_id: str):
             # Check if in same hex
             if enemy_q == player_q and enemy_r == player_r:
                 # Get ship name
-                enemy_ship = session.query(StarshipRecord).get(enemy_id)
+                enemy_ship = session.get(StarshipRecord, enemy_id)
                 ship_name = enemy_ship.name if enemy_ship else f"Enemy {i + 1}"
                 ships_in_hex.append({"id": enemy_key, "name": ship_name})
 
@@ -5723,6 +5718,15 @@ def update_scene_by_id(scene_id: int):
             scene.challenges_json = json.dumps(data["challenges"])
         if "characters_present" in data:
             scene.characters_present_json = json.dumps(data["characters_present"])
+        if "player_ship_id" in data:
+            scene.player_ship_id = data["player_ship_id"]
+        if "scene_position" in data:
+            scene.scene_position = data["scene_position"]
+        if "enemy_ships" in data:
+            scene.enemy_ships_json = json.dumps(data["enemy_ships"])
+        if "tactical_map" in data:
+            scene.tactical_map_json = json.dumps(data["tactical_map"])
+            scene.has_map = bool(data["tactical_map"])
 
         session.commit()
 
@@ -5738,6 +5742,825 @@ def update_scene_by_id(scene_id: int):
                 "scene_traits": json.loads(scene.scene_traits_json),
                 "challenges": json.loads(scene.challenges_json),
                 "characters_present": json.loads(scene.characters_present_json),
+            }
+        )
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+# ========== EXPORT/IMPORT ENDPOINTS ==========
+
+
+def character_to_dict(record: CharacterRecord) -> dict:
+    """Convert a CharacterRecord to a dictionary for export."""
+    return {
+        "name": record.name,
+        "species": record.species,
+        "rank": record.rank,
+        "role": record.role,
+        "attributes": json.loads(record.attributes_json),
+        "disciplines": json.loads(record.disciplines_json),
+        "talents": json.loads(record.talents_json) if record.talents_json else [],
+        "focuses": json.loads(record.focuses_json) if record.focuses_json else [],
+        "stress": record.stress,
+        "stress_max": record.stress_max,
+        "determination": record.determination,
+        "determination_max": record.determination_max,
+        "character_type": record.character_type,
+        "pronouns": record.pronouns,
+        "avatar_url": record.avatar_url,
+        "description": record.description,
+        "values": json.loads(record.values_json) if record.values_json else [],
+        "equipment": json.loads(record.equipment_json) if record.equipment_json else [],
+        "environment": record.environment,
+        "upbringing": record.upbringing,
+        "career_path": record.career_path,
+    }
+
+
+def dict_to_character(
+    data: dict, existing_record: CharacterRecord = None
+) -> CharacterRecord:
+    """Convert a dictionary to a CharacterRecord (for import).
+
+    Args:
+        data: Dictionary containing character data
+        existing_record: If provided, update this record; otherwise create new
+
+    Returns:
+        CharacterRecord
+    """
+    if existing_record:
+        record = existing_record
+    else:
+        record = CharacterRecord(name=data.get("name", "Unknown"))
+
+    record.name = data.get("name", record.name)
+    record.species = data.get("species")
+    record.rank = data.get("rank")
+    record.role = data.get("role")
+    record.attributes_json = json.dumps(data.get("attributes", {}))
+    record.disciplines_json = json.dumps(data.get("disciplines", {}))
+    record.talents_json = json.dumps(data.get("talents", []))
+    record.focuses_json = json.dumps(data.get("focuses", []))
+    record.stress = data.get("stress", 5)
+    record.stress_max = data.get("stress_max", 5)
+    record.determination = data.get("determination", 1)
+    record.determination_max = data.get("determination_max", 3)
+    record.character_type = data.get("character_type", "support")
+    record.pronouns = data.get("pronouns")
+    record.avatar_url = data.get("avatar_url")
+    record.description = data.get("description")
+    record.values_json = json.dumps(data.get("values", []))
+    record.equipment_json = json.dumps(data.get("equipment", []))
+    record.environment = data.get("environment")
+    record.upbringing = data.get("upbringing")
+    record.career_path = data.get("career_path")
+
+    return record
+
+
+def npc_to_dict(record: NPCRecord) -> dict:
+    """Convert an NPCRecord to a dictionary for export."""
+    return {
+        "name": record.name,
+        "npc_type": record.npc_type,
+        "attributes": json.loads(record.attributes_json)
+        if record.attributes_json
+        else None,
+        "disciplines": json.loads(record.disciplines_json)
+        if record.disciplines_json
+        else None,
+        "stress": record.stress,
+        "stress_max": record.stress_max,
+        "appearance": record.appearance,
+        "motivation": record.motivation,
+        "affiliation": record.affiliation,
+        "location": record.location,
+        "picture_url": record.picture_url,
+        "notes": record.notes,
+    }
+
+
+def dict_to_npc(data: dict, existing_record: NPCRecord = None) -> NPCRecord:
+    """Convert a dictionary to an NPCRecord (for import).
+
+    Args:
+        data: Dictionary containing NPC data
+        existing_record: If provided, update this record; otherwise create new
+
+    Returns:
+        NPCRecord
+    """
+    if existing_record:
+        record = existing_record
+    else:
+        record = NPCRecord(
+            name=data.get("name", "Unknown"), npc_type=data.get("npc_type", "minor")
+        )
+
+    record.name = data.get("name", record.name)
+    record.npc_type = data.get("npc_type", record.npc_type)
+    record.attributes_json = (
+        json.dumps(data.get("attributes")) if data.get("attributes") else None
+    )
+    record.disciplines_json = (
+        json.dumps(data.get("disciplines")) if data.get("disciplines") else None
+    )
+    record.stress = data.get("stress", 5)
+    record.stress_max = data.get("stress_max", 5)
+    record.appearance = data.get("appearance")
+    record.motivation = data.get("motivation")
+    record.affiliation = data.get("affiliation")
+    record.location = data.get("location")
+    record.picture_url = data.get("picture_url")
+    record.notes = data.get("notes")
+
+    return record
+
+
+def ship_to_dict(record: StarshipRecord) -> dict:
+    """Convert a StarshipRecord to a dictionary for export."""
+    return {
+        "name": record.name,
+        "ship_class": record.ship_class,
+        "ship_registry": record.ship_registry,
+        "scale": record.scale,
+        "systems": json.loads(record.systems_json),
+        "departments": json.loads(record.departments_json),
+        "weapons": json.loads(record.weapons_json) if record.weapons_json else [],
+        "talents": json.loads(record.talents_json) if record.talents_json else [],
+        "traits": json.loads(record.traits_json) if record.traits_json else [],
+        "breaches": json.loads(record.breaches_json) if record.breaches_json else [],
+        "shields": record.shields,
+        "shields_max": record.shields_max,
+        "resistance": record.resistance,
+        "has_reserve_power": record.has_reserve_power,
+        "shields_raised": record.shields_raised,
+        "weapons_armed": record.weapons_armed,
+        "crew_quality": record.crew_quality,
+    }
+
+
+def dict_to_ship(data: dict, existing_record: StarshipRecord = None) -> StarshipRecord:
+    """Convert a dictionary to a StarshipRecord (for import).
+
+    Args:
+        data: Dictionary containing ship data
+        existing_record: If provided, update this record; otherwise create new
+
+    Returns:
+        StarshipRecord
+    """
+    if existing_record:
+        record = existing_record
+    else:
+        record = StarshipRecord(
+            name=data.get("name", "Unknown"),
+            ship_class=data.get("ship_class", "Unknown"),
+            scale=data.get("scale", 1),
+            systems_json=json.dumps(
+                {
+                    "comms": 7,
+                    "computers": 7,
+                    "engines": 7,
+                    "sensors": 7,
+                    "structure": 7,
+                    "weapons": 7,
+                }
+            ),
+            departments_json=json.dumps(
+                {
+                    "command": 0,
+                    "conn": 0,
+                    "engineering": 0,
+                    "medicine": 0,
+                    "science": 0,
+                    "security": 0,
+                }
+            ),
+        )
+
+    record.name = data.get("name", record.name)
+    record.ship_class = data.get("ship_class", record.ship_class)
+    record.ship_registry = (
+        data.get("ship_registry") if "ship_registry" in data else record.ship_registry
+    )
+    record.scale = data.get("scale", record.scale)
+    record.systems_json = json.dumps(data.get("systems", {}))
+    record.departments_json = json.dumps(data.get("departments", {}))
+    record.weapons_json = json.dumps(data.get("weapons", []))
+    record.talents_json = json.dumps(data.get("talents", []))
+    record.traits_json = json.dumps(data.get("traits", []))
+    record.breaches_json = json.dumps(data.get("breaches", []))
+    record.shields = data.get("shields", 0)
+    record.shields_max = data.get("shields_max", 0)
+    record.resistance = data.get("resistance", 0)
+    record.has_reserve_power = data.get("has_reserve_power", True)
+    record.shields_raised = data.get("shields_raised", False)
+    record.weapons_armed = data.get("weapons_armed", False)
+    record.crew_quality = data.get("crew_quality")
+
+    return record
+
+
+@api_bp.route("/backup", methods=["GET"])
+def export_backup():
+    """Export ALL data: global characters, NPCs, ships + all campaigns with their linked entities."""
+    session = get_session()
+    try:
+        # Export global characters
+        characters = session.query(CharacterRecord).all()
+        characters_data = [character_to_dict(c) for c in characters]
+
+        # Export global NPCs
+        npcs = session.query(NPCRecord).all()
+        npcs_data = [npc_to_dict(n) for n in npcs]
+
+        # Export global ships
+        ships = session.query(StarshipRecord).all()
+        ships_data = [ship_to_dict(s) for s in ships]
+
+        # Export campaigns with their linked entities
+        campaigns = session.query(CampaignRecord).all()
+        campaigns_data = []
+        for campaign in campaigns:
+            campaign_info = {
+                "campaign_id": campaign.campaign_id,
+                "name": campaign.name,
+                "description": campaign.description,
+                "is_active": campaign.is_active,
+                "enemy_turn_multiplier": campaign.enemy_turn_multiplier,
+                "characters": [],
+                "ships": [],
+                "npcs": [],
+            }
+
+            # Get campaign characters
+            from sta.database.schema import CampaignPlayerRecord
+
+            campaign_players = (
+                session.query(CampaignPlayerRecord)
+                .filter_by(campaign_id=campaign.id)
+                .all()
+            )
+            for cp in campaign_players:
+                if cp.character_id:
+                    char = (
+                        session.query(CharacterRecord)
+                        .filter_by(id=cp.character_id)
+                        .first()
+                    )
+                    if char:
+                        char_data = character_to_dict(char)
+                        char_data["position"] = cp.position
+                        campaign_info["characters"].append(char_data)
+
+            # Get campaign ships
+            from sta.database.schema import CampaignShipRecord
+
+            campaign_ships = (
+                session.query(CampaignShipRecord)
+                .filter_by(campaign_id=campaign.id)
+                .all()
+            )
+            for cs in campaign_ships:
+                ship = session.query(StarshipRecord).filter_by(id=cs.ship_id).first()
+                if ship:
+                    ship_data = ship_to_dict(ship)
+                    ship_data["is_available"] = cs.is_available
+                    campaign_info["ships"].append(ship_data)
+
+            # Get campaign NPCs
+            from sta.database.schema import CampaignNPCRecord
+
+            campaign_npcs = (
+                session.query(CampaignNPCRecord)
+                .filter_by(campaign_id=campaign.id)
+                .all()
+            )
+            for cn in campaign_npcs:
+                npc = session.query(NPCRecord).filter_by(id=cn.npc_id).first()
+                if npc:
+                    npc_data = npc_to_dict(npc)
+                    campaign_info["npcs"].append(npc_data)
+
+            campaigns_data.append(campaign_info)
+
+        return jsonify(
+            {
+                "version": "1.0",
+                "exported_at": datetime.now().isoformat(),
+                "characters": characters_data,
+                "npcs": npcs_data,
+                "ships": ships_data,
+                "campaigns": campaigns_data,
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/characters/export", methods=["GET"])
+def export_characters():
+    """Export all global characters as JSON."""
+    session = get_session()
+    try:
+        characters = session.query(CharacterRecord).all()
+        characters_data = [character_to_dict(c) for c in characters]
+
+        return jsonify(
+            {
+                "version": "1.0",
+                "exported_at": datetime.now().isoformat(),
+                "characters": characters_data,
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/characters/import", methods=["POST"])
+def import_characters():
+    """Import characters from JSON.
+
+    Request body:
+    {
+        "characters": [
+            {
+                "name": "Captain Picard",
+                "species": "Human",
+                "rank": "Captain",
+                ...
+            },
+            ...
+        ]
+    }
+
+    Creates new records if they don't exist, updates existing records if they do (by name match).
+
+    Returns:
+    {
+        "success": true,
+        "imported": 2,
+        "updated": 1,
+        "errors": []
+    }
+    """
+    session = get_session()
+    try:
+        data = request.json
+        if not data or "characters" not in data:
+            return jsonify({"error": "Missing 'characters' key in request body"}), 400
+
+        characters_data = data["characters"]
+        if not isinstance(characters_data, list):
+            return jsonify({"error": "'characters' must be a list"}), 400
+
+        imported = 0
+        updated = 0
+        errors = []
+
+        for idx, char_data in enumerate(characters_data):
+            if not isinstance(char_data, dict):
+                errors.append(f"Character {idx} is not a valid object, skipping")
+                continue
+            if not char_data.get("name"):
+                errors.append(f"Character at index {idx} missing name, skipping")
+                continue
+
+            name = char_data.get("name", "Unknown")
+            if not isinstance(name, str) or len(name) > 200:
+                errors.append(f"Character '{name}' has invalid name, skipping")
+                continue
+
+            stress = char_data.get("stress", 5)
+            if not isinstance(stress, int) or stress < 0 or stress > 20:
+                errors.append(
+                    f"Character '{name}' has invalid stress value, using default"
+                )
+                stress = 5
+
+            stress_max = char_data.get("stress_max", 5)
+            if not isinstance(stress_max, int) or stress_max < 0 or stress_max > 20:
+                errors.append(
+                    f"Character '{name}' has invalid stress_max value, using default"
+                )
+                stress_max = 5
+
+            determination = char_data.get("determination", 1)
+            if (
+                not isinstance(determination, int)
+                or determination < 0
+                or determination > 10
+            ):
+                determination = 1
+
+            determination_max = char_data.get("determination_max", 3)
+            if (
+                not isinstance(determination_max, int)
+                or determination_max < 0
+                or determination_max > 10
+            ):
+                determination_max = 3
+
+            try:
+                attributes = char_data.get("attributes", {})
+                if attributes:
+                    json.dumps(attributes)
+            except (TypeError, ValueError):
+                errors.append(
+                    f"Character '{name}' has invalid attributes JSON, resetting to default"
+                )
+                attributes = {}
+
+            try:
+                disciplines = char_data.get("disciplines", {})
+                if disciplines:
+                    json.dumps(disciplines)
+            except (TypeError, ValueError):
+                errors.append(
+                    f"Character '{name}' has invalid disciplines JSON, resetting to default"
+                )
+                disciplines = {}
+
+            try:
+                talents = char_data.get("talents", [])
+                if talents:
+                    json.dumps(talents)
+            except (TypeError, ValueError):
+                talents = []
+
+            try:
+                focuses = char_data.get("focuses", [])
+                if focuses:
+                    json.dumps(focuses)
+            except (TypeError, ValueError):
+                focuses = []
+
+            try:
+                values = char_data.get("values", [])
+                if values:
+                    json.dumps(values)
+            except (TypeError, ValueError):
+                values = []
+
+            try:
+                equipment = char_data.get("equipment", [])
+                if equipment:
+                    json.dumps(equipment)
+            except (TypeError, ValueError):
+                equipment = []
+
+            char_data["stress"] = stress
+            char_data["stress_max"] = stress_max
+            char_data["determination"] = determination
+            char_data["determination_max"] = determination_max
+            char_data["attributes"] = attributes
+            char_data["disciplines"] = disciplines
+            char_data["talents"] = talents
+            char_data["focuses"] = focuses
+            char_data["values"] = values
+            char_data["equipment"] = equipment
+
+            existing = session.query(CharacterRecord).filter_by(name=name).first()
+
+            if existing:
+                record = dict_to_character(char_data, existing)
+                updated += 1
+            else:
+                record = dict_to_character(char_data)
+                session.add(record)
+                imported += 1
+
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "imported": imported,
+                "updated": updated,
+                "errors": errors,
+            }
+        )
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/npcs/export", methods=["GET"])
+def export_npcs():
+    """Export all global NPCs as JSON."""
+    session = get_session()
+    try:
+        npcs = session.query(NPCRecord).all()
+        npcs_data = [npc_to_dict(n) for n in npcs]
+
+        return jsonify(
+            {
+                "version": "1.0",
+                "exported_at": datetime.now().isoformat(),
+                "npcs": npcs_data,
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/npcs/import", methods=["POST"])
+def import_npcs():
+    """Import NPCs from JSON.
+
+    Request body:
+    {
+        "npcs": [
+            {
+                "name": "Ambassador Spock",
+                "npc_type": "major",
+                ...
+            },
+            ...
+        ]
+    }
+
+    Creates new records if they don't exist, updates existing records if they do (by name match).
+
+    Returns:
+    {
+        "success": true,
+        "imported": 2,
+        "updated": 1,
+        "errors": []
+    }
+    """
+    session = get_session()
+    try:
+        data = request.json
+        if not data or "npcs" not in data:
+            return jsonify({"error": "Missing 'npcs' key in request body"}), 400
+
+        npcs_data = data["npcs"]
+        if not isinstance(npcs_data, list):
+            return jsonify({"error": "'npcs' must be a list"}), 400
+
+        imported = 0
+        updated = 0
+        errors = []
+
+        for idx, npc_data in enumerate(npcs_data):
+            if not isinstance(npc_data, dict):
+                errors.append(f"NPC {idx} is not a valid object, skipping")
+                continue
+            if not npc_data.get("name"):
+                errors.append(f"NPC at index {idx} missing name, skipping")
+                continue
+
+            name = npc_data.get("name", "Unknown")
+            if not isinstance(name, str) or len(name) > 200:
+                errors.append(f"NPC '{name}' has invalid name, skipping")
+                continue
+
+            npc_type = npc_data.get("npc_type", "minor")
+            if npc_type not in ("minor", "major", "nemesis"):
+                errors.append(f"NPC '{name}' has invalid npc_type, using 'minor'")
+                npc_type = "minor"
+
+            stress = npc_data.get("stress", 5)
+            if not isinstance(stress, int) or stress < 0 or stress > 20:
+                stress = 5
+
+            stress_max = npc_data.get("stress_max", 5)
+            if not isinstance(stress_max, int) or stress_max < 0 or stress_max > 20:
+                stress_max = 5
+
+            try:
+                attributes = npc_data.get("attributes")
+                if attributes:
+                    json.dumps(attributes)
+            except (TypeError, ValueError):
+                attributes = None
+
+            try:
+                disciplines = npc_data.get("disciplines")
+                if disciplines:
+                    json.dumps(disciplines)
+            except (TypeError, ValueError):
+                disciplines = None
+
+            npc_data["npc_type"] = npc_type
+            npc_data["stress"] = stress
+            npc_data["stress_max"] = stress_max
+            npc_data["attributes"] = attributes
+            npc_data["disciplines"] = disciplines
+
+            existing = session.query(NPCRecord).filter_by(name=name).first()
+
+            if existing:
+                record = dict_to_npc(npc_data, existing)
+                updated += 1
+            else:
+                record = dict_to_npc(npc_data)
+                session.add(record)
+                imported += 1
+
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "imported": imported,
+                "updated": updated,
+                "errors": errors,
+            }
+        )
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/ships/export", methods=["GET"])
+def export_ships():
+    """Export all global ships as JSON."""
+    session = get_session()
+    try:
+        ships = session.query(StarshipRecord).all()
+        ships_data = [ship_to_dict(s) for s in ships]
+
+        return jsonify(
+            {
+                "version": "1.0",
+                "exported_at": datetime.now().isoformat(),
+                "ships": ships_data,
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@api_bp.route("/ships/import", methods=["POST"])
+def import_ships():
+    """Import ships from JSON.
+
+    Request body:
+    {
+        "ships": [
+            {
+                "name": "USS Enterprise",
+                "ship_class": "Constitution-class",
+                "scale": 6,
+                ...
+            },
+            ...
+        ]
+    }
+
+    Creates new records if they don't exist, updates existing records if they do (by name match).
+
+    Returns:
+    {
+        "success": true,
+        "imported": 2,
+        "updated": 1,
+        "errors": []
+    }
+    """
+    session = get_session()
+    try:
+        data = request.json
+        if not data or "ships" not in data:
+            return jsonify({"error": "Missing 'ships' key in request body"}), 400
+
+        ships_data = data["ships"]
+        if not isinstance(ships_data, list):
+            return jsonify({"error": "'ships' must be a list"}), 400
+
+        imported = 0
+        updated = 0
+        errors = []
+
+        for idx, ship_data in enumerate(ships_data):
+            if not isinstance(ship_data, dict):
+                errors.append(f"Ship {idx} is not a valid object, skipping")
+                continue
+            if not ship_data.get("name"):
+                errors.append(f"Ship at index {idx} missing name, skipping")
+                continue
+
+            name = ship_data.get("name", "Unknown")
+            if not isinstance(name, str) or len(name) > 200:
+                errors.append(f"Ship '{name}' has invalid name, skipping")
+                continue
+
+            scale = ship_data.get("scale", 1)
+            if not isinstance(scale, int) or scale < 1 or scale > 20:
+                errors.append(f"Ship '{name}' has invalid scale, using default 1")
+                scale = 1
+
+            shields = ship_data.get("shields", 0)
+            if not isinstance(shields, int) or shields < 0:
+                shields = 0
+
+            shields_max = ship_data.get("shields_max", 0)
+            if not isinstance(shields_max, int) or shields_max < 0:
+                shields_max = 0
+
+            resistance = ship_data.get("resistance", 0)
+            if not isinstance(resistance, int) or resistance < 0:
+                resistance = 0
+
+            try:
+                systems = ship_data.get("systems", {})
+                if systems:
+                    json.dumps(systems)
+            except (TypeError, ValueError):
+                systems = {}
+
+            try:
+                departments = ship_data.get("departments", {})
+                if departments:
+                    json.dumps(departments)
+            except (TypeError, ValueError):
+                departments = {}
+
+            try:
+                weapons = ship_data.get("weapons", [])
+                if weapons:
+                    json.dumps(weapons)
+            except (TypeError, ValueError):
+                weapons = []
+
+            try:
+                talents = ship_data.get("talents", [])
+                if talents:
+                    json.dumps(talents)
+            except (TypeError, ValueError):
+                talents = []
+
+            try:
+                traits = ship_data.get("traits", [])
+                if traits:
+                    json.dumps(traits)
+            except (TypeError, ValueError):
+                traits = []
+
+            try:
+                breaches = ship_data.get("breaches", [])
+                if breaches:
+                    json.dumps(breaches)
+            except (TypeError, ValueError):
+                breaches = []
+
+            ship_data["scale"] = scale
+            ship_data["shields"] = shields
+            ship_data["shields_max"] = shields_max
+            ship_data["resistance"] = resistance
+            ship_data["systems"] = systems
+            ship_data["departments"] = departments
+            ship_data["weapons"] = weapons
+            ship_data["talents"] = talents
+            ship_data["traits"] = traits
+            ship_data["breaches"] = breaches
+
+            existing = session.query(StarshipRecord).filter_by(name=name).first()
+
+            if existing:
+                record = dict_to_ship(ship_data, existing)
+                updated += 1
+            else:
+                record = dict_to_ship(ship_data)
+                session.add(record)
+                imported += 1
+
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "imported": imported,
+                "updated": updated,
+                "errors": errors,
             }
         )
 

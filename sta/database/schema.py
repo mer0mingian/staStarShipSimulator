@@ -40,6 +40,23 @@ class CharacterRecord(Base):
     determination: Mapped[int] = mapped_column(Integer, default=1)
     determination_max: Mapped[int] = mapped_column(Integer, default=3)
 
+    # Extended character fields
+    character_type: Mapped[Optional[str]] = mapped_column(
+        String(20), default="support"
+    )  # main, support, npc
+    pronouns: Mapped[Optional[str]] = mapped_column(String(50))
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
+    description: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Values, equipment (stored as JSON)
+    values_json: Mapped[str] = mapped_column(Text, default="[]")
+    equipment_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    # Background fields
+    environment: Mapped[Optional[str]] = mapped_column(String(100))
+    upbringing: Mapped[Optional[str]] = mapped_column(String(100))
+    career_path: Mapped[Optional[str]] = mapped_column(String(100))
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
@@ -63,6 +80,15 @@ class CharacterRecord(Base):
             rank=self.rank,
             species=self.species,
             role=self.role,
+            character_type=self.character_type or "support",
+            pronouns=self.pronouns,
+            avatar_url=self.avatar_url,
+            description=self.description,
+            values=json.loads(self.values_json) if self.values_json else [],
+            equipment=json.loads(self.equipment_json) if self.equipment_json else [],
+            environment=self.environment,
+            upbringing=self.upbringing,
+            career_path=self.career_path,
         )
 
     @classmethod
@@ -99,6 +125,15 @@ class CharacterRecord(Base):
             stress_max=char.stress_max,
             determination=char.determination,
             determination_max=char.determination_max,
+            character_type=char.character_type,
+            pronouns=char.pronouns,
+            avatar_url=char.avatar_url,
+            description=char.description,
+            values_json=json.dumps(char.values),
+            equipment_json=json.dumps(char.equipment),
+            environment=char.environment,
+            upbringing=char.upbringing,
+            career_path=char.career_path,
         )
 
 
@@ -469,6 +504,13 @@ class SceneRecord(Base):
 
     has_map: Mapped[bool] = mapped_column(default=False)
     tactical_map_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    # Starship combat specific fields
+    player_ship_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("starships.id"), nullable=True
+    )
+    scene_position: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    enemy_ships_json: Mapped[str] = mapped_column(Text, default="[]")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(

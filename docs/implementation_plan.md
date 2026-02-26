@@ -5,6 +5,51 @@ To maintain compatibility with the upstream branch, **create new tables** for ne
 
 ---
 
+## Global vs Campaign Manifest System
+
+### Architecture
+All major entities exist in a **global database** and can be linked to campaigns:
+
+```
+Global (Database)          Campaign (Database)
+─────────────────          ──────────────────
+CharacterRecord     ──►   CampaignPlayerRecord (links character to campaign)
+NPCRecord           ──►   CampaignNPCRecord (links NPC to campaign)
+StarshipRecord      ──►   CampaignShipRecord (links ship to campaign)
+```
+
+### Why This Design
+- **Reusability**: Create a character/NPC/ship once, use in multiple campaigns
+- **Backup**: Global data persists across campaigns
+- **Import/Export**: JSON backup of global data for portability
+
+### Import/Export Workflow
+1. **Global Manifest**: All PCs, NPCs, and ships exist globally
+2. **Campaign Manifest**: Link global entities to a campaign
+3. **JSON Export**: Export global or campaign data as JSON
+4. **JSON Import**: Import from JSON creates/updates global entities
+5. **Backup All**: Export all data (global + all campaigns) as JSON
+
+### JSON Format
+```json
+{
+  "version": "1.0",
+  "exported_at": "2026-02-24T12:00:00Z",
+  "characters": [...],
+  "npcs": [...],
+  "ships": [...],
+  "campaigns": {
+    "campaign_id": {
+      "characters": [...],
+      "npcs": [...],
+      "ships": [...]
+    }
+  }
+}
+```
+
+---
+
 ## Core Concept: Scene as First-Class Entity
 
 **Design Philosophy:** A Scene is the primary container for GM narrative context. Combat (starship or personnel) is a special type of scene activation, not a separate entity.
@@ -87,41 +132,32 @@ Scene
 
 ## Milestone 2: Crew Manifest & Character Management
 
-### Lessons Learned from Milestone 1 Discussion
+### Design: Global vs Campaign Manifests
 
-#### NPC System Design
-- **NPC Types** (from STA 2E Ch 11.1):
-  - **Major NPCs**: Full stats, important characters
-  - **Notable NPCs**: Simplified stats, recurring characters
-  - **Minor NPCs**: Basic info, one-scene characters
-  - **NPC Crew**: Ship crew members (minimal stats)
+All entities have two layers:
+1. **Global Database**: Characters, NPCs, Ships exist globally (created once, reusable)
+2. **Campaign Manifest**: Links global entities to a campaign
 
-- **NPC Fields**:
-  - `name`, `npc_type`
-  - `appearance`, `motivation`, `affiliation`, `location`
-  - `picture_url`
-  - For Major/Notable: `attributes_json`, `disciplines_json`, `stress`, `stress_max`
-  - For NPC Crew: `ship_id` (FK to starships)
+```
+CharacterRecord (global) ──► CampaignPlayerRecord (per campaign)
+NPCRecord (global)         ──► CampaignNPCRecord (per campaign)
+StarshipRecord (global)    ──► CampaignShipRecord (per campaign)
+```
 
-- **NPC Archive** (global pool):
-  - NPCs created once, reusable across campaigns
-  - GM can create on-the-fly during scenes
-  - Copy existing NPCs to create variants
+### Features
+- **Campaign Dashboard**: Lists PCs, NPCs, Ships in current campaign
+- **Import from Global**: Add global characters/NPCs/ships to campaign
+- **JSON Export**: Export global data or campaign data
+- **JSON Import**: Import characters/NPCs/ships from JSON
+- **Backup All**: Export all data (global + all campaigns)
 
-- **Campaign Manifest** (`CampaignNPCRecord`):
-  - Links NPCs from archive to specific campaign
-  - Default `is_visible_to_players = False`
-
-- **Scene NPCs** (`SceneNPCRecord`):
-  - Links NPCs to active scene
-  - Can reference archive NPC OR have quick on-the-fly fields
-  - Visibility toggle per scene
-
-#### Character Import
-- **BC Holmes Generator**: Located at `~/repositories/StarTrek2d20`
-- Export format: JSON-based (need to analyze format from source code)
-- Import should handle: attributes, disciplines, talents, traits
-- Consider: field mapping between BC Holmes and our schema
+### Implementation Tasks
+1. [x] Extended character fields (character_type, pronouns, avatar_url, description, values, equipment, environment, upbringing, career_path)
+2. [ ] Character list page for campaign dashboard
+3. [ ] Ship list page for campaign dashboard
+4. [ ] Import global entities to campaign
+5. [ ] JSON export/import endpoints
+6. [ ] Backup all functionality
 
 #### Extended Character Fields
 - Main/Support characters need:
@@ -145,11 +181,10 @@ Scene
 - ✅ `CharacterTraitRecord` - Persistent character traits
 
 ### Implementation Tasks
-1. [ ] Analyze BC Holmes export format (check `~/repositories/StarTrek2d20`)
-2. [ ] Create NPC management UI (archive, campaign manifest)
-3. [ ] Add "Add NPC" button to narrative scene GM view
-4. [ ] Create character list/edit pages
-5. [ ] Implement BC Holmes import
+1. [ ] Create NPC management UI (archive, campaign manifest)
+2. [ ] Add "Add NPC" button to narrative scene GM view
+3. [ ] Create character list/edit pages
+4. [ ] Implement BC Holmes import (low priority - can be done later when exports available)
 
 ---
 
@@ -310,6 +345,59 @@ Scene
 
 ---
 
+## Milestone 2A: Unified Scene System (Migration from Encounter System)
+
+### Problem
+Currently there are two parallel workflows:
+- **New (Scene)**: Narrative scenes created via API → Edit page
+- **Old (Encounter)**: Combat encounters created via dedicated form page
+
+This creates maintenance overhead and confusion for GMs.
+
+### Goal
+Migrate encounter creation to the scene system so all content uses a unified workflow:
+- Dashboard → Create Scene (any type) → Edit Scene → Activate
+
+### Changes Required
+
+#### 1. Database
+- Add enemy ships and tactical map fields to `SceneRecord`:
+  - `enemy_ships_json` (Text) - Enemy ship configurations
+  - `tactical_map_json` (Text) - Map configuration
+  - `player_position_id` (FK to starships) - Player's ship
+  - `scene_position` (String) - Player's bridge position
+
+#### 2. Backend
+- Create `/scenes/new` route that handles all scene types
+- Add enemy ship generation/capture in scene creation
+- Add tactical map setup in scene creation  
+- Deprecate `/encounters/new` route (keep for backwards compatibility)
+- Update scene activation to start combat for `starship_encounter` type
+
+#### 3. Frontend
+- Create `new_scene.html` template (similar to old `new_encounter.html`)
+- Update `campaign_dashboard.html` dropdown to use `/scenes/new`
+- Update edit scene page to include enemy ships and tactical map
+- Update scene activation to handle combat initialization
+
+### UI Flow After Migration
+1. GM Home → Campaign Dashboard
+2. Click "Create Scene" dropdown → Choose "Narrative" or "Starship Combat"
+3. New unified form: Name, Description, Stardate, Scene Type, Enemy Ships, Tactical Map
+4. Save → Edit Scene (optional)
+5. Activate → Combat/Narrative View
+
+### Backwards Compatibility
+- Keep old encounter URLs working but hidden
+- Redirect old "New Encounter" button to new scene workflow
+- Migrate existing encounters to scenes (optional, can be done later)
+
+---
+
 ## Reference Files
 - Rules: See `docs/rules_reference.md` for STA 2E rule locations.
-- BC Holmes Generator: `~/repositories/StarTrek2d20`
+
+## Future: BC Holmes Import
+- Generator: `~/repositories/StarTrek2d20`
+- Import character exports when GM has existing characters to migrate
+- Low priority - can be implemented when needed

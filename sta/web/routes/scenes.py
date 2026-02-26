@@ -25,10 +25,181 @@ from sta.database import (
     NPCRecord,
     CampaignNPCRecord,
     StarshipRecord,
+    CampaignShipRecord,
 )
+from sta.models.enums import Position
 
 
 scenes_bp = Blueprint("scenes", __name__)
+
+
+@scenes_bp.route("/new", methods=["GET", "POST"])
+def new_scene():
+    """Create a new scene (narrative or starship encounter)."""
+    campaign_id = request.args.get("campaign_id")
+    if not campaign_id:
+        flash("Campaign ID required")
+        return redirect(url_for("main.index"))
+
+    session = get_session()
+    try:
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+        if not campaign:
+            flash("Campaign not found")
+            return redirect(url_for("main.index"))
+
+        # Get available ships for the campaign
+        campaign_ships = (
+            session.query(CampaignShipRecord).filter_by(campaign_id=campaign.id).all()
+        )
+        available_ships = []
+        for cs in campaign_ships:
+            ship = session.query(StarshipRecord).filter_by(id=cs.ship_id).first()
+            if ship:
+                available_ships.append(ship)
+
+        if request.method == "POST":
+            name = request.form.get("name", "New Scene")
+            scene_type = request.form.get("scene_type", "narrative")
+            description = request.form.get("description", "")
+            stardate = request.form.get("stardate", "")
+            position = request.form.get("position", "captain")
+            status = request.form.get("status", "draft")
+
+            player_ship_id = request.form.get("player_ship_id")
+            if player_ship_id:
+                player_ship_id = int(player_ship_id)
+            elif campaign.active_ship_id:
+                player_ship_id = campaign.active_ship_id
+
+            enemy_ships_json = request.form.get("enemy_ships_json", "[]")
+            tactical_map_json = request.form.get("tactical_map_json", "{}")
+            ship_positions_json = request.form.get("ship_positions_json", "{}")
+
+            enemy_count = int(request.form.get("enemy_count", "1"))
+            crew_quality = request.form.get("crew_quality", "talented")
+
+            scene = SceneRecord(
+                campaign_id=campaign.id,
+                name=name,
+                description=description,
+                scene_type=scene_type,
+                stardate=stardate or None,
+                status=status,
+                player_ship_id=player_ship_id,
+                scene_position=position,
+                enemy_ships_json=enemy_ships_json,
+                tactical_map_json=tactical_map_json,
+                has_map=bool(tactical_map_json and tactical_map_json != "{}"),
+            )
+            session.add(scene)
+            session.flush()
+
+            enemy_ships = (
+                json.loads(enemy_ships_json) if enemy_ships_json != "[]" else []
+            )
+
+            active_ship = None
+            if campaign.active_ship_id:
+                active_ship = (
+                    session.query(StarshipRecord)
+                    .filter_by(id=campaign.active_ship_id)
+                    .first()
+                )
+            player_scale = active_ship.scale if active_ship else 4
+
+            if scene_type == "starship_encounter" and enemy_count > 0:
+                if not enemy_ships:
+                    ship_positions = (
+                        json.loads(ship_positions_json)
+                        if ship_positions_json and ship_positions_json != "{}"
+                        else {}
+                    )
+                    for i in range(enemy_count):
+                        enemy_ships.append(
+                            {
+                                "id": f"enemy_{i}",
+                                "name": f"Enemy Ship {i + 1}",
+                                "ship_class": "Generic Fighter",
+                                "scale": max(1, player_scale - 1),
+                                "crew_quality": crew_quality,
+                                "systems": {
+                                    "comms": 8,
+                                    "computers": 8,
+                                    "engines": 8,
+                                    "sensors": 8,
+                                    "structure": 8,
+                                    "weapons": 8,
+                                },
+                                "departments": {
+                                    "command": 1,
+                                    "conn": 1,
+                                    "engineering": 1,
+                                    "medicine": 1,
+                                    "science": 1,
+                                    "security": 1,
+                                },
+                                "weapons": [
+                                    {
+                                        "name": "Phaser Array",
+                                        "weapon_type": "phaser",
+                                        "damage": 2,
+                                        "range": "medium",
+                                        "qualities": [],
+                                    }
+                                ],
+                                "shields": 8,
+                                "shields_max": 8,
+                                "position": ship_positions.get(
+                                    f"enemy_{i}", {"q": 2, "r": -1}
+                                )
+                                if ship_positions_json
+                                else {"q": 2, "r": -1},
+                            }
+                        )
+
+                    scene.enemy_ships_json = json.dumps(enemy_ships)
+
+                if tactical_map_json == "{}" and ship_positions_json:
+                    scene.tactical_map_json = json.dumps(
+                        {
+                            "radius": 3,
+                            "tiles": [],
+                            "positions": json.loads(ship_positions_json),
+                        }
+                    )
+
+            session.commit()
+
+            # For starship_encounter, redirect to edit page where combat can be started
+            if scene_type == "starship_encounter":
+                return redirect(url_for("scenes.edit_scene", scene_id=scene.id))
+
+            return redirect(url_for("scenes.edit_scene", scene_id=scene.id))
+
+        positions = [p.value for p in Position]
+
+        # Get scene_type from query param or default to starship_encounter
+        default_scene_type = request.args.get("scene_type", "starship_encounter")
+        if default_scene_type not in (
+            "narrative",
+            "starship_encounter",
+            "personal_encounter",
+            "social_encounter",
+        ):
+            default_scene_type = "starship_encounter"
+
+        return render_template(
+            "new_scene.html",
+            campaign=campaign,
+            available_ships=available_ships,
+            positions=positions,
+            default_scene_type=default_scene_type,
+        )
+    finally:
+        session.close()
 
 
 @scenes_bp.route("/<int:scene_id>")
@@ -193,6 +364,8 @@ def edit_scene(scene_id: int):
         scene_traits = json.loads(scene.scene_traits_json or "[]")
         challenges = json.loads(scene.challenges_json or "[]")
         characters_present = json.loads(scene.characters_present_json or "[]")
+        enemy_ships = json.loads(scene.enemy_ships_json or "[]")
+        tactical_map = json.loads(scene.tactical_map_json or "{}")
 
         scene_data = {
             "id": scene.id,
@@ -204,6 +377,10 @@ def edit_scene(scene_id: int):
             "scene_traits": scene_traits,
             "challenges": challenges,
             "characters_present": characters_present,
+            "player_ship_id": scene.player_ship_id,
+            "scene_position": scene.scene_position,
+            "enemy_ships": enemy_ships,
+            "tactical_map": tactical_map,
         }
 
         # Load NPCs for this scene
@@ -238,12 +415,27 @@ def edit_scene(scene_id: int):
                     }
                 )
 
+        # Load available ships for this campaign
+        campaign_ships = (
+            session.query(CampaignShipRecord).filter_by(campaign_id=campaign.id).all()
+        )
+        available_ships = []
+        for cs in campaign_ships:
+            ship = session.query(StarshipRecord).filter_by(id=cs.ship_id).first()
+            if ship:
+                available_ships.append(ship)
+
+        # Get positions list
+        positions = [p.value for p in Position]
+
         return render_template(
             "edit_scene.html",
             scene=scene_data,
             scene_record=scene,
             campaign=campaign,
             npcs=npcs_data,
+            available_ships=available_ships,
+            positions=positions,
         )
     finally:
         session.close()
