@@ -602,3 +602,51 @@ class CharacterTraitRecord(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class PersonnelEncounterRecord(Base):
+    """Database record for a personnel (personal) combat encounter."""
+
+    __tablename__ = "personnel_encounters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scene_id: Mapped[int] = mapped_column(ForeignKey("scenes.id"), unique=True)
+
+    # Combat state
+    momentum: Mapped[int] = mapped_column(Integer, default=0)
+    threat: Mapped[int] = mapped_column(Integer, default=0)
+    round: Mapped[int] = mapped_column(Integer, default=1)
+    current_turn: Mapped[str] = mapped_column(String(20), default="player")
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+    # Character positions on tactical map
+    # Structure: {"character_0": {"q": int, "r": int}, "character_1": {...}, ...}
+    character_positions_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    # Character states (stress, injuries, status)
+    # Structure: [{"character_id": int, "name": str, "stress": int, "stress_max": int,
+    #              "injuries": [{"type": "stun"|"deadly", "severity": int, "name": str}],
+    #              "is_defeated": bool, "protection": int}]
+    character_states_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    # Turn tracking - JSON dict: {"character_index": {"acted": bool, "acted_at": "timestamp"}}
+    characters_turns_used_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    # Track who currently has claimed the turn
+    current_player_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, default=None
+    )
+    turn_claimed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, default=None
+    )
+
+    # Active effects stored as JSON
+    active_effects_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    # Tactical map data (hex grid with terrain) - can reuse from scene or override
+    tactical_map_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )

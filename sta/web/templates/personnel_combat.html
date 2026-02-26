@@ -1,0 +1,887 @@
+{% extends "base.html" %}
+
+{% block title %}{{ scene_name }} - Personnel Combat{% endblock %}
+{% block header %}{{ scene_name }} - Round {{ round }} - Personnel Combat{% endblock %}
+
+{% block content %}
+<div class="grid">
+    <!-- Resource Pools -->
+    <div class="panel">
+        <h2>Resources</h2>
+        <div class="resource-pool momentum">
+            <span>Momentum</span>
+            <button class="btn btn-small" onclick="updateMomentum(-1)">-</button>
+            <span class="value" id="momentum">{{ momentum }}</span>
+            <button class="btn btn-small" onclick="updateMomentum(1)">+</button>
+            <span style="color: #666;">/ 6</span>
+        </div>
+        <div class="resource-pool threat">
+            <span>Threat</span>
+            <button class="btn btn-small" onclick="updateThreat(-1)">-</button>
+            <span class="value" id="threat">{{ threat }}</span>
+            <button class="btn btn-small" onclick="updateThreat(1)">+</button>
+        </div>
+        <div style="margin-top: 15px;">
+            <strong>Current Turn:</strong>
+            <span id="current-turn" style="color: {% if current_turn == 'player' %}var(--lcars-green){% else %}var(--lcars-red){% endif %};">
+                {{ current_turn.upper() }}
+            </span>
+            <button class="btn btn-small" onclick="nextTurn()">End Turn</button>
+        </div>
+        <div style="margin-top: 10px;">
+            <strong>Round:</strong> <span id="round">{{ round }}</span>
+        </div>
+    </div>
+
+    <!-- Turn Order / Character Selector -->
+    <div class="panel">
+        <h2>Active Character</h2>
+        <select id="active-character-select" onchange="selectActiveCharacter(this.value)" style="width: 100%; margin-bottom: 10px;">
+            {% for char in characters %}
+            <option value="{{ loop.index0 }}" {% if loop.index0 == active_character_index %}selected{% endif %}>
+                {{ char.name }} {% if char.is_player %}(PC){% else %}(NPC){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+        <div id="active-character-info">
+            <div class="stat-row">
+                <span>Status</span>
+                <span class="stat-value" id="char-status" style="color: {% if active_character.is_defeated %}var(--lcars-red){% else %}var(--lcars-green){% endif %};">
+                    {{ 'DEFEATED' if active_character.is_defeated else 'ACTIVE' }}
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tactical Map -->
+<div class="panel" style="border-color: var(--lcars-blue);">
+    <h2 style="color: var(--lcars-blue);">Tactical Map</h2>
+    <div id="hex-map-container" style="width: 100%; overflow-x: auto; text-align: center;"></div>
+    <div id="hex-map-legend" style="margin-top: 10px;"></div>
+</div>
+
+<!-- Character Status Panels -->
+<div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+    {% for char in characters %}
+    <div class="panel {% if char.is_player %}character-panel-player{% else %}character-panel-enemy{% endif %}"
+         style="border-color: {% if char.is_player %}var(--lcars-green){% else %}var(--lcars-red){% endif %};{% if char.is_defeated %}opacity: 0.6;{% endif %}"
+         data-character-index="{{ loop.index0 }}">
+        <h2 style="color: {% if char.is_player %}var(--lcars-green){% else %}var(--lcars-red){% endif %};">
+            {{ char.name }}
+            {% if char.is_player %}<span style="font-size: 0.7em; color: var(--lcars-tan);">(PC)</span>{% endif %}
+        </h2>
+        
+        <div class="stat-row">
+            <span>Stress</span>
+            <span class="stat-value">
+                <span id="char-stress-{{ loop.index0 }}">{{ char.stress }}</span> / {{ char.stress_max }}
+            </span>
+        </div>
+        <div class="stress-bar">
+            <div class="fill" id="char-stress-bar-{{ loop.index0 }}" style="width: {{ (char.stress / char.stress_max * 100) | int }}%; background: {% if char.stress >= char.stress_max * 0.8 %}var(--lcars-red){% elif char.stress >= char.stress_max * 0.5 %}var(--lcars-orange){% else %}var(--lcars-green){% endif %};"></div>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <strong style="color: var(--lcars-tan);">Injuries:</strong>
+            <div id="char-injuries-{{ loop.index0 }}" style="margin-top: 5px;">
+                {% if char.injuries %}
+                    {% for injury in char.injuries %}
+                    <span class="injury-tag" style="display: inline-block; background: #3a1a1a; border: 1px solid var(--lcars-red); border-radius: 3px; padding: 2px 8px; margin: 2px; font-size: 0.85em; color: var(--lcars-red);">
+                        {{ injury.name }} ({{ injury.severity }})
+                    </span>
+                    {% endfor %}
+                {% else %}
+                <span style="color: #666; font-size: 0.9em;">None</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="stat-row" style="margin-top: 10px;">
+            <span>Status</span>
+            <span class="stat-value" id="char-status-{{ loop.index0 }}" style="color: {% if char.is_defeated %}var(--lcars-red){% else %}var(--lcars-green){% endif %};">
+                {{ 'DEFEATED' if char.is_defeated else 'ACTIVE' }}
+            </span>
+        </div>
+
+        <div class="stat-row">
+            <span>Position</span>
+            <span class="stat-value" id="char-position-{{ loop.index0 }}">
+                ({{ char.position.q }}, {{ char.position.r }})
+            </span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Actions Panel -->
+<div class="grid">
+    <div class="panel">
+        <h2>Minor Actions</h2>
+        <ul class="action-list" id="minor-actions-list">
+            {% for action in minor_actions %}
+            <li onclick="selectAction('{{ action }}', 'minor')" class="action-item" data-action="{{ action }}">
+                <strong>{{ action }}</strong>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="panel">
+        <h2>Major Actions</h2>
+        <ul class="action-list" id="major-actions-list">
+            {% for action in major_actions %}
+            <li onclick="selectAction('{{ action }}', 'major')" class="action-item" data-action="{{ action }}">
+                <strong>{{ action }}</strong>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<!-- Selected Actions Summary -->
+<div class="panel" id="selection-summary" style="display: none; border-color: var(--lcars-blue);">
+    <h2 style="color: var(--lcars-blue);">SELECTED ACTIONS</h2>
+    <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div>
+            <strong style="color: var(--lcars-tan);">Minor Action:</strong>
+            <div id="summary-minor" style="padding: 8px; background: #222; border-radius: 5px; margin-top: 5px;">
+                <span style="color: #666;">None selected</span>
+            </div>
+        </div>
+        <div>
+            <strong style="color: var(--lcars-tan);">Major Action:</strong>
+            <div id="summary-major" style="padding: 8px; background: #222; border-radius: 5px; margin-top: 5px;">
+                <span style="color: #666;">None selected</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Execution Panel -->
+<div class="panel" id="action-panel" style="display: none; border-color: var(--lcars-orange);">
+    <h2 style="color: var(--lcars-orange);" id="action-panel-title">Execute Action</h2>
+    
+    <div id="attack-form" style="display: none;">
+        <h3 style="color: var(--lcars-red); margin: 10px 0;">Personnel Attack</h3>
+        <div class="grid" style="grid-template-columns: 1fr 1fr;">
+            <div>
+                <label for="attack-attribute">Attribute</label>
+                <select id="attack-attribute" style="width: 100%;">
+                    <option value="control">Control</option>
+                    <option value="daring" selected>Daring</option>
+                    <option value="fitness">Fitness</option>
+                    <option value="insight">Insight</option>
+                    <option value="presence">Presence</option>
+                    <option value="reason">Reason</option>
+                </select>
+            </div>
+            <div>
+                <label for="attack-discipline">Discipline</label>
+                <select id="attack-discipline" style="width: 100%;">
+                    <option value="command">Command</option>
+                    <option value="conn">Conn</option>
+                    <option value="engineering">Engineering</option>
+                    <option value="medicine">Medicine</option>
+                    <option value="science">Science</option>
+                    <option value="security" selected>Security</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="grid" style="grid-template-columns: 1fr 1fr; margin-top: 10px;">
+            <div>
+                <label for="attack-target">Target</label>
+                <select id="attack-target" style="width: 100%;">
+                    {% for char in characters %}
+                    <option value="{{ loop.index0 }}">{{ char.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="attack-severity">Severity</label>
+                <select id="attack-severity" style="width: 100%;">
+                    <option value="1">1 (Minor)</option>
+                    <option value="2" selected>2 (Moderate)</option>
+                    <option value="3">3 (Serious)</option>
+                    <option value="4">4 (Deadly)</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <label for="attack-injury-type">Injury Type</label>
+            <select id="attack-injury-type" style="width: 100%;">
+                <option value="stun" selected>Stun</option>
+                <option value="burn">Burn</option>
+                <option value="lethal">Lethal</option>
+                <option value="mortal">Mortal</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="movement-form" style="display: none;">
+        <h3 style="color: var(--lcars-green); margin: 10px 0;">Movement</h3>
+        <p style="color: var(--lcars-tan);">Click on the tactical map to move your character.</p>
+    </div>
+
+    <div id="first-aid-form" style="display: none;">
+        <h3 style="color: var(--lcars-green); margin: 10px 0;">First Aid</h3>
+        <div class="grid" style="grid-template-columns: 1fr 1fr;">
+            <div>
+                <label for="first-aid-attribute">Attribute</label>
+                <select id="first-aid-attribute" style="width: 100%;">
+                    <option value="control">Control</option>
+                    <option value="daring" selected>Daring</option>
+                    <option value="fitness">Fitness</option>
+                    <option value="insight">Insight</option>
+                    <option value="presence">Presence</option>
+                    <option value="reason">Reason</option>
+                </select>
+            </div>
+            <div>
+                <label for="first-aid-discipline">Discipline</label>
+                <select id="first-aid-discipline" style="width: 100%;">
+                    <option value="command">Command</option>
+                    <option value="conn">Conn</option>
+                    <option value="engineering">Engineering</option>
+                    <option value="medicine" selected>Medicine</option>
+                    <option value="science">Science</option>
+                    <option value="security">Security</option>
+                </select>
+            </div>
+        </div>
+        <div style="margin-top: 10px;">
+            <label for="first-aid-target">Target</label>
+            <select id="first-aid-target" style="width: 100%;">
+                {% for char in characters %}
+                <option value="{{ loop.index0 }}">{{ char.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div style="margin-top: 15px;">
+        <label>
+            <input type="checkbox" id="use-momentum"> Spend Momentum for bonus dice
+        </label>
+    </div>
+    <div>
+        <label for="bonus-dice">Bonus Dice (from Momentum)</label>
+        <input type="number" id="bonus-dice" value="0" min="0" max="3" style="width: 80px;">
+    </div>
+
+    <button class="btn" onclick="executeAction()" style="margin-top: 15px;" id="execute-btn">Execute</button>
+    <button class="btn" onclick="cancelAction()" style="margin-top: 15px; background: #666;">Cancel</button>
+
+    <div id="action-results" style="margin-top: 15px; display: none;"></div>
+</div>
+
+<!-- Dice Roller Panel -->
+<div class="panel" id="dice-panel" style="display: none;">
+    <h2>Dice Roller</h2>
+    <div id="current-action-display" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px; display: none;">
+        <strong>Current Action:</strong> <span id="current-action-name"></span>
+    </div>
+
+    <div id="roll-details" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px;">
+        <p><strong>Character Roll (2d20):</strong> <span id="roll-attr-name">Daring</span> (<span id="roll-attr-value">9</span>) + <span id="roll-disc-name">Security</span> (<span id="roll-disc-value">2</span>) = Target <span id="roll-target">11</span></p>
+        <p><strong>Difficulty:</strong> <span id="roll-diff-display">1</span></p>
+    </div>
+
+    <input type="hidden" id="roll-attr" value="9">
+    <input type="hidden" id="roll-disc" value="2">
+    <input type="hidden" id="roll-diff" value="1">
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+        <div>
+            <label for="roll-bonus">Bonus Dice</label>
+            <input type="number" id="roll-bonus" value="0" min="0" max="3" style="width: 100%;">
+        </div>
+        <div>
+            <label>
+                <input type="checkbox" id="roll-focus"> Focus Applies
+            </label>
+        </div>
+    </div>
+    <button class="btn" onclick="rollDice()" style="margin-top: 15px;">Roll Dice</button>
+
+    <div id="dice-results" style="margin-top: 15px; display: none;">
+        <h3>Results</h3>
+        <div id="dice-display"></div>
+        <div id="dice-summary" style="margin-top: 10px;"></div>
+    </div>
+</div>
+
+<style>
+    .stress-bar {
+        width: 100%;
+        height: 12px;
+        background: #333;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 5px;
+    }
+    .stress-bar .fill {
+        height: 100%;
+        transition: width 0.3s ease, background 0.3s ease;
+    }
+    .grid {
+        display: grid;
+        gap: 15px;
+    }
+    .action-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    .action-list li {
+        padding: 10px;
+        margin: 5px 0;
+        background: #1a1a1a;
+        border-radius: 5px;
+        cursor: pointer;
+        border-left: 3px solid var(--lcars-orange);
+        transition: all 0.2s ease;
+    }
+    .action-list li:hover {
+        background: #2a2a2a;
+        border-left-color: var(--lcars-blue);
+    }
+    .action-list li.action-selected {
+        background: rgba(153, 204, 255, 0.2);
+        border: 2px solid var(--lcars-blue);
+        border-left: 3px solid var(--lcars-blue);
+    }
+    .character-panel-player {
+        border-width: 3px;
+    }
+    .character-panel-enemy {
+        border-width: 3px;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translateY(0); }
+        to { opacity: 0; transform: translateY(-10px); }
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+<script>
+    const sceneId = {{ scene_id }};
+    const characters = {{ characters | tojson }};
+    let currentTurn = '{{ current_turn }}';
+    let currentRound = {{ round }};
+    let currentMomentum = {{ momentum }};
+    let currentThreat = {{ threat }};
+    let activeCharacterIndex = {{ active_character_index }};
+    
+    // Character positions for map
+    const characterPositions = {};
+    characters.forEach((char, idx) => {
+        characterPositions[`character_${idx}`] = char.position;
+    });
+
+    // Selected actions
+    let selectedMinorAction = null;
+    let selectedMajorAction = null;
+    let currentActionType = null;
+
+    // Player character stats (would be loaded from character data in real implementation)
+    const playerAttrs = {
+        control: 9,
+        daring: 9,
+        fitness: 9,
+        insight: 9,
+        presence: 9,
+        reason: 9
+    };
+    const playerDiscs = {
+        command: 2,
+        conn: 2,
+        engineering: 2,
+        medicine: 2,
+        science: 2,
+        security: 2
+    };
+
+    // Initialize map on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        renderHexMap();
+    });
+
+    function renderHexMap() {
+        const mapData = {{ tactical_map | tojson }};
+        
+        HexMap.render('hex-map-container', mapData, [], {
+            characters: characters,
+            characterPositions: characterPositions,
+            selectedCharacterId: `character_${activeCharacterIndex}`,
+            onCharacterClick: onCharacterClick,
+            onHexClick: onHexClick,
+            showCoords: true,
+            shipLabelFontSize: 10,
+            coordFontSize: 9
+        });
+
+        HexMap.renderLegend('hex-map-legend');
+    }
+
+    function onCharacterClick(character, index) {
+        // Select character as active
+        const select = document.getElementById('active-character-select');
+        if (select) {
+            select.value = index;
+            selectActiveCharacter(index);
+        }
+    }
+
+    function onHexClick(q, r, terrain, cost) {
+        // If movement action selected, move character there
+        if (selectedMinorAction === 'Personnel Movement' || selectedMajorAction === 'Sprint') {
+            moveCharacter(q, r);
+        }
+    }
+
+    async function moveCharacter(q, r) {
+        const response = await fetch(`/api/personnel/${sceneId}/execute-action`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                action: selectedMinorAction === 'Personnel Movement' ? 'Personnel Movement' : 'Sprint',
+                character_index: activeCharacterIndex,
+                position: { q, r }
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update character position
+            characterPositions[`character_${activeCharacterIndex}`] = { q, r };
+            renderHexMap();
+            updateCharacterPositionDisplay(activeCharacterIndex, q, r);
+            
+            showToast('Moved to (' + q + ', ' + r + ')', 'success');
+            
+            // Clear action
+            cancelAction();
+            refreshStatus();
+        } else {
+            showErrorToast(data.error || 'Failed to move');
+        }
+    }
+
+    function updateCharacterPositionDisplay(index, q, r) {
+        const el = document.getElementById(`char-position-${index}`);
+        if (el) {
+            el.textContent = `(${q}, ${r})`;
+        }
+    }
+
+    function selectActiveCharacter(index) {
+        activeCharacterIndex = parseInt(index);
+        
+        // Update map selection
+        renderHexMap();
+        
+        // Update active character info panel
+        const char = characters[activeCharacterIndex];
+        const statusEl = document.getElementById('char-status');
+        if (statusEl && char) {
+            statusEl.textContent = char.is_defeated ? 'DEFEATED' : 'ACTIVE';
+            statusEl.style.color = char.is_defeated ? 'var(--lcars-red)' : 'var(--lcars-green)';
+        }
+    }
+
+    async function refreshStatus() {
+        try {
+            const response = await fetch(`/api/personnel/${sceneId}/status?role=player`);
+            const data = await response.json();
+            
+            if (data.error) {
+                console.error('Error refreshing status:', data.error);
+                return;
+            }
+
+            // Update resources
+            currentMomentum = data.momentum;
+            currentThreat = data.threat;
+            currentTurn = data.current_turn;
+            currentRound = data.round;
+            
+            document.getElementById('momentum').textContent = currentMomentum;
+            document.getElementById('threat').textContent = currentThreat;
+            document.getElementById('current-turn').textContent = currentTurn.toUpperCase();
+            document.getElementById('current-turn').style.color = currentTurn === 'player' ? 'var(--lcars-green)' : 'var(--lcars-red)';
+            document.getElementById('round').textContent = currentRound;
+            
+            // Update characters
+            data.characters.forEach((char, idx) => {
+                updateCharacterDisplay(idx, char);
+            });
+            
+            // Update character positions
+            data.characters.forEach((char, idx) => {
+                characterPositions[`character_${idx}`] = char.position;
+            });
+            
+            renderHexMap();
+        } catch (err) {
+            console.error('Failed to refresh status:', err);
+        }
+    }
+
+    function updateCharacterDisplay(index, char) {
+        // Update stress
+        const stressEl = document.getElementById(`char-stress-${index}`);
+        if (stressEl) stressEl.textContent = char.stress;
+        
+        const stressBarEl = document.getElementById(`char-stress-bar-${index}`);
+        if (stressBarEl) {
+            const pct = (char.stress / char.stress_max) * 100;
+            stressBarEl.style.width = pct + '%';
+            stressBarEl.style.background = pct >= 80 ? 'var(--lcars-red)' : (pct >= 50 ? 'var(--lcars-orange)' : 'var(--lcars-green)');
+        }
+        
+        // Update injuries
+        const injuriesEl = document.getElementById(`char-injuries-${index}`);
+        if (injuriesEl) {
+            if (char.injuries && char.injuries.length > 0) {
+                injuriesEl.innerHTML = char.injuries.map(injury => 
+                    `<span class="injury-tag" style="display: inline-block; background: #3a1a1a; border: 1px solid var(--lcars-red); border-radius: 3px; padding: 2px 8px; margin: 2px; font-size: 0.85em; color: var(--lcars-red);">${injury.name} (${injury.severity})</span>`
+                ).join('');
+            } else {
+                injuriesEl.innerHTML = '<span style="color: #666; font-size: 0.9em;">None</span>';
+            }
+        }
+        
+        // Update status
+        const statusEl = document.getElementById(`char-status-${index}`);
+        if (statusEl) {
+            statusEl.textContent = char.is_defeated ? 'DEFEATED' : 'ACTIVE';
+            statusEl.style.color = char.is_defeated ? 'var(--lcars-red)' : 'var(--lcars-green)';
+        }
+        
+        // Update position
+        updateCharacterPositionDisplay(index, char.position.q, char.position.r);
+    }
+
+    function selectAction(name, type) {
+        // Clear previous selections
+        document.querySelectorAll('.action-item').forEach(el => el.classList.remove('action-selected'));
+        
+        // Find and highlight this action
+        document.querySelectorAll(`[data-action="${name}"]`).forEach(el => el.classList.add('action-selected'));
+        
+        if (type === 'minor') {
+            selectedMinorAction = name;
+            selectedMajorAction = null;
+            currentActionType = 'minor';
+        } else {
+            selectedMajorAction = name;
+            selectedMinorAction = null;
+            currentActionType = 'major';
+        }
+        
+        updateSelectionSummary();
+        showActionPanel(name, type);
+    }
+
+    function showActionPanel(actionName, type) {
+        const panel = document.getElementById('action-panel');
+        const attackForm = document.getElementById('attack-form');
+        const movementForm = document.getElementById('movement-form');
+        const firstAidForm = document.getElementById('first-aid-form');
+        const title = document.getElementById('action-panel-title');
+        
+        // Hide all forms first
+        attackForm.style.display = 'none';
+        movementForm.style.display = 'none';
+        firstAidForm.style.display = 'none';
+        
+        panel.style.display = 'block';
+        title.textContent = actionName;
+        
+        if (actionName === 'Personnel Attack') {
+            attackForm.style.display = 'block';
+        } else if (actionName === 'Personnel Movement' || actionName === 'Sprint') {
+            movementForm.style.display = 'block';
+        } else if (actionName === 'First Aid') {
+            firstAidForm.style.display = 'block';
+        }
+        
+        panel.scrollIntoView({behavior: 'smooth'});
+    }
+
+    function updateSelectionSummary() {
+        const summaryPanel = document.getElementById('selection-summary');
+        const summaryMinor = document.getElementById('summary-minor');
+        const summaryMajor = document.getElementById('summary-major');
+        
+        if (selectedMinorAction || selectedMajorAction) {
+            summaryPanel.style.display = 'block';
+        } else {
+            summaryPanel.style.display = 'none';
+        }
+        
+        if (selectedMinorAction) {
+            summaryMinor.innerHTML = `<strong style="color: var(--lcars-green);">✓ ${selectedMinorAction}</strong>`;
+        } else {
+            summaryMinor.innerHTML = '<span style="color: #666;">None selected (optional)</span>';
+        }
+        
+        if (selectedMajorAction) {
+            summaryMajor.innerHTML = `<strong style="color: var(--lcars-green);">✓ ${selectedMajorAction}</strong>`;
+        } else {
+            summaryMajor.innerHTML = '<span style="color: #888;">← Select a major action to proceed</span>';
+        }
+    }
+
+    function cancelAction() {
+        selectedMinorAction = null;
+        selectedMajorAction = null;
+        currentActionType = null;
+        
+        document.querySelectorAll('.action-item').forEach(el => el.classList.remove('action-selected'));
+        
+        document.getElementById('action-panel').style.display = 'none';
+        document.getElementById('dice-panel').style.display = 'none';
+        
+        updateSelectionSummary();
+    }
+
+    async function executeAction() {
+        const actionName = selectedMinorAction || selectedMajorAction;
+        
+        let requestData = {
+            action: actionName,
+            character_index: activeCharacterIndex
+        };
+        
+        if (actionName === 'Personnel Attack') {
+            requestData.attribute = document.getElementById('attack-attribute').value;
+            requestData.discipline = document.getElementById('attack-discipline').value;
+            requestData.target_index = parseInt(document.getElementById('attack-target').value);
+            requestData.severity = parseInt(document.getElementById('attack-severity').value);
+            requestData.injury_type = document.getElementById('attack-injury-type').value;
+            requestData.difficulty = 1;
+        } else if (actionName === 'First Aid') {
+            requestData.attribute = document.getElementById('first-aid-attribute').value;
+            requestData.discipline = document.getElementById('first-aid-discipline').value;
+            requestData.target_index = parseInt(document.getElementById('first-aid-target').value);
+            requestData.difficulty = 2;
+        }
+        
+        try {
+            const response = await fetch(`/api/personnel/${sceneId}/execute-action`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(requestData)
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast(`Action executed: ${actionName}`, 'success');
+                cancelAction();
+                refreshStatus();
+            } else {
+                showErrorToast(data.error || 'Failed to execute action');
+            }
+        } catch (err) {
+            showErrorToast('Error executing action');
+            console.error(err);
+        }
+    }
+
+    // Dice rolling functions
+    function rollDice() {
+        const attr = parseInt(document.getElementById('roll-attr').value);
+        const disc = parseInt(document.getElementById('roll-disc').value);
+        const diff = parseInt(document.getElementById('roll-diff').value);
+        const bonus = parseInt(document.getElementById('roll-bonus').value) || 0;
+        const focus = document.getElementById('roll-focus').checked;
+        
+        const target = attr + disc;
+        
+        // Roll 2d20
+        const dice = [];
+        for (let i = 0; i < 2 + bonus; i++) {
+            dice.push(Math.floor(Math.random() * 20) + 1);
+        }
+        
+        // Calculate results
+        let successes = 0;
+        let complications = 0;
+        let crits = 0;
+        
+        dice.forEach(d => {
+            if (d === 1) {
+                successes += 2;
+                crits++;
+            } else if (d <= target) {
+                successes++;
+            }
+            if (d === 20) {
+                complications++;
+            }
+        });
+        
+        // Display results
+        const resultsDiv = document.getElementById('dice-results');
+        const displayDiv = document.getElementById('dice-display');
+        const summaryDiv = document.getElementById('dice-summary');
+        
+        let diceHtml = '<div style="display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0;">';
+        dice.forEach((d, i) => {
+            let color = '#666';
+            if (d === 1) color = '#00ff00';
+            else if (d <= target) color = '#00aa00';
+            else if (d === 20) color = '#ff0000';
+            
+            diceHtml += `<span style="background: #222; border: 2px solid ${color}; border-radius: 5px; padding: 8px 12px; font-size: 1.2em; color: ${color}; font-weight: bold;">${d}</span>`;
+        });
+        diceHtml += '</div>';
+        
+        displayDiv.innerHTML = diceHtml;
+        
+        let summaryHtml = `<p><strong>Target:</strong> ${target} (${attr} + ${disc})</p>`;
+        summaryHtml += `<p><strong>Difficulty:</strong> ${diff}</p>`;
+        summaryHtml += `<p><strong>Successes:</strong> ${successes} ${crits > 0 ? `(including ${crits} crit${crits > 1 ? 's' : ''})` : ''}</p>`;
+        
+        if (successes >= diff) {
+            summaryHtml += `<p style="color: var(--lcars-green); font-weight: bold;">✓ SUCCESS!</p>`;
+        } else {
+            summaryHtml += `<p style="color: var(--lcars-red); font-weight: bold;">✗ FAILED</p>`;
+        }
+        
+        if (complications > 0) {
+            summaryHtml += `<p style="color: var(--lcars-orange);">⚠ ${complications} Complication${complications > 1 ? 's' : ''}</p>`;
+        }
+        
+        summaryDiv.innerHTML = summaryHtml;
+        resultsDiv.style.display = 'block';
+    }
+
+    // Resource management
+    async function updateMomentum(change) {
+        try {
+            const response = await fetch(`/api/personnel/${sceneId}/momentum`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({change})
+            });
+            const data = await response.json();
+            currentMomentum = data.momentum;
+            document.getElementById('momentum').textContent = currentMomentum;
+        } catch (err) {
+            showErrorToast('Failed to update momentum');
+        }
+    }
+
+    async function updateThreat(change) {
+        try {
+            const response = await fetch(`/api/personnel/${sceneId}/threat`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({change})
+            });
+            const data = await response.json();
+            currentThreat = data.threat;
+            document.getElementById('threat').textContent = currentThreat;
+        } catch (err) {
+            showErrorToast('Failed to update threat');
+        }
+    }
+
+    async function nextTurn() {
+        try {
+            const response = await fetch(`/api/personnel/${sceneId}/next-turn`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                currentTurn = data.current_turn;
+                currentRound = data.round;
+                
+                const turnEl = document.getElementById('current-turn');
+                turnEl.textContent = currentTurn.toUpperCase();
+                turnEl.style.color = currentTurn === 'player' ? 'var(--lcars-green)' : 'var(--lcars-red)';
+                
+                document.getElementById('round').textContent = currentRound;
+                
+                // Update header
+                document.querySelector('header h1').textContent = 
+                    `{{ scene_name }} - Round ${currentRound} - Personnel Combat`;
+                
+                // Clear actions
+                cancelAction();
+                
+                showToast(`Turn: ${currentTurn.toUpperCase()} | Round: ${currentRound}`, 'success');
+            }
+        } catch (err) {
+            showErrorToast('Failed to advance turn');
+        }
+    }
+
+    // Toast notifications
+    function showToast(message, type) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #1a3a1a;
+            border: 2px solid var(--lcars-green);
+            border-radius: 5px;
+            color: var(--lcars-green);
+            font-weight: bold;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in;
+        `;
+        toast.textContent = `✓ ${message}`;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
+    }
+
+    function showErrorToast(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #3a1a1a;
+            border: 2px solid var(--lcars-red);
+            border-radius: 5px;
+            color: var(--lcars-red);
+            font-weight: bold;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in;
+        `;
+        toast.textContent = `✗ ${message}`;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // Auto-refresh status every 3 seconds
+    setInterval(refreshStatus, 3000);
+</script>
+{% endblock %}
