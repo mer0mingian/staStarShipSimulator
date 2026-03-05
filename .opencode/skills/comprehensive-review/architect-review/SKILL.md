@@ -1,6 +1,6 @@
 ---
 name: architect-review
-description: model: opus
+description: "Review architecture decisions. Use when evaluating system design, architectural trade-offs, or adherence to SOLID principles. This skill assesses adherence to modern architecture patterns like microservices, event-driven architecture, and DDD. It also checks for SOLID principle compliance and provides guidance on scalability and maintainability."
 ---
 ---
 name: architect-review
