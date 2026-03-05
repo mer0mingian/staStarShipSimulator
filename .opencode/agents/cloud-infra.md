@@ -8,4 +8,5 @@ permission:
     "building-mcp-server-on-cloudflare": allow
     "python-development/python-configuration": allow
     "python-development/python-packaging": allow
+    "modern-python": allow
 ---

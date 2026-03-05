@@ -153,7 +153,8 @@ skill-auditor/
 
 | Skill | .opencode | .agents | Status | Action |
 |-------|-----------|---------|--------|--------|
-| modern-python | ❌ | ✅ | **UNIQUE in .agents** | KEEP .agents/ |
+| modern-python | ❌ | ✅ | **UNIQUE in .agents** | KEEP |
+| notebooklm | ❌ | ✅ | **UNIQUE in .agents** | KEEP |
 | template-skill | ✅ | ✅ | Both empty | DELETE .agents/ |
 | software-architecture | ✅ | ✅ | Duplicate | DELETE .agents/ |
 | system-design | ✅ | ✅ | Duplicate | DELETE .agents/ |
@@ -174,7 +175,7 @@ skill-auditor/
 | excalidraw-diagrams | ✅ | ✅ | Duplicate | DELETE .agents/ |
 | google-workspace | ✅ | ✅ | Duplicate | DELETE .agents/ |
 
-**Total unique in .agents: 1** (modern-python)
+**Total unique in .agents: 2** (modern-python, notebooklm)
 
 ---
 
@@ -228,32 +229,57 @@ These are already working well as separate skills with clear triggers:
 
 Based on the re-evaluation, here are the actual changes needed:
 
-### If You Delete .agents/skills/ (except modern-python):
+### Phase 1: Execute Safe Deletions
 
-| Skill to Delete | Dependencies to Update |
-|-----------------|----------------------|
-| docker-expert | None (not referenced) |
-| cloudflare | None (not referenced) |
-| databases | None (not referenced) |
-| differential-review | agents/code-reviewer.md, agents/code-auditor.md |
+```bash
+# UNIQUE in .agents/ - MUST KEEP:
+# .agents/skills/modern-python/ (NOT in .opencode!)
+# .agents/skills/notebooklm/ (NOT in .opencode!)
 
-Wait - differential-review IS referenced! Let me verify this more carefully...
+# Execute deletions:
+rm -rf .agents/skills/template-skill/
+rm -rf .agents/skills/software-architecture/
+rm -rf .agents/skills/system-design/
+rm -rf .agents/skills/solid/
+rm -rf .agents/skills/skill-creator/
+rm -rf .agents/skills/differential-review/
+rm -rf .agents/skills/databases/
+rm -rf .agents/skills/docker-expert/
+rm -rf .agents/skills/cloudflare/
+rm -rf .agents/skills/mcp-builder/
+rm -rf .agents/skills/hugging-face-cli/
+rm -rf .agents/skills/senior-ml-engineer/
+rm -rf .agents/skills/qdrant-vector-search/
+rm -rf .agents/skills/embedding-strategies/
+rm -rf .agents/skills/building-mcp-server-on-cloudflare/
+rm -rf .agents/skills/api-documentation-generator/
+rm -rf .agents/skills/excalidraw/
+rm -rf .agents/skills/excalidraw-diagrams/
+rm -rf .agents/skills/google-workspace/
+```
 
-Actually, from the grep results:
-- `agents/code-reviewer.md` has: `"differential-review": allow`
-- `agents/code-auditor.md` has: `"differential-review": allow`
-
-These references use bare skill names without "superpowers/" prefix, which means they reference `.opencode/skills/differential-review/` (which exists!).
-
-So deleting `.agents/skills/differential-review` would be **SAFE** since the reference points to `.opencode/`.
+**Savings:** ~3800 lines (keeping modern-python + notebooklm)
 
 ---
 
 ## Revised Consolidation Plan
 
-### Phase 1: Careful Duplicate Removal (Week 1)
+### ✅ Phase 1: COMPLETE - Duplicate Removal
 
+**Executed:** Deleted 19 duplicate skills from `.agents/skills/`, kept only unique ones.
+
+**Results:**
 ```bash
+.agents/skills/ now contains:
+- modern-python/  (unique - not in .opencode!)
+- notebooklm/     (unique - not in .opencode!)
+```
+
+**Lines saved:** ~3800
+
+---
+
+### Phase 2: Reduce Large Skills (Week 2)
 # DON'T: rm -rf .agents/skills/
 # DO: Remove specific duplicates except modern-python
 
