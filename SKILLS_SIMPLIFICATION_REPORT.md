@@ -371,6 +371,288 @@ After re-evaluation, NO skill merges are needed:
 
 ---
 
+# PART 3: Skill Cluster Analysis
+
+## Overview
+
+**Total Skills:** 170
+
+## Identified Clusters
+
+### Cluster 1: Core Workflow (6 skills)
+*Essential development workflow skills*
+| Skill | Purpose |
+|-------|---------|
+| brainstorming | Start projects |
+| writing-plans | Planning |
+| executing-plans | Implementation |
+| subagent-driven-development | Parallel work |
+| finishing-a-development-branch | Completion |
+| using-git-worktrees | Branch management |
+
+### Cluster 2: Code Quality (7 skills)
+*Review, testing, debugging*
+| Skill | Purpose |
+|-------|---------|
+| requesting-code-review | Pre-merge review |
+| receiving-code-review | Respond to feedback |
+| code-review-excellence | Review patterns |
+| comprehensive-review | Full review |
+| differential-review | Security diffs |
+| test-driven-development | TDD methodology |
+| systematic-debugging | Debugging |
+
+### Cluster 3: Python Development (18 skills)
+*Python-specific patterns*
+| Skill | Purpose |
+|-------|---------|
+| modern-python | Main Python skill |
+| python-dev-agents | Agent config |
+| async-python-patterns | Async/await |
+| python-background-jobs | Task queues |
+| python-code-style | Style/linting |
+| python-configuration | Config management |
+| python-design-patterns | Architecture |
+| python-error-handling | Exception patterns |
+| python-observability | Logging/metrics |
+| python-packaging | PyPI/distribution |
+| python-performance-optimization | Profiling |
+| python-project-structure | Project layout |
+| python-resilience | Fault tolerance |
+| python-resource-management | Memory/cpu |
+| python-testing-patterns | Testing |
+| python-type-safety | Type hints |
+| python-anti-patterns | What to avoid |
+| uv-package-manager | UV tooling |
+
+### Cluster 4: JavaScript/TypeScript (5 skills)
+*JS ecosystem*
+| Skill | Purpose |
+|-------|---------|
+| modern-javascript-patterns | JS best practices |
+| typescript-advanced-types | TS advanced |
+| nodejs-backend-patterns | Node.js |
+| javascript-testing-patterns | JS testing |
+| tailwind-design-system | Tailwind CSS |
+
+### Cluster 5: Frontend/UI (14 skills)
+*UI development*
+| Skill | Purpose |
+|-------|---------|
+| accessibility-compliance | A11y |
+| design-system-patterns | Design systems |
+| interaction-design | Animations |
+| mobile-android-design | Android UI |
+| mobile-ios-design | iOS UI |
+| react-native-design | React Native |
+| responsive-design | Mobile-first |
+| visual-design-foundations | Color/type |
+| web-component-design | Web Components |
+| react-native-architecture | RN architecture |
+| react-state-management | State |
+| nextjs-app-router-patterns | Next.js |
+| angular-migration | Angular→React |
+| react-modernization | Legacy React |
+
+### Cluster 6: Architecture (9 skills)
+*System design*
+| Skill | Purpose |
+|-------|---------|
+| system-design | General system design |
+| software-architecture | Architecture decisions |
+| solid | SOLID principles |
+| architecture-patterns | Common patterns |
+| microservices-patterns | Microservices |
+| cqrs-implementation | CQRS pattern |
+| event-store-design | Event sourcing |
+| saga-orchestration | Sagas |
+| projection-patterns | Projections |
+
+### Cluster 7: LLM/AI (10 skills)
+*AI and ML patterns*
+| Skill | Purpose |
+|-------|---------|
+| senior-ml-engineer | ML engineering |
+| embedding-strategies | Embeddings |
+| llm-evaluation | LLM testing |
+| prompt-engineering-patterns | Prompts |
+| rag-implementation | RAG pattern |
+| langchain-architecture | LangChain |
+| vector-index-tuning | Vector DB |
+| similarity-search-patterns | Semantic search |
+| hybrid-search-implementation | Hybrid search |
+| qdrant-vector-search | Qdrant |
+
+### Cluster 8: Data Engineering (5 skills)
+*Data pipelines*
+| Skill | Purpose |
+|-------|---------|
+| airflow-dag-patterns | Airflow |
+| dbt-transformation-patterns | dbt |
+| data-quality-frameworks | Quality |
+| spark-optimization | Spark |
+| postgresql | PostgreSQL |
+
+### Cluster 9: DevOps/Cloud (13 skills)
+*Infrastructure*
+| Skill | Purpose |
+|-------|---------|
+| cloudflare | Cloudflare |
+| docker-expert | Docker |
+| databases | DB general |
+| deployment-pipeline-design | CI/CD |
+| github-actions-templates | GitHub Actions |
+| gitlab-ci-patterns | GitLab CI |
+| secrets-management | Secrets |
+| cost-optimization | Cloud costs |
+| terraform-module-library | Terraform |
+| distributed-tracing | Tracing |
+| prometheus-configuration | Prometheus |
+| grafana-dashboards | Grafana |
+| slo-implementation | SLOs |
+
+### Cluster 10: Security (6 skills)
+*Security patterns*
+| Skill | Purpose |
+|-------|---------|
+| security-requirement-extraction | Requirements |
+| sast-configuration | SAST |
+| stride-analysis-patterns | STRIDE |
+| attack-tree-construction | Attack trees |
+| threat-mitigation-mapping | Threats |
+| auth-implementation-patterns | Auth |
+
+### Cluster 11: Shell/Systems (4 skills)
+*Low-level*
+| Skill | Purpose |
+|-------|---------|
+| bash-defensive-patterns | Bash |
+| bats-testing-patterns | Bats testing |
+| shellcheck-configuration | Shellcheck |
+| memory-safety-patterns | Memory safety |
+
+### Cluster 12: Specialized Domains (17 skills)
+*Industry-specific*
+| Skill | Purpose |
+|-------|---------|
+| startup-financial-modeling | Startups |
+| startup-metrics-framework | Metrics |
+| competitive-landscape | Competition |
+| market-sizing-analysis | Market size |
+| team-composition-analysis | Teams |
+| data-storytelling | Data viz |
+| kpi-dashboard-design | Dashboards |
+| blockchain-web3 | (see below) |
+| defi-protocol-templates | DeFi |
+| nft-standards | NFTs |
+| solidity-security | Solidity |
+| web3-testing | Web3 testing |
+| godot-gdscript-patterns | Godot |
+| unity-ecs-patterns | Unity |
+| payment-processing | (see below) |
+| stripe-integration | Stripe |
+| paypal-integration | PayPal |
+| pci-compliance | PCI |
+| billing-automation | Billing |
+
+### Cluster 13: Meta Skills (6 skills)
+*Skills about skills*
+| Skill | Purpose |
+|-------|---------|
+| skill-creator | Creating skills |
+| skill-auditor | Auditing skills |
+| writing-skills | Skill writing |
+| template-skill | Template |
+| using-superpowers | Superpowers |
+| dispatching-parallel-agents | Parallel agents |
+
+### Cluster 14: Documentation (4 skills)
+*Docs generation*
+| Skill | Purpose |
+|-------|---------|
+| api-documentation-generator | API docs |
+| changelog-automation | Changelogs |
+| architecture-decision-records | ADRs |
+| openapi-spec-generation | OpenAPI |
+
+### Cluster 15: Incident Response (3 skills)
+*On-call*
+| Skill | Purpose |
+|-------|---------|
+| incident-runbook-templates | Runbooks |
+| on-call-handoff-patterns | Handoffs |
+| postmortem-writing | Postmortems |
+
+### Cluster 16: Other (9 skills)
+*Miscellaneous*
+| Skill | Purpose |
+|-------|---------|
+| building-mcp-server-on-cloudflare | MCP servers |
+| mcp-builder | MCP building |
+| excalidraw-diagrams | Diagrams |
+| excalidraw | Excalidraw |
+| database-migration | Migrations |
+| context-driven-development | Context |
+| workflow-orchestration-patterns | Workflows |
+| workflow-patterns | Workflows |
+| track-management | Track mgmt |
+
+---
+
+## Overlap Analysis
+
+| Overlap | Skills | Recommendation |
+|---------|--------|-----------------|
+| Python patterns | 16+ python-* skills | Keep - each has unique focus |
+| Workflow patterns | workflow-orchestration, workflow-patterns | MERGE into one |
+| Cloud infra | distributed-tracing, prometheus, grafana, slo-implementation | Consider merging into "observability" |
+| Mobile design | mobile-android, mobile-ios, react-native | Keep - different platforms |
+| Frontend | 14 UI skills | Keep - specialized |
+
+---
+
+## Recommendations
+
+### 1. MERGE: Workflow Skills
+- `workflow-orchestration-patterns` + `workflow-patterns` → `workflow-patterns`
+
+### 2. MERGE: Observability Skills
+- `distributed-tracing` + `prometheus-configuration` + `grafana-dashboards` + `slo-implementation` → `observability-patterns`
+
+### 3. KEEP: Other Clusters
+- Python (18 skills) - unique focuses
+- LLM/AI (10 skills) - unique focuses
+- Core workflow (6 skills) - essential
+- Security (6 skills) - specialized
+- Architecture (9 skills) - different patterns
+
+---
+
+## Summary by Cluster
+
+| Cluster | Count | Status |
+|---------|-------|--------|
+| Core Workflow | 6 | Keep |
+| Code Quality | 7 | Keep |
+| Python Development | 18 | Keep |
+| JavaScript/TypeScript | 5 | Keep |
+| Frontend/UI | 14 | Keep |
+| Architecture | 9 | Keep |
+| LLM/AI | 10 | Keep |
+| Data Engineering | 5 | Keep |
+| DevOps/Cloud | 13 | Merge 4→1 observability |
+| Security | 6 | Keep |
+| Shell/Systems | 4 | Keep |
+| Specialized Domains | 17 | Keep |
+| Meta Skills | 6 | Keep |
+| Documentation | 4 | Keep |
+| Incident Response | 3 | Keep |
+| Other | 9 | Merge 2→1 workflow |
+
+**Potential Reduction:** 170 → 166 skills (4 merges)
+
+---
+
 # PART 2: Plugins Analysis
 
 ## Commands in Plugins
