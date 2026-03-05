@@ -1,6 +1,6 @@
 ---
 name: embedding-strategies
-description: Select and optimize embedding models for semantic search and RAG applications. Use when choosing embedding models, implementing chunking strategies, or optimizing embedding quality for specific domains.
+description: Select and optimize embedding models for semantic search and RAG applications. Use when choosing embedding models, implementing chunking strategies, or optimizing embedding quality for specific domains. Covers models like Voyage AI, OpenAI Ada, and Sentence Transformers. Provides templates for common pipelines and evaluation methods.
 ---
 
 # Embedding Strategies

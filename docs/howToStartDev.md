@@ -1,5 +1,16 @@
 # STA Starship Simulator - Developer Guide
 
+## Prompt to collect everything important
+Understand the scope of this project.
+To this end, read @docs/PROJECT_BRIEFING.md , @docs/objects.md , @docs/open_questions.md , @howToStartDev.md, @docs/rules_reference.md .
+Understand the scope. Note that some legacy components are contained in the repository. Discard build content (needs to be refreshed, focus on Windows/Linux, ignore Mac, prepare github actions later.)
+
+Your Job is to create a plan how to implement the requested features and document this in a file docs/delivery_plan.md.
+You need to define specific unambiguous tasks that multiple automated AI coding agents can work on in parallel.
+
+Ask all questions that are relevant in this context. Confirm, if you have understood the tasks. Mind you @AGENTS.md . Understand which skills you have available and use them.
+
+
 ## Development Environment Setup
 
 ### 1. Prerequisites

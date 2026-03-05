@@ -1,11 +1,23 @@
 ---
 name: code-reviewer
-description: model: opus
+description: "Review code against project plan and standards. Use when a major project step is completed. Checks for adherence to best practices, identifies deviations, and suggests improvements. Focuses on security, performance, and maintainability."
+model: inherit
 ---
+
 ---
 name: code-reviewer
-description: Elite code review expert specializing in modern AI-powered code analysis, security vulnerabilities, performance optimization, and production reliability. Masters static analysis tools, security scanning, and configuration review with 2024/2025 best practices. Use PROACTIVELY for code quality assurance.
-model: opus
+description: "Review code against project plan and standards. Use when a major project step is completed. Checks for adherence to best practices, identifies deviations, and suggests improvements. Focuses on security, performance, and maintainability."
+model: inherit
+permission:
+  skill:
+    "superpowers/requesting-code-review": allow
+    "superpowers/receiving-code-review": allow
+    "comprehensive-review/code-reviewer": allow
+    "comprehensive-review/security-auditor": allow
+    "python-development/python-anti-patterns": allow
+    "python-development/python-performance-optimization": allow
+    "differential-review": allow
+    "modern-python": allow
 ---
 
 You are an elite code review expert specializing in modern code analysis techniques, AI-powered review tools, and production-grade quality assurance.
