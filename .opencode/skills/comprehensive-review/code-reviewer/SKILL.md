@@ -3,6 +3,7 @@ name: code-reviewer
 description: "Review code against project plan and standards. Use when a major project step is completed. Checks for adherence to best practices, identifies deviations, and suggests improvements. Focuses on security, performance, and maintainability."
 model: inherit
 ---
+
 ---
 name: code-reviewer
 description: "Review code against project plan and standards. Use when a major project step is completed. Checks for adherence to best practices, identifies deviations, and suggests improvements. Focuses on security, performance, and maintainability."
