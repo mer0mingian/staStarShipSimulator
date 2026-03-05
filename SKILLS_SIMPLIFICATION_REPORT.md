@@ -368,3 +368,147 @@ After re-evaluation, NO skill merges are needed:
 ---
 
 ## Original Sections (For Reference)
+
+---
+
+# PART 2: Plugins Analysis
+
+## Commands in Plugins
+
+**Total: 74 command files** across 35+ plugin categories.
+
+### OpenCode Command Quality Criteria
+
+Based on https://opencode.ai/docs/commands/:
+
+**Good Command Structure:**
+```yaml
+---
+description: "[What it does]"
+agent: [optional agent]
+model: [optional model]
+---
+
+[Prompt content with $ARGUMENTS, @file references, !`command` output]
+```
+
+**Key requirements:**
+- **description**: Brief, shown in TUI (max ~100 chars)
+- **agent**: Optional, triggers specific agent
+- **template**: The actual prompt
+- **Arguments**: Use `$ARGUMENTS` or `$1`, `$2`, etc.
+- **File references**: Use `@filename` to include files
+- **Shell output**: Use `!`command`` to inject command output
+
+### Commands Analysis
+
+| Plugin Category | Command Count | Quality Issues |
+|----------------|--------------|----------------|
+| conductor | 7 | Multiple commands, good structure |
+| tdd-workflows | 4 | Well-structured |
+| ui-design | 4 | Good |
+| error-debugging/error-diagnostics | 5 | Some duplicates |
+| code-refactoring | 3 | Good |
+| comprehensive-review | 2 | Good |
+| git-pr-workflows | 3 | Good |
+
+**Recommendation for Commands:**
+
+Commands in plugins are specialized and should **stay in plugins** since they are:
+- Domain-specific (business-analyst, ml-pipeline, security-audit)
+- Not part of core development workflow
+- Not referenced by main agents
+
+**Do NOT move to .opencode/commands/** unless they are:
+- Used by active agents
+- Part of core workflow
+
+---
+
+## Skills in Plugins
+
+**Total: 100+ skill files** across many plugin categories.
+
+### Clusters Identified
+
+| Cluster | Plugin Categories | Skill Count |
+|---------|------------------|-------------|
+| **UI/Design** | ui-design | ~15 skills |
+| **Python Dev** | python-development | ~15 skills |
+| **LLM/ML** | llm-application-dev, machine-learning-ops | ~12 skills |
+| **Security** | security-scanning, security-compliance | ~8 skills |
+| **Shell/Systems** | shell-scripting, systems-programming | ~5 skills |
+| **Business** | startup-business-analyst | ~5 skills |
+| **Observability** | observability-monitoring | ~4 skills |
+| **Payment** | payment-processing | ~3 skills |
+
+### Overlap Analysis
+
+| Skill Area | Overlaps With | Assessment |
+|------------|--------------|------------|
+| python-development skills | modern-python (main skill) | HIGH - should reference main skill |
+| llm-application-dev/skills/embedding-strategies | main embedding-strategies | DUPLICATE - remove from plugin |
+| shell-scripting skills | bash-pro (backup-agents) | OK - specialized |
+| ui-design skills | - | OK - domain specific |
+
+---
+
+## Recommendations
+
+### 1. Commands - KEEP IN PLUGINS
+
+Commands are domain-specific and should stay in their plugin folders. They are:
+- Not part of the core workflow (brainstorm → plan → execute → finish)
+- Used by specific use cases (security-audit, ml-pipeline)
+- Well-structured following OpenCode conventions
+
+### 2. Skills - Apply Progressive Disclosure
+
+Many skills in plugins are **well-structured** but could benefit from:
+- Progressive disclosure for larger skills
+- References to main skills (e.g., python-development should use modern-python)
+
+### 3. Duplicate Skills to Remove
+
+| Duplicate | Original Location | Action |
+|----------|------------------|--------|
+| llm-application-dev/skills/embedding-strategies | .opencode/skills/embedding-strategies | DELETE from plugin |
+| python-development skills | modern-python (main) | Keep - specialized focus |
+
+### 4. Generic Agent Approach
+
+**Key insight:** Instead of 62+ specific agents, use **generic skills** with focus parameters:
+
+**Current (bloated):**
+- 147 archived agents in backup-agents/
+- Each agent has specific permissions
+
+**Recommended (lean):**
+- 7 active agents with generic skill access
+- Agents pass "focus" parameter to skills
+- Skills adapt behavior based on focus
+
+Example:
+```
+# Instead of 10 specific agents:
+# - python-django-agent, python-fastapi-agent, python-flask-agent
+
+# Use 1 generic python-dev agent that:
+# - Calls python-pro with focus=django|fastapi|flask
+# - Calls modern-python with task=setup|testing|deployment
+```
+
+---
+
+## Summary: Recommended Actions
+
+| Action | Priority | Impact |
+|--------|----------|--------|
+| Keep commands in plugins | ✅ Done | N/A |
+| Remove duplicate embedding-strategies from plugin | High | -1 duplicate |
+| Apply progressive disclosure to large plugin skills | Medium | Token savings |
+| Consolidate backup-agents into generic skills | Low | Future consideration |
+
+---
+
+*Analysis based on OpenCode command conventions and skill-auditor quality criteria*
