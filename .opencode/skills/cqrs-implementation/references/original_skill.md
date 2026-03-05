@@ -33,9 +33,30 @@ Implement CQRS by separating the models and interfaces used for updating data (C
 ## Key Patterns
 
 ### Pattern 1: Separate Models (Cluster: Architecture)
-Each microservice must manage its own private database schema. Other services access the data only through that service's API or published events.
 
-### Pattern 2: Asynchronous Projection Update (Cluster: Architecture)
+The write model validates business rules; the read model optimizes for presentation.
+
+```typescript
+// Write Model (e.g., SQL/Transactional DB)
+interface UserAggregate {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    version: number;
+    changeName(newName: string): DomainEvent[]; // Business logic here
+}
+
+// Read Model (e.g., NoSQL/Materialized View)
+interface UserView {
+    userId: string; // Primary Key
+    fullName: string; // Denormalized for fast display
+    status: 'Active' | 'Pending'; // Derived state
+}
+```
+
+### Pattern 2: Asynchronous Projection Update (Eventual Consistency)
+
 Use an event stream to update the read model asynchronously.
 
 ```mermaid
@@ -49,17 +70,34 @@ graph LR
 ```
 
 ### Pattern 3: Query Handlers
+
 Queries are simple functions that bypass the write stack entirely.
+
+```typescript
+// services/readService.ts
+async function getUserView(userId: string): Promise<UserView> {
+    // Query directly into the optimized read model store (e.g., MongoDB or Redis)
+    const readDoc = await ReadDB.users.findOne({ userId });
+    
+    if (!readDoc) throw new NotFoundError();
+    
+    return {
+        userId: readDoc.id,
+        fullName: `${readDoc.firstName} ${readDoc.lastName}`, // Denormalized for display
+        status: readDoc.accountStatus // Derived state
+    };
+}
+```
 
 ## Best Practices
 
--   **Query Optimization:** Read models can be highly specialized (e.g., Elasticsearch for search).
--   **Command Simplicity:** Write handlers should be thin wrappers around domain logic.
+-   **Query Optimization:** Read models can be highly specialized (e.g., Elasticsearch for search, Redis for session data).
+-   **Command Simplicity:** Write handlers should be thin wrappers around domain logic, focused on validation and consistency.
 -   **Data Synchronization:** Embrace eventual consistency; notify clients when data might be stale.
 
 ## References
 
--   [CQRS Official Site](references/cqrs-official.html)
+-   [CQRS Official Site](https://cqrs.nu/)
 -   [Event Sourcing Patterns](references/event-sourcing.md)
 -   [Data Projection Strategies](references/data-projection.md)
 
