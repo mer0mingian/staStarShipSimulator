@@ -39,10 +39,12 @@ Focus on replacing lifecycle methods with Effect Hooks.
 | `shouldComponentUpdate`| `React.memo`, `useMemo`, `useCallback` | Prevent unnecessary re-renders |
 
 ### Step 2: State Management Modernization
+
 -   **Legacy:** Components manage local state via `this.setState`.
 -   **Modern:** Use `useState` for local state; use context/Zustand/React Query for global state.
 
 ### Step 3: Adopting Concurrency (React 18+)
+
 Implement features that allow React to interrupt urgent rendering tasks for critical updates.
 
 -   **`useTransition`**: For state updates that should not block UI responsiveness (e.g., filtering large lists).
@@ -80,9 +82,9 @@ return (
 
 ## References
 
--   [React Hooks Documentation](references/react-hooks.html)
--   [React Concurrent Features](references/concurrent-features.html)
--   [Migrating to React 18](references/react-18-migration.html)
+-   [React Hooks Documentation](https://react.dev/reference/react/hooks)
+-   [React Concurrent Features](https://react.dev/reference/react/useTransition)
+-   [Migrating to React 18](https://react.dev/blog/2022/03/08/react-18-beta)
 
 ---
 

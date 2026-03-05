@@ -1,6 +1,6 @@
 ---
 name: threat-mitigation-mapping
-description: "Map identified threats to appropriate security controls and mitigations. Use when prioritizing security investments, creating remediation plans, or validating control effectiveness. Focuses on STRIDE/DREAD/Attack Trees outcomes. Cluster: Security (SPLIT)"
+description: "Map identified threats to appropriate security controls and mitigations. Use when prioritizing security investments, creating remediation plans, or validating control effectiveness. Focuses on STRIDE/DREAD threat outcomes. Cluster: Security (SPLIT)"
 ---
 
 # Threat Mitigation Mapping
@@ -14,6 +14,10 @@ Systematically mapping identified threats (from modeling) to concrete, measurabl
 - Validating control effectiveness against specific threats
 - Developing comprehensive security architectures
 - Translating security requirements into implementation tasks
+
+## Threat Modeling Foundation
+
+This skill assumes you have already identified threats using a methodology like STRIDE (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege).
 
 ## Core Concepts: Mapping & Prioritization
 
@@ -41,27 +45,34 @@ $$\text{Residual Risk} = \text{Inherent Risk} \times (1 - \text{Control Effectiv
 
 ## Mitigation Strategy Templates
 
-### Template 1: Data In-Transit Protection (Cluster: Security)
+### Template 1: Data In-Transit Protection (Information Disclosure/Tampering)
+
 -   **Threat:** Eavesdropping on API traffic.
 -   **Control:** Enforce Transport Layer Security (TLS).
--   **Implementation:** Mandate TLS 1.3 end-to-end, pin certificates, configure HSTS headers.
+-   **Implementation:**
+    1.  Mandate TLS 1.3 end-to-end.
+    2.  Pin certificates (if applicable, e.g., for mobile clients).
+    3.  Configure HTTP Strict Transport Security (HSTS) headers.
 
-### Template 2: Input Validation for Injection Attacks (Cluster: Security)
+### Template 2: Input Validation for Injection Attacks (Tampering)
+
 -   **Threat:** SQL Injection, Cross-Site Scripting (XSS).
 -   **Control:** Strict input validation and parameterized queries.
--   **Implementation:** Use parameterized queries/ORMs; sanitize/encode all user-generated content.
+-   **Implementation:**
+    1.  Use parameterized queries/ORMs for all database interactions.
+    2.  Sanitize and encode all user-generated content before rendering (HTML context, URL context).
 
 ## Best Practices
 
 -   **Principle of Least Privilege:** Controls should enforce the minimum necessary access.
--   **Defense-in-Depth:** Implement overlapping controls.
--   **Auditability:** Ensure control implementation is auditable (logs, config verification).
+-   **Defense-in-Depth:** Implement overlapping controls (defense in depth).
+-   **Auditability:** Ensure control implementation is auditable (logs, configuration verification).
 
 ## References
 
--   [NIST SP 800-53 Catalog](references/nist-catalog.html)
--   [MITRE ATT&CK Framework](references/mitre-attack.html)
--   [OWASP ASVS](references/owasp-asvs.html)
+-   [NIST SP 800-53 Catalog](https://csrc.nist.gov/Projects/Risk-Management/framework-security-controls/csrc-catalog-search)
+-   [MITRE ATT&CK Framework](https://attack.mitre.org/) (For understanding TTPs)
+-   [OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/)
 
 ---
 

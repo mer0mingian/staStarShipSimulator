@@ -35,7 +35,7 @@ Master testing strategies for JavaScript and TypeScript applications using moder
 
 ## Key Patterns
 
-### Pattern 1: Unit Testing with Jest (Cluster: Code Quality)
+### Pattern 1: Unit Testing with Jest
 
 ```javascript
 // math.js
@@ -48,38 +48,63 @@ describe('add function', () => {
   test('should add two positive numbers correctly', () => {
     expect(add(2, 3)).toBe(5);
   });
-  // ... more tests
+
+  test('should handle zero correctly', () => {
+    expect(add(5, 0)).toBe(5);
+  });
+
+  test('should handle negative numbers', () => {
+    expect(add(-5, 2)).toBe(-3);
+  });
 });
 ```
 
-### Pattern 2: Component Integration Testing (Cluster: Frontend/UI)
+### Pattern 2: Component Integration Testing (React Testing Library)
 
 ```jsx
 import { render, screen, fireEvent } from '@testing-library/react';
-import Button from '../Button'; 
+import Button from '../Button'; // Assuming component exists
 
 test('button increments counter on click', () => {
   render(<Button initialCount={0} />);
+
   const button = screen.getByRole('button', { name: /count: 0/i });
-  fireEvent.click(button); 
+  
+  fireEvent.click(button); // Simulate user action
+  
+  // Assert based on the resulting DOM state
   expect(screen.getByRole('button', { name: /count: 1/i })).toBeInTheDocument();
 });
 ```
 
-### Pattern 3: Mocking API Responses (Cluster: Code Quality)
-
-Use Mock Service Worker (`msw`) for network mocking.
+### Pattern 3: Mocking API Responses
 
 ```javascript
 // API call utility
-const fetchUser = async (id) => { /* ... fetch logic ... */ };
+const fetchUser = async (id) => {
+  const res = await fetch(`/api/users/${id}`);
+  if (!res.ok) throw new Error('Failed to fetch');
+  return res.json();
+};
 
-// Test file setup using MSW handlers
+// Test file
+import { fetchUser } from '../api';
+import { rest } from 'msw'; // Mock Service Worker for API mocking
+
 server.use(
   rest.get('/api/users/:id', (req, res, ctx) => {
-    // ... mock logic ...
+    const { id } = req.params;
+    if (id === '1') {
+      return res(ctx.status(200), ctx.json({ id: 1, name: 'Test User' }));
+    }
+    return res(ctx.status(404));
   })
 );
+
+test('fetchUser returns correct data for user 1', async () => {
+  const user = await fetchUser(1);
+  expect(user.name).toBe('Test User');
+});
 ```
 
 ## Best Practices
@@ -91,10 +116,10 @@ server.use(
 
 ## References
 
--   [Jest Documentation](references/jest-docs.md)
--   [Testing Library Docs](references/testing-library.md)
--   [MSW (Mock Service Worker)](references/msw-docs.md)
--   [Vitest Documentation](references/vitest-docs.md)
+-   [Jest Documentation](https://jestjs.io/docs/)
+-   [Testing Library Docs](https://testing-library.com/docs/)
+-   [MSW (Mock Service Worker)](https://mswjs.io/docs/)
+-   [Vitest Documentation](https://vitest.dev/guide/)
 
 ---
 

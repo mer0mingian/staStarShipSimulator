@@ -61,8 +61,9 @@ Rank identified threats by severity (e.g., Likelihood $\times$ Impact). Map each
 
 ## References
 
--   [Microsoft STRIDE Threat Model Overview](references/microsoft-overview.html)
--   [OWASP Threat Modeling Cheat Sheet](references/owasp-cheatsheet.html)
+-   [Microsoft STRIDE Threat Model Overview](https://docs.microsoft.com/en-us/azure/security/benchmarks/threat-modeling-overview)
+-   [OWASP Threat Modeling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html)
+-   [STRIDE Categories Explained](references/stride-categories.md)
 
 ---
 

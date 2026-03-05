@@ -87,16 +87,14 @@ Use `revalidateTag` or `revalidatePath` within Server Actions or server-side dat
 
 ## Best Practices
 
--   **Colocate State:** Keep client components as shallow as possible; use them only where interactivity is mandatory.
+-   **Colocate State:** Keep client components as shallow as possible.
 -   **Server Actions:** Use for mutations (POST/PUT/DELETE) instead of client-side fetches to internal APIs.
 -   **Caching Strategy:** Rely on Next.js's default caching (`force-cache`) and only use `{ cache: 'no-store' }` for dynamic content.
--   **Layouts:** Keep layouts simple and focused on shared UI shells.
 
 ## References
 
 -   [Next.js App Router Docs](references/app-router-docs.html)
 -   [Server Components vs. Client Components](references/server-client-components.html)
--   [Data Fetching in App Router](references/data-fetching.html)
 -   [Next.js Server Actions](references/server-actions.html)
 
 ---

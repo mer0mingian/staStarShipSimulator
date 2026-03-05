@@ -39,7 +39,7 @@ Write clean, efficient, and maintainable code using modern ECMAScript features (
 Always prefer creating new objects/arrays over mutating existing ones to ensure predictable state changes.
 
 ```javascript
-const user = { id: 1, name: "Alice", settings: { theme: "dark" }, posts: [] };
+const user = { id: 1, name: "Alice", settings: { theme: "dark" } };
 
 // 1. Updating a top-level property
 const updatedUser1 = { ...user, name: "Alicia" };
@@ -53,12 +53,13 @@ const updatedUser2 = {
     }
 };
 
-// 3. Adding to an array (immutably)
+// 3. Adding to an array
 const newPosts = ["Post A", "Post B"];
 const userWithPosts = { ...user, posts: [...user.posts, ...newPosts] };
 ```
 
-### Pattern 2: Promise Chaining & Error Handling (Cluster: Code Quality)
+### Pattern 2: Promise Chaining & Error Handling
+
 Use `.then()` for success and `.catch()` for reliable error handling.
 
 ```javascript
@@ -75,17 +76,27 @@ fetch('/api/data')
     });
 ```
 
-### Pattern 3: Destructuring in Function Signatures (Cluster: Frontend/UI)
+### Pattern 3: Destructuring in Function Signatures
+
 Makes function signatures self-documenting and safer.
 
 ```javascript
+// BAD: Relies on parameter order
+function displayUser(user) {
+    console.log(user.name, user.email);
+}
+
 // GOOD: Explicitly defines expected keys and provides defaults
 function displayUser({ name, email, role = 'guest' }) {
     console.log(`Name: ${name}, Role: ${role}`);
 }
+
+displayUser({ name: "Bob", email: "b@e.com" }); // Works fine
+// displayUser({ email: "b@e.com" }); // Will fail if name is required (undefined)
 ```
 
-### Pattern 4: Functional Programming Concepts (Cluster: General)
+### Pattern 4: Functional Programming Concepts
+
 -   **Immutability**: Data structures should not change after creation.
 -   **Pure Functions**: Given the same input, always return the same output, no side effects.
 -   **Composition**: Building complex logic by chaining simple, pure functions.
@@ -99,9 +110,9 @@ function displayUser({ name, email, role = 'guest' }) {
 
 ## References
 
--   [MDN JavaScript Guide](references/mdn-guide.html)
--   [JavaScript.info ES6+ Features](references/javascript-info.html)
--   [Functional Programming in JS](references/fp-guide.html)
+-   [MDN JavaScript Guide](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+-   [JavaScript.info ES6+ Features](https://javascript.info/js-features)
+-   [Functional Programming in JS](https://medium.com/javascript-scene/function-composition-in-javascript-d470b29c4586)
 
 ---
 

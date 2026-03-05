@@ -42,6 +42,7 @@ Middleware runs sequentially and can modify the request/response cycle.
 ## Key Patterns
 
 ### Pattern 1: Centralized Error Handling
+
 Use a final error-handling middleware to catch errors thrown by preceding handlers/routes.
 
 ```javascript
@@ -80,10 +81,12 @@ module.exports = app;
 ```
 
 ### Pattern 2: Database Integration (ORM/ODM)
+
 -   **SQL (e.g., Sequelize/Prisma):** Use transaction blocks for multiple dependent writes.
 -   **NoSQL (e.g., Mongoose):** Use ODM features for schema validation on save.
 
 ### Pattern 3: Authentication with JWT
+
 1.  User logs in $\rightarrow$ Server verifies credentials.
 2.  Server creates JWT (with user ID, roles, expiry).
 3.  Server sends JWT back to client.
@@ -99,10 +102,10 @@ module.exports = app;
 
 ## References
 
--   [Express.js Documentation](references/express-docs.md)
--   [Fastify Documentation](references/fastify-docs.md)
--   [OWASP Top 10 for Node.js](references/owasp-nodejs.md)
--   [Joi/Zod Documentation](references/validation-docs.md)
+-   [Express.js Documentation](https://expressjs.com/)
+-   [Fastify Documentation](https://www.fastify.io/)
+-   [OWASP Top 10 for Node.js](https://owasp.org/www-project-top-ten/)
+-   [Joi/Zod Documentation](https://joi.dev/api/)
 
 ---
 

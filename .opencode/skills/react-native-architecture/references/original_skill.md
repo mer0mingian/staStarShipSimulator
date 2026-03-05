@@ -10,8 +10,8 @@ Architecting scalable, performant, and maintainable React Native applications, f
 ## When to Use This Skill
 
 - Starting a new, large-scale React Native project
-- Deciding between Expo managed workflow and Bare workflow
-- Implementing cross-platform state management (Zustand/Redux)
+- Deciding between bare workflow and Expo managed workflow
+- Implementing cross-platform state management (Zustand, Redux)
 - Setting up navigation structures (React Navigation)
 - Integrating native device features (camera, sensors)
 - Implementing offline synchronization strategies
@@ -44,7 +44,7 @@ Use nested navigators for complex flows:
 //   - HomeStack (Stack nested within a Tab)
 ```
 
-### Pattern 2: State Management with Zustand (Cluster: Frontend/UI)
+### Pattern 2: State Management with Zustand
 
 Use Zustand for simple, fast global state management across components.
 
@@ -77,7 +77,17 @@ const useUserStore = create<UserState>((set, get) => ({
 ```
 
 ### Pattern 3: Native Module Integration (Bare Workflow)
+
 If Expo managed is too restrictive, use Expo Dev Client or eject to Bare workflow to integrate custom native modules (Swift/Kotlin).
+
+```bash
+# Eject from managed workflow (if necessary)
+expo prebuild
+
+# Build native project
+npm run ios
+npm run android
+```
 
 ## Best Practices
 
@@ -88,10 +98,10 @@ If Expo managed is too restrictive, use Expo Dev Client or eject to Bare workflo
 
 ## References
 
--   [React Native Official Docs](references/rn-docs.html)
--   [Expo Documentation](references/expo-docs.html)
--   [React Navigation Docs](references/react-navigation.html)
--   [Zustand Documentation](references/zustand-docs.html)
+-   [React Native Official Docs](https://reactnative.dev/docs/getting-started)
+-   [Expo Documentation](https://docs.expo.dev/)
+-   [React Navigation Docs](https://reactnavigation.org/docs/getting-started)
+-   [Zustand Documentation](https://zustand-demo.pmnd.rs/)
 
 ---
 
