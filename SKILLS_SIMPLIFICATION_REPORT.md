@@ -264,29 +264,62 @@ rm -rf .agents/skills/google-workspace/
 
 ## Revised Consolidation Plan
 
-### ✅ Phase 1: COMPLETE - Duplicate Removal
+### ✅ Phase 1: COMPLETE - Duplicate Removal & Directory Restructuring
 
-**Executed:** Deleted 19 duplicate skills from `.agents/skills/`, kept only unique ones.
+**Actions taken:**
+1. Deleted 19 duplicate skills from `.agents/skills/`
+2. Moved unique skills (modern-python, notebooklm) to `.opencode/skills/`
+3. Removed empty `.agents/` directory
+4. Created `.opencode/backup-agents/` for plugin agents (62 agent collections)
 
-**Results:**
-```bash
-.agents/skills/ now contains:
-- modern-python/  (unique - not in .opencode!)
-- notebooklm/     (unique - not in .opencode!)
+**New Structure:**
+```
+.opencode/
+├── agents/           # Active agents (7 files)
+├── commands/        # Active commands (3 files)
+├── skills/          # All skills including modern-python, notebooklm (37 dirs)
+├── plugins/         # Plugin directories (now without agents)
+└── backup-agents/  # Archived agents from plugins (62 dirs)
 ```
 
 **Lines saved:** ~3800
 
 ---
 
-### Phase 2: Reduce Large Skills (Week 2)
-# DON'T: rm -rf .agents/skills/
-# DO: Remove specific duplicates except modern-python
+### ✅ Phase 2: Progressive Disclosure - COMPLETE for skill-auditor
 
-# Safe to delete (not referenced or reference points to .opencode/):
-rm -rf .agents/skills/template-skill/
-rm -rf .agents/skills/software-architecture/
-rm -rf .agents/skills/system-design/
+**Completed:**
+- skill-auditor: 671 lines → 150 lines (SKILL.md) + references/
+
+**New structure:**
+```
+skill-auditor/
+├── SKILL.md (150 lines)
+└── references/
+    ├── quality-criteria.md
+    ├── audit-template.md
+    └── anti-patterns.md
+```
+
+---
+
+### Phase 3: Reduce Remaining Large Skills
+
+Remaining skills to split:
+1. writing-skills (655 lines)
+2. excalidraw-diagrams (715 lines)
+3. embedding-strategies (608 lines)
+
+---
+
+### Summary of Changes
+
+| Change | Status |
+|--------|--------|
+| Phase 1: Duplicate removal | ✅ Complete |
+| Phase 2: skill-auditor split | ✅ Complete |
+| Directory restructuring | ✅ Complete |
+| Remaining large skills | ⏳ Pending |
 rm -rf .agents/skills/solid/
 rm -rf .agents/skills/skill-creator/
 rm -rf .agents/skills/differential-review/
