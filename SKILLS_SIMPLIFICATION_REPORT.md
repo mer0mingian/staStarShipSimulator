@@ -653,6 +653,267 @@ After re-evaluation, NO skill merges are needed:
 
 ---
 
+# PLAN: Cluster-by-Cluster Overlap Analysis
+
+## Audit Framework (Based on skill-auditor)
+
+### Quality Criteria for Each Skill
+
+For each skill, evaluate against:
+
+| Dimension | Criteria | Weight |
+|-----------|----------|--------|
+| **1. Structure** | SKILL.md <500 lines? Progressive disclosure used? | 20% |
+| **2. Discoverability** | Description has triggers (not workflow)? | **35%** (CRITICAL) |
+| **3. Content Quality** | Concise? Consistent? Right freedom level? | 15% |
+| **4. Effectiveness** | Discipline skills resist rationalization? | 10% |
+| **5. Workflows** | Checklists, feedback loops present? | 10% |
+| **6. Technical** | Scripts handle errors? | 10% |
+
+### Decision Matrix
+
+| Condition | Action |
+|-----------|--------|
+| Good structure + Good description + Referenced by agents | **KEEP** |
+| Good description + Not referenced + Specialized | KEEP (specialized) |
+| Poor description + Overlaps with other | **MERGE** into better skill |
+| Poor structure + Poor description + Not referenced | **DELETE** |
+| Large skill (>500 lines) | SPLIT (progressive disclosure) |
+
+---
+
+## Cluster Analysis Plan
+
+### Phase 1: Core Skills (Essential - 6 skills)
+
+**Priority: LOW** - These are working and referenced
+
+| Skill | Current Status | Analysis |
+|-------|----------------|----------|
+| brainstorming | Referenced by orchestrator | ✅ KEEP |
+| writing-plans | Referenced by architect | ✅ KEEP |
+| executing-plans | Referenced by commands | ✅ KEEP |
+| subagent-driven-development | Referenced by python-dev | ✅ KEEP |
+| finishing-a-development-branch | Referenced by workflow | ✅ KEEP |
+| using-git-worktrees | Referenced by writing-plans | ✅ KEEP |
+
+**Action:** No changes needed - essential and working
+
+---
+
+### Phase 2: Code Quality (7 skills)
+
+**Priority: MEDIUM** - Check for overlaps
+
+| Skill | Purpose | Check |
+|-------|---------|-------|
+| requesting-code-review | Pre-merge | Different from receiving? |
+| receiving-code-review | Post-review | Different from requesting? |
+| code-review-excellence | General review | Overlaps with requesting? |
+| comprehensive-review | Full review | Overlaps with code-review? |
+| differential-review | Security diffs | Subset of comprehensive? |
+| test-driven-development | TDD | Essential - keep |
+| systematic-debugging | Debug | Essential - keep |
+
+**Analysis needed:**
+- [ ] Does `code-review-excellence` overlap with `requesting-code-review`?
+- [ ] Is `differential-review` a subset of `comprehensive-review`?
+
+---
+
+### Phase 3: Python Development (18 skills)
+
+**Priority: HIGH** - Most skills, highest overlap risk
+
+| Skill | Lines | Description Quality | Action |
+|-------|-------|-------------------|--------|
+| modern-python | ? | ? | ✅ MAIN - keep |
+| python-dev-agents | ? | ? | Agent config - keep |
+| async-python-patterns | ? | ? | Specialized - keep |
+| python-background-jobs | ? | ? | Check overlap with async |
+| python-code-style | ? | ? | Keep |
+| python-configuration | ? | ? | Keep |
+| python-design-patterns | ? | ? | Keep |
+| python-error-handling | ? | ? | Keep |
+| python-observability | ? | ? | Keep |
+| python-packaging | ? | ? | Keep |
+| python-performance-optimization | ? | ? | Keep |
+| python-project-structure | ? | ? | Keep |
+| python-resilience | ? | ? | Keep |
+| python-resource-management | ? | ? | Keep |
+| python-testing-patterns | ? | ? | Keep |
+| python-type-safety | ? | ? | Keep |
+| python-anti-patterns | ? | ? | Keep |
+| uv-package-manager | ? | ? | Keep |
+
+**Action:** Sample check descriptions - likely all good
+
+---
+
+### Phase 4: Architecture (9 skills)
+
+**Priority: MEDIUM**
+
+| Skill | Check |
+|-------|-------|
+| system-design | Core - keep |
+| software-architecture | Overlaps with system-design? |
+| solid | Subset of architecture? |
+| architecture-patterns | General - keep |
+| microservices-patterns | Specialized - keep |
+| cqrs-implementation | Specialized - keep |
+| event-store-design | Specialized - keep |
+| saga-orchestration | Specialized - keep |
+| projection-patterns | Specialized - keep |
+
+**Analysis needed:**
+- [ ] Does `software-architecture` = `system-design`?
+- [ ] Is `solid` needed separately?
+
+---
+
+### Phase 5: LLM/AI (10 skills)
+
+**Priority: MEDIUM**
+
+| Skill | Check |
+|-------|-------|
+| senior-ml-engineer | Main ML skill |
+| embedding-strategies | Keep - specialized |
+| llm-evaluation | Keep - specialized |
+| prompt-engineering-patterns | Keep - specialized |
+| rag-implementation | Keep - specialized |
+| langchain-architecture | Overlaps with rag? |
+| vector-index-tuning | Subset of embedding? |
+| similarity-search-patterns | Overlaps with vector? |
+| hybrid-search-implementation | Keep - specialized |
+| qdrant-vector-search | Subset of vector? |
+
+**Analysis needed:**
+- [ ] `langchain-architecture` vs `rag-implementation` overlap?
+- [ ] `vector-index-tuning` vs `similarity-search` overlap?
+- [ ] `qdrant-vector-search` vs `embedding-strategies`?
+
+---
+
+### Phase 6-16: Remaining Clusters
+
+**Priority: LOW** - Generally specialized
+
+For each:
+- Check if skills are referenced by agents
+- Check for clear descriptions
+- Keep specialized skills (they're domain-specific)
+
+---
+
+## Execution Plan
+
+### Step 1: Sample Check (5 skills)
+Pick 5 skills from different clusters, apply full audit
+
+### Step 2: Identify Issues
+- List skills with poor descriptions
+- List skills with >500 lines
+- List skills not referenced by agents
+
+### Step 3: Decide Actions
+For each issue:
+- DELETE: Not referenced + poor quality
+- MERGE: Overlaps + both poor
+- IMPROVE: Good potential + fixable
+- KEEP: Good quality + referenced
+
+### Step 4: Execute
+Make changes in order of priority
+
+---
+
+### Step 4: Execute
+Make changes in order of priority
+
+---
+
+## Questions Before Proceeding
+
+1. Should I proceed with this analysis?
+2. Focus on most referenced skills first?
+3. Include agent reference check in analysis?
+
+---
+
+# CLUSTER AUDIT TEMPLATE
+
+Use this template for each cluster:
+
+## Cluster: [NAME]
+
+### Skills in Cluster
+| # | Skill Name | Lines | Description Quality | Agent Ref | Issues | Action |
+|---|-----------|-------|-------------------|-----------|--------|--------|
+| 1 | | | | | | |
+| 2 | | | | | | |
+
+### Quality Assessment
+
+**Discoverability Check:**
+- [ ] Description follows pattern: `[What]. Use when [TRIGGERS].`
+- [ ] Triggers are specific (not vague)
+- [ ] Description doesn't summarize workflow
+
+**Structure Check:**
+- [ ] SKILL.md < 500 lines
+- [ ] Progressive disclosure used if >200 lines
+- [ ] References one level deep
+
+**Content Check:**
+- [ ] Concise (doesn't over-explain)
+- [ ] Consistent terminology
+- [ ] Right degree of freedom
+
+### Overlap Analysis
+
+| Skill A | Skill B | Overlap Type | Merge? |
+|---------|---------|--------------|--------|
+| | | | |
+
+### Final Recommendations
+
+| Skill | Action | Rationale |
+|-------|--------|-----------|
+| | | |
+
+---
+
+# CURRENT CLUSTERS (170 skills)
+
+## Quick Reference
+
+| Cluster | Count | Priority |
+|---------|-------|----------|
+| Core Workflow | 6 | LOW - working |
+| Code Quality | 7 | MEDIUM |
+| Python Development | 18 | HIGH |
+| JavaScript/TypeScript | 5 | LOW |
+| Frontend/UI | 14 | LOW |
+| Architecture | 9 | MEDIUM |
+| LLM/AI | 10 | MEDIUM |
+| Data Engineering | 5 | LOW |
+| DevOps/Cloud | 13 | LOW |
+| Security | 6 | LOW |
+| Shell/Systems | 4 | LOW |
+| Specialized Domains | 17 | LOW |
+| Meta Skills | 6 | LOW |
+| Documentation | 4 | LOW |
+| Incident Response | 3 | LOW |
+| Other | 9 | LOW |
+
+---
+
+*Document ready for cluster-by-cluster analysis when approved*
+
+---
+
 # PART 2: Plugins Analysis
 
 ## Commands in Plugins
