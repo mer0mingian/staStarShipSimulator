@@ -11,6 +11,7 @@ Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-s
     - Ensure `.venv` is created and used for requirements.
     - Check `.gitignore` to ensure `.venv` is excluded.
 - **Reference Files:** Do NOT read or reference `STA2e_Core Rulebook_DIGITAL_v1.1.txt`. Use `starshiprules.md` and other extracted reference files instead.
+- **Document Learnings:** After every significant user interaction, decision, or milestone completion, update `docs/learnings_and_decisions.md` to capture what was learned and what was decided.
 
 ## 1. Think Before Coding
 
