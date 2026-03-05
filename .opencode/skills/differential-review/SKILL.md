@@ -1,7 +1,76 @@
 ---
 name: differential-review
-description: "Perform security-focused differential review of code changes (PRs, commits, diffs). Use when analyzing code for security regressions, identifying blast radius, and checking test coverage. Adapts analysis depth to codebase size."
+description: "Perform security-focused differential review of code changes (PRs, commits, diffs). Use when analyzing code for security regressions, identifying blast radius, and checking test coverage. Adapts analysis depth to codebase size. Cluster: Code Quality (CHECK)"
 ---
+
+# Differential Security Review
+
+Security-focused code review for PRs, commits, and diffs.
+
+## When to Use This Skill
+
+- Analyzing code for security regressions in high-risk areas (Auth, Crypto, Validation)
+- Determining the "blast radius" of a change
+- Checking test coverage impact on security boundaries
+- Reviewing security-related commits or PRs
+
+## Core Principles (See references/core-principles.md)
+
+1.  **Risk-First**: Focus on auth, crypto, value transfer, external calls.
+2.  **Evidence-Based**: Every finding must be tied to git history, line numbers, or attack scenarios.
+3.  **Adaptive Scope**: Review depth changes based on perceived risk and codebase size (SMALL/MEDIUM/LARGE).
+4.  **Honest Limitations**: Explicitly state coverage limits and confidence level.
+5.  **Output-Driven**: Always generate a comprehensive markdown report file.
+
+## Security Rationalizations (Do Not Skip) (See references/rationalizations.md)
+
+| Rationalization | Why It's Wrong | Required Action |
+|-----------------|----------------|-----------------|
+| "Small PR, quick review" | Heartbleed was 2 lines | Classify by RISK, not size |
+| "I know this codebase" | Familiarity breeds blind spots | Build explicit baseline context |
+| "Git history takes too long"| History reveals regressions | Never skip Phase 1 analysis |
+| "Blast radius is obvious" | You'll miss transitive callers | Calculate quantitatively |
+| "No tests = not my problem"| Missing tests = elevated risk rating | Flag in report, elevate severity |
+| "Just a refactor, no security impact" | Refactors break invariants | Analyze as HIGH until proven LOW |
+| "I'll explain verbally" | No artifact = findings lost | Always write report |
+
+## Quick Reference
+
+### Codebase Size Strategy
+-   **SMALL (<20 files):** DEEP review of all dependencies.
+-   **MEDIUM (20-200):** FOCUSED review on 1-hop dependencies and priority files.
+-   **LARGE (200+):** SURGICAL review of critical paths only.
+
+### Risk Level Triggers
+-   **HIGH:** Auth, crypto, external calls, value transfer, validation removal.
+-   **MEDIUM:** Business logic changes, new public APIs.
+-   **LOW:** Comments, tests, UI, logging.
+
+## Workflow Overview (See references/methodology.md)
+
+1.  **Pre-Analysis** $\rightarrow$ **Phase 0: Triage** (Determine size/risk profile)
+2.  **Phase 1: Code Analysis** (Review diff line-by-line)
+3.  **Phase 2: Test Coverage** (Check existing tests vs. new logic)
+4.  **Phase 3: Blast Radius** (Identify callers/dependencies)
+5.  **Phase 4: Deep Context** (Investigate HIGH RISK areas)
+6.  **Phase 5: Adversarial Modeling** (Simulate exploits for HIGH risk)
+7.  **Phase 6: Reporting** (Generate final markdown report)
+
+## Next Steps & Output
+
+-   If findings exist, transform them using an `issue-writer` command template.
+-   Always generate and provide the full markdown report.
+
+## References
+
+-   [Methodology Phases](references/methodology.md)
+-   [Adversarial Modeling](references/adversarial.md)
+-   [Reporting Templates](references/reporting.md)
+
+---
+
+**Remember:** Focus on security regressions, blast radius, and test coverage. (Cluster: Code Quality)
+
 
 # Differential Security Review
 
