@@ -1,4 +1,9 @@
 {
+	"folders": [
+		{
+			"path": ".."
+		}
+    ],
     "settings": {
         "workbench.colorCustomizations": {
             "minimap.background": "#00000000",

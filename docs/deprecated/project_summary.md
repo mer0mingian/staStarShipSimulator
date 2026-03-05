@@ -1,11 +1,13 @@
 # STA Starship Simulator - Project Summary
 
+IMPORTANT: The content of this file is **OUTDATED. DO NOT USE IT, EXCEPT FOR REFERENCE!**
+
 ## Overview
 STA Starship Simulator is a web-based starship operations and combat simulator for the Star Trek Adventures 2nd Edition (STA 2e) tabletop RPG. It is designed to replace paper-based tracking of ship stats, shields, and momentum, allowing players to use their own devices (phones, tablets, laptops) while a shared "viewscreen" displays the tactical situation.
 
 ## Core Functionality
 - **Multiplayer/Campaigns:** Supports GM-hosted campaigns with password protection. Players can join, claim characters, and select bridge positions.
-- **Combat Simulation:** 
+- **Combat Simulation:**
     - Hex-based tactical map with terrain (nebulae, asteroids).
     - Full damage system (shields, breaches, system destruction).
     - Turn-based combat alternating between players and enemies.
