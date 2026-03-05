@@ -1,75 +1,53 @@
 ---
 name: software-architecture
-description: Guide for quality focused software architecture. This skill should be used when users want to write code, design architecture, analyze code, in any case that relates to software development.
+description: "Guide for quality focused software architecture. This skill should be used when users want to write code, design architecture, analyze code, in any case that relates to software development. Focuses on Clean Architecture, DDD, and framework independence. Cluster: Architecture (CHECK)"
 ---
 
-# Software Architecture Development Skill
+# Software Architecture Principles
 
-This skill provides guidance for quality focused software development and architecture. It is based on Clean Architecture and Domain Driven Design principles.
+Guidance on designing robust, maintainable, and scalable software architecture using Clean Architecture and Domain-Driven Design (DDD) principles.
 
-## Code Style Rules
+## When to Use This Skill
 
-### General Principles
+- Designing new microservices or monolithic decomposition
+- Auditing existing architecture for structural integrity
+- Making framework technology choices (e.g., ORM, messaging)
+- Evaluating proposed designs for adherence to separation of concerns
 
-- **Early return pattern**: Always use early returns when possible, over nested conditions for better readability
-- Avoid code duplication through creation of reusable functions and modules
-- Decompose long (more than 80 lines of code) components and functions into multiple smaller components and functions. If they cannot be used anywhere else, keep it in the same file. But if file longer than 200 lines of code, it should be split into multiple files.
-- Use arrow functions instead of function declarations when possible
+## Core Principles (See references/core-principles.md)
 
-### Best Practices
+### 1. Decoupling & Dependencies
+-   **Dependency Rule**: Dependencies must only point inwards (Entities/Domain $\rightarrow$ Infrastructure/Frameworks). Frameworks and databases should never influence core business logic.
+-   **Framework Independence**: Business logic must be usable without the web framework or database layer.
 
-#### Library-First Approach
+### 2. Domain-Driven Design (DDD)
+-   **Ubiquitous Language**: Use domain terms consistently across code, tests, and communication.
+-   **Entities & Aggregates**: Define domain concepts clearly.
+-   **Bounded Contexts**: Use as the basis for service/module boundaries.
 
-- **ALWAYS search for existing solutions before writing custom code**
-  - Check npm for existing libraries that solve the problem
-  - Evaluate existing services/SaaS solutions
-  - Consider third-party APIs for common functionality
-- Use libraries instead of writing your own utils or helpers. For example, use `cockatiel` instead of writing your own retry logic.
-- **When custom code IS justified:**
-  - Specific business logic unique to the domain
-  - Performance-critical paths with special requirements
-  - When external dependencies would be overkill
-  - Security-sensitive code requiring full control
-  - When existing solutions don't meet requirements after thorough evaluation
+### 3. Clean Architecture Concepts
+-   **Entities (Core Domain)**: Business rules that change infrequently.
+-   **Use Cases (Application)**: Orchestrate domain logic to fulfill specific application goals.
+-   **Interface Adapters**: Translate data between use cases and external agents (e.g., Controllers, Presenters, Gateways).
+-   **Frameworks & Drivers (Infrastructure)**: Databases, web frameworks, external APIs.
 
-#### Architecture and Design
+## Anti-Patterns to Avoid (See references/anti-patterns.md)
 
-- **Clean Architecture & DDD Principles:**
-  - Follow domain-driven design and ubiquitous language
-  - Separate domain entities from infrastructure concerns
-  - Keep business logic independent of frameworks
-  - Define use cases clearly and keep them isolated
-- **Naming Conventions:**
-  - **AVOID** generic names: `utils`, `helpers`, `common`, `shared`
-  - **USE** domain-specific names: `OrderCalculator`, `UserAuthenticator`, `InvoiceGenerator`
-  - Follow bounded context naming patterns
-  - Each module should have a single, clear purpose
-- **Separation of Concerns:**
-  - Do NOT mix business logic with UI components
-  - Keep database queries out of controllers
-  - Maintain clear boundaries between contexts
-  - Ensure proper separation of responsibilities
+-   **NIH (Not Invented Here) Syndrome:** Don't build custom solutions when established, high-quality libraries exist.
+-   **Mixing Concerns:** Database queries in controllers, UI logic in domain entities.
+-   **Generic Naming:** Avoid vague names like `utils`, `helpers`, `common`. Use domain-specific names.
 
-#### Anti-Patterns to Avoid
+## Best Practices
 
-- **NIH (Not Invented Here) Syndrome:**
-  - Don't build custom auth when Auth0/Supabase exists
-  - Don't write custom state management instead of using Redux/Zustand
-  - Don't create custom form validation instead of using established libraries
-- **Poor Architectural Choices:**
-  - Mixing business logic with UI components
-  - Database queries directly in controllers
-  - Lack of clear separation of concerns
-- **Generic Naming Anti-Patterns:**
-  - `utils.js` with 50 unrelated functions
-  - `helpers/misc.js` as a dumping ground
-  - `common/shared.js` with unclear purpose
-- Remember: Every line of custom code is a liability that needs maintenance, testing, and documentation
+-   **Code Quality:** Follow SOLID principles, break down complex functions/files.
+-   **Custom Code Justification:** Only write custom code for logic unique to the business domain or security-sensitive paths.
 
-#### Code Quality
+## References
 
-- Proper error handling with typed catch blocks
-- Break down complex logic into smaller, reusable functions
-- Avoid deep nesting (max 3 levels)
-- Keep functions focused and under 50 lines when possible
-- Keep files focused and under 200 lines of code when possible
+-   [Clean Architecture Diagram & Explanation](references/clean-architecture-diagram.md)
+-   [DDD Glossary](references/ddd-glossary.md)
+-   [ADR Usage](references/adr-usage.md)
+
+---
+
+**Remember:** Architecture is about managing complexity and ensuring business rules are insulated from infrastructure churn. (Cluster: Architecture)

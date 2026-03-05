@@ -2,6 +2,64 @@
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
+---
+
+# Core Development Workflow
+
+This project uses a **skill-based workflow** for software development. Understanding when to invoke each skill is critical.
+
+## The Workflow Chain
+
+```
+brainstorming → writing-plans → (subagent-driven-development OR executing-plans) → finishing-a-development-branch
+                            ↓
+                    using-git-worktrees
+```
+
+### Phase 1: Exploration (brainstorming)
+- **When:** User wants to build something new, fix a bug, or explore a design
+- **Skill:** `superpowers:brainstorming`
+- **Purpose:** Ask questions, refine requirements, explore alternatives, create design document
+
+### Phase 2: Planning (writing-plans)
+- **When:** Design is approved, ready to implement
+- **Skill:** `superpowers:writing-plans`
+- **Purpose:** Break work into bite-sized tasks (2-5 min each), specify exact file paths and verification steps
+
+### Phase 3: Implementation
+- **Option A - Same session:** `superpowers:subagent-driven-development`
+  - Use when: Working through tasks sequentially in current session
+- **Option B - Parallel:** `superpowers:executing-plans`  
+  - Use when: Multiple independent tasks can run in parallel
+
+### Phase 4: Cleanup (finishing-a-development-branch)
+- **When:** All tasks complete
+- **Skill:** `superpowers:finishing-a-development-branch`
+- **Purpose:** Verify tests pass, present merge/PR options, cleanup worktree
+
+### Supporting Skills
+- **using-git-worktrees:** Creates isolated workspace on new branch (used by writing-plans)
+- **systematic-debugging:** For troubleshooting issues
+- **test-driven-development:** For writing failing tests first
+- **verification-before-completion:** For confirming fixes work
+
+## Skill Invocation Guidelines
+
+**Key principle:** Each skill has a specific trigger. Don't guess - follow the chain.
+
+| Trigger | Skill to Use |
+|---------|---------------|
+| "Let's build X", "design Y" | brainstorming first |
+| "Plan this", "break down" | writing-plans |
+| "Implement", "work through tasks" | subagent-driven-development |
+| "Parallel", "batch" | executing-plans |
+| "Complete", "finish", "merge" | finishing-a-development-branch |
+| "Debug", "why is this broken" | systematic-debugging |
+| "Write tests", "TDD" | test-driven-development |
+| "Verify fix", "confirm it works" | verification-before-completion |
+
+---
+
 ## AI Assistant Rules & Project Constraints (CRITICAL)
 
 - **Minimal Changes:** Keep changes to existing files absolutely minimal! This is a private extension to an open-source project, and compatibility with the upstream branch is paramount.

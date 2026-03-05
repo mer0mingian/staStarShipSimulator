@@ -9,4 +9,5 @@ permission:
     "embedding-strategies": allow
     "senior-ml-engineer": allow
     "python-development/python-performance-optimization": allow
+    "modern-python": allow
 ---

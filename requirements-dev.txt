@@ -2,5 +2,8 @@
 pytest>=7.4.0
 pytest-cov>=4.1.0
 
+# Database migrations
+alembic>=1.13.1
+
 # Build/packaging
 pyinstaller>=6.0

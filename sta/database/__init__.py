@@ -16,6 +16,14 @@ from .schema import (
     CharacterTraitRecord,
     PersonnelEncounterRecord,
 )
+from .vtt_schema import (
+    VTTCharacterRecord,
+    VTTShipRecord,
+    UniverseLibraryRecord,
+    TraitRecord,
+    TalentRecord,
+    WeaponRecord,
+)
 
 __all__ = [
     "init_db",
@@ -34,4 +42,10 @@ __all__ = [
     "SceneNPCRecord",
     "CharacterTraitRecord",
     "PersonnelEncounterRecord",
+    "VTTCharacterRecord",
+    "VTTShipRecord",
+    "UniverseLibraryRecord",
+    "TraitRecord",
+    "TalentRecord",
+    "WeaponRecord",
 ]
