@@ -23,7 +23,8 @@
 - python-dev-agents/python-pro
 
 **Best For**: Core Python implementation, database work, API development
-**Recommended Model**: `opencode/minimax-m2.5-free` (free tier)
+**Recommended Model**: `opencode/minimax-m2.5-free`
+**Skills**: modern-python, solid, python-pro, test-driven-development, etc. (free tier)
 
 ### 2. code-reviewer
 **Role**: Quality Assurance
@@ -39,7 +40,8 @@
 - differential-review
 
 **Best For**: Code quality reviews, security audits, architecture validation
-**Recommended Model**: `opencode/claude-sonnet-4-5` (high quality for reviews)
+**Recommended Model**: `opencode/claude-sonnet-4-5`
+**Skills**: modern-python, code-reviewer, security-auditor, etc. (high quality for reviews)
 
 ### 3. code-auditor
 **Role**: Quality Assurance
@@ -154,6 +156,33 @@ Since agent configurations use `model: inherit`, they will use the default model
 1. **Set default to free tier** for most work: `opencode/minimax-m2.5-free`
 2. **Override for reviews** by temporarily changing config when needed
 3. **Alternative**: Use Task tool to specify model per invocation
+
+## Updated Agent Skill Configuration
+
+### Final Skill Assignment
+
+| Agent | Has modern-python | Has python-pro | Has SOLID | Total Python Skills | Notes |
+|-------|-------------------|----------------|-----------|---------------------|-------|
+| python-dev | ✅ | ✅ | ✅ | 3 | Primary implementation agent |
+| code-reviewer | ✅ | ❌ | ❌ | 1 | Code quality reviews |
+| architect | ❌ | ✅ | ❌ | 1 | System design |
+| data-engineer | ✅ | ❌ | ❌ | 1 | Database work |
+| cloud-infra | ❌ | ❌ | ❌ | 0 | Not needed (local dev) |
+| code-auditor | ❌ | ❌ | ❌ | 0 | Inherits from code-reviewer |
+| orchestrator | ❌ | ❌ | ❌ | 0 | Coordination only |
+
+### Key Updates
+
+1. **python-dev**: Now has ALL required skills
+   - ✅ modern-python (modern tooling: uv, ruff, ty)
+   - ✅ solid (SOLID principles)
+   - ✅ python-pro (Python development patterns)
+
+2. **cloud-infra**: Not needed for local development
+   - Removed from active agent list
+   - Will not be used for this project
+
+3. **All other agents**: Maintain their specialized skills
 
 ## Agent Assignment Plan
 
