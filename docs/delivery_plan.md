@@ -184,18 +184,18 @@ Create new VTT database schema alongside legacy tables, prepare for clean migrat
 ### Overview
 Full campaign lifecycle management with GM controls and player access.
 
-### Status: IN PROGRESS
+### Status: ✅ COMPLETE (2026-03-06)
 
 ### Detailed Tasks
-See `docs/milestone2_tasks.md` for specific implementation steps.
+See `docs/milestone3_tasks.md` for specific implementation steps.
 
-### Current State
-Most campaign infrastructure already exists. Main gaps:
-- Resource pool management (Momentum/Threat at campaign level)
-- Universe Library API (new VTT integration)
+### Current State (as of M2 completion)
+- Campaign resource pools (Momentum/Threat) exist
+- Universe Library API functional
 - VTT character/ship integration with campaigns
+- Session token system with expiration
 
-### Tasks (Summary)
+---
 
 #### Task 2.1: Campaign CRUD API
 **Agent**: python-dev
@@ -253,72 +253,32 @@ Most campaign infrastructure already exists. Main gaps:
 - ✅ GM authentication working
 - ✅ All tests passing
 
-### Timeline: 5-7 days
+### Status: ✅ COMPLETE
+
+### Detailed Tasks
+See `docs/milestone2_tasks.md` for implementation details and test results.
+
+### Completed Features
+- Campaign resource pools (Momentum/Threat)
+- Universe Library API (characters/ships with categories)
+- VTT character/ship integration (linking tables, endpoints)
+- Session token enhancement (expiration, refresh)
+
+All 257 tests passing (including 54 new M2 tests).
+
+---
 
 ## Milestone 3: Scene Management
 
 ### Overview
 Complete scene lifecycle with narrative and combat support.
 
+### Status: 🔄 IN PROGRESS
+
 ### Tasks
+See `docs/milestone3_tasks.md` for complete task breakdown.
 
-#### Task 3.1: Scene CRUD API
-**Agent**: python-dev
-**Skills**: modern-python, fastapi-pro
-**Model**: `opencode/minimax-m2.5-free`
-
-- [ ] Implement `/api/scenes/*` endpoints:
-  - `POST /api/scenes` - Create scene
-  - `GET /api/scenes/{id}` - Get scene details
-  - `PUT /api/scenes/{id}` - Update scene
-  - `POST /api/scenes/{id}/activate` - Activate scene
-  - `POST /api/scenes/{id}/end` - End scene
-  - `GET /api/scenes/{id}/participants` - List participants
-- [ ] Add scene type support (narrative, combat, social)
-- [ ] Implement scene status transitions (draft → active → completed)
-
-**Files**: `sta/web/routes/scenes.py`
-
-#### Task 3.2: Scene Transitions
-**Agent**: python-dev
-**Skills**: modern-python
-**Model**: `opencode/minimax-m2.5-free`
-
-- [ ] Implement connected scene logic
-- [ ] Add Momentum reduction on transition (min 0)
-- [ ] Create GM prompt for next scene selection
-- [ ] Implement ad-hoc scene creation
-- [ ] Add campaign overview return option
-
-**Files**: `sta/web/routes/scenes.py`, `sta/mechanics/scene_transitions.py` (new)
-
-#### Task 3.3: Participant Management
-**Agent**: python-dev
-**Skills**: modern-python
-**Model**: `opencode/minimax-m2.5-free`
-
-- [ ] Implement `/api/scenes/{id}/participants` endpoints
-- [ ] Add character/ship assignment to scenes
-- [ ] Implement visibility controls (GM vs players)
-- [ ] Create initiative order management
-- [ ] Add turn tracking system
-
-**Files**: `sta/web/routes/scenes.py`, `sta/models/vtt/models.py`
-
-### Testing Strategy
-- **Unit Tests**: Scene validation and state transitions
-- **Integration Tests**: Scene lifecycle workflows
-- **Concurrency Tests**: Multiple participants joining
-- **State Tests**: Scene status transitions
-
-### Acceptance Criteria
-- ✅ Scene CRUD fully functional
-- ✅ Scene transitions with Momentum management
-- ✅ Participant management with visibility controls
-- ✅ Initiative and turn system working
-- ✅ All tests passing
-
-### Timeline: 5-7 days
+---
 
 ## Milestone 4: Character/Ship CRUD
 
