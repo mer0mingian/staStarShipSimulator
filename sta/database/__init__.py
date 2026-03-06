@@ -15,6 +15,8 @@ from .schema import (
     SceneNPCRecord,
     CharacterTraitRecord,
     PersonnelEncounterRecord,
+    SceneParticipantRecord,
+    SceneShipRecord,
 )
 from .vtt_schema import (
     VTTCharacterRecord,
@@ -43,6 +45,8 @@ __all__ = [
     "SceneNPCRecord",
     "CharacterTraitRecord",
     "PersonnelEncounterRecord",
+    "SceneParticipantRecord",
+    "SceneShipRecord",
     "VTTCharacterRecord",
     "VTTShipRecord",
     "UniverseLibraryRecord",
