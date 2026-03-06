@@ -412,6 +412,10 @@ class CampaignRecord(Base):
     # Campaign state
     is_active: Mapped[bool] = mapped_column(default=True)
 
+    # Campaign-level resource pools
+    momentum: Mapped[int] = mapped_column(Integer, default=0)
+    threat: Mapped[int] = mapped_column(Integer, default=0)
+
     # GM password (hashed) - default is "ENGAGE1"
     gm_password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 

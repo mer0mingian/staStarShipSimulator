@@ -2416,35 +2416,91 @@ def api_convert_scene(scene_id: int):
                 "message": f"Scene converted from {old_type} to {new_type}",
             }
         )
+    finally:
+        session.close()
 
-        if not gm or session_token != gm.session_token:
-            return jsonify({"error": "Only GM can convert scenes"}), 403
+
+# =============================================================================
+# Campaign Resource Pool API
+# =============================================================================
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/resources", methods=["GET"])
+def api_get_campaign_resources(campaign_id: str):
+    """API: Get campaign momentum and threat pools."""
+    session = get_session()
+    try:
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        return jsonify(
+            {
+                "momentum": campaign.momentum,
+                "threat": campaign.threat,
+                "momentum_max": 6,
+            }
+        )
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/momentum", methods=["POST"])
+def api_update_campaign_momentum(campaign_id: str):
+    """API: Add or subtract campaign momentum."""
+    session = get_session()
+    try:
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
 
         data = request.get_json()
-        new_type = data.get("scene_type")
+        amount = data.get("amount", 0)
 
-        if new_type not in (
-            "narrative",
-            "starship_encounter",
-            "personal_encounter",
-            "social_encounter",
-        ):
-            return jsonify({"error": "Invalid scene type"}), 400
-
-        old_type = scene.scene_type
-        scene.scene_type = new_type
-
-        # Update has_map based on type (social encounters don't have maps)
-        scene.has_map = new_type != "social_encounter"
+        campaign.momentum = max(0, min(6, campaign.momentum + amount))
 
         session.commit()
 
         return jsonify(
             {
                 "success": True,
-                "old_type": old_type,
-                "new_type": new_type,
-                "message": f"Scene converted from {old_type} to {new_type}",
+                "momentum": campaign.momentum,
+                "momentum_max": 6,
+            }
+        )
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/threat", methods=["POST"])
+def api_update_campaign_threat(campaign_id: str):
+    """API: Add or subtract campaign threat."""
+    session = get_session()
+    try:
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        data = request.get_json()
+        amount = data.get("amount", 0)
+
+        campaign.threat = max(0, campaign.threat + amount)
+
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "threat": campaign.threat,
             }
         )
     finally:
