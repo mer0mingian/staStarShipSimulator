@@ -105,27 +105,35 @@ class VTTCharacterRecord(Base):
     def validate_vtt_constraints(self) -> list[str]:
         """Validate VTT-specific constraints for character."""
         errors = []
-        
+
         # Validate attribute ranges (7-12 for humanoids)
         attrs = json.loads(self.attributes_json)
         for attr_name, value in attrs.items():
             if not (7 <= value <= 12):
-                errors.append(f"Attribute {attr_name} must be between 7-12, got {value}")
-        
+                errors.append(
+                    f"Attribute {attr_name} must be between 7-12, got {value}"
+                )
+
         # Validate discipline ranges (0-5)
         discs = json.loads(self.disciplines_json)
         for disc_name, value in discs.items():
             if not (0 <= value <= 5):
-                errors.append(f"Discipline {disc_name} must be between 0-5, got {value}")
-        
+                errors.append(
+                    f"Discipline {disc_name} must be between 0-5, got {value}"
+                )
+
         # Validate stress ranges
         if not (0 <= self.stress <= self.stress_max):
-            errors.append(f"Stress must be between 0-{self.stress_max}, got {self.stress}")
-        
+            errors.append(
+                f"Stress must be between 0-{self.stress_max}, got {self.stress}"
+            )
+
         # Validate determination ranges
         if not (0 <= self.determination <= self.determination_max):
-            errors.append(f"Determination must be between 0-{self.determination_max}, got {self.determination}")
-        
+            errors.append(
+                f"Determination must be between 0-{self.determination_max}, got {self.determination}"
+            )
+
         return errors
 
     @classmethod
@@ -280,29 +288,33 @@ class VTTShipRecord(Base):
     def validate_vtt_constraints(self) -> list[str]:
         """Validate VTT-specific constraints for ship."""
         errors = []
-        
+
         # Validate system ranges (7-12)
         systems = json.loads(self.systems_json)
         for system_name, value in systems.items():
             if not (7 <= value <= 12):
                 errors.append(f"System {system_name} must be between 7-12, got {value}")
-        
+
         # Validate department ranges (0-5)
         departments = json.loads(self.departments_json)
         for dept_name, value in departments.items():
             if not (0 <= value <= 5):
-                errors.append(f"Department {dept_name} must be between 0-5, got {value}")
-        
+                errors.append(
+                    f"Department {dept_name} must be between 0-5, got {value}"
+                )
+
         # Validate scale (1-7)
         if not (1 <= self.scale <= 7):
             errors.append(f"Scale must be between 1-7, got {self.scale}")
-        
+
         # Validate shields
         if self.shields_max < 0:
             errors.append(f"Shields max cannot be negative, got {self.shields_max}")
         if self.shields < 0 or self.shields > self.shields_max:
-            errors.append(f"Shields must be between 0-{self.shields_max}, got {self.shields}")
-        
+            errors.append(
+                f"Shields must be between 0-{self.shields_max}, got {self.shields}"
+            )
+
         return errors
 
     @classmethod
@@ -370,10 +382,33 @@ class UniverseLibraryRecord(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
-    category: Mapped[str] = mapped_column(String(50))  # species, faction, location, etc.
+    category: Mapped[str] = mapped_column(
+        String(50)
+    )  # species, faction, location, etc.
     description: Mapped[Optional[str]] = mapped_column(Text)
     image_url: Mapped[Optional[str]] = mapped_column(String(500))
-    reference_data_json: Mapped[str] = mapped_column(Text, default="{}")  # Additional metadata
+    reference_data_json: Mapped[str] = mapped_column(
+        Text, default="{}"
+    )  # Additional metadata
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
+
+
+class UniverseItemRecord(Base):
+    """Library of reusable characters and ships for campaign use."""
+
+    __tablename__ = "universe_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    category: Mapped[str] = mapped_column(String(50))  # pcs, npcs, creatures, ships
+    item_type: Mapped[str] = mapped_column(String(20))  # character, ship
+    data_json: Mapped[str] = mapped_column(Text)  # Full serialized character/ship data
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    image_url: Mapped[Optional[str]] = mapped_column(String(500))
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -390,7 +425,9 @@ class TraitRecord(Base):
     name: Mapped[str] = mapped_column(String(100), unique=True)
     description: Mapped[str] = mapped_column(Text)
     trait_type: Mapped[str] = mapped_column(String(50))  # character, ship, weapon, etc.
-    game_effects_json: Mapped[str] = mapped_column(Text, default="{}")  # Mechanical effects
+    game_effects_json: Mapped[str] = mapped_column(
+        Text, default="{}"
+    )  # Mechanical effects
     is_positive: Mapped[bool] = mapped_column(Boolean, default=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -409,7 +446,9 @@ class TalentRecord(Base):
     description: Mapped[str] = mapped_column(Text)
     discipline: Mapped[str] = mapped_column(String(20))  # Associated discipline
     rank: Mapped[int] = mapped_column(Integer, default=1)  # Talent rank/level
-    game_effects_json: Mapped[str] = mapped_column(Text, default="{}")  # Mechanical effects
+    game_effects_json: Mapped[str] = mapped_column(
+        Text, default="{}"
+    )  # Mechanical effects
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -426,11 +465,15 @@ class WeaponRecord(Base):
     name: Mapped[str] = mapped_column(String(100), unique=True)
     weapon_type: Mapped[str] = mapped_column(String(20))  # energy, torpedo, kinetic
     damage: Mapped[int] = mapped_column(Integer, default=0)
-    range: Mapped[str] = mapped_column(String(20), default="medium")  # close, medium, long, extreme
+    range: Mapped[str] = mapped_column(
+        String(20), default="medium"
+    )  # close, medium, long, extreme
     qualities_json: Mapped[str] = mapped_column(Text, default="[]")  # Special qualities
     description: Mapped[Optional[str]] = mapped_column(Text)
     requires_calibration: Mapped[bool] = mapped_column(Boolean, default=False)
-    delivery_system: Mapped[Optional[str]] = mapped_column(String(20))  # cannons, banks, etc.
+    delivery_system: Mapped[Optional[str]] = mapped_column(
+        String(20)
+    )  # cannons, banks, etc.
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
