@@ -69,6 +69,7 @@ brainstorming → writing-plans → (subagent-driven-development OR executing-pl
     - Ensure `.venv` is created and used for requirements.
     - Check `.gitignore` to ensure `.venv` is excluded.
 - **Reference Files:** Do NOT read or reference `STA2e_Core Rulebook_DIGITAL_v1.1.txt`. Use `starshiprules.md` and other extracted reference files instead.
+- **Document Learnings:** After every significant user interaction, decision, or milestone completion, update `docs/learnings_and_decisions.md` to capture what was learned and what was decided.
 
 ## 1. Think Before Coding
 
@@ -125,6 +126,21 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+## Documentation Structure
+
+This project uses **progressive disclosure** - essential info first, detailed references on demand.
+
+| Level | Files | When to Use |
+|-------|-------|-------------|
+| **Start Here** | `docs/delivery_plan.md` | Understand VTT transition roadmap |
+| **Current Work** | `docs/milestone2_tasks.md` | Execute in-progress milestone tasks |
+| **Reference** | `docs/rules_reference.md`, `docs/objects.md` | Game rules, data models |
+| **Archive** | `docs/open_questions.md`, `docs/learnings_and_decisions.md` | Historical context |
+
+See `docs/README.md` for full documentation guide.
 
 ---
 

@@ -1,82 +1,45 @@
 # STA Starship Simulator
 
-A web-based starship operations and combat simulator for **Star Trek Adventures 2nd Edition** tabletop RPG.
+A web-based **Virtual Tabletop (VTT)** for **Star Trek Adventures 2nd Edition** tabletop RPG. Currently transitioning from a combat-encounter tool to a full VTT experience.
 
-> **Beta Notice**: This project is in active development. Core starship combat features are functional, but some actions and features are still being implemented. Bug reports and feedback welcome!
+> **Development Notice**: This project is in active development. The core starship combat system is functional. The VTT transition is in progress (see Milestones below).
 
 ## What Is This?
 
-This app digitizes the starship combat experience for STA 2e tabletop sessions. Instead of tracking ship stats, breaches, shields, and momentum on paper, each player can use their own device (phone, tablet, laptop) while a shared "viewscreen" displays the tactical situation for everyone.
+This app digitizes the starship combat experience for STA 2e tabletop sessions. Each player uses their own device (phone, tablet, laptop) while a shared "viewscreen" displays the tactical situation.
 
-**Prerequisites**: This app assumes familiarity with the Star Trek Adventures 2nd Edition ruleset. It handles the bookkeeping and dice math, but you should understand concepts like Momentum, Threat, ship systems, breaches, and the 2d20 task resolution system.
-
-**Best For**: In-person play sessions where the crew is on a starship, especially during starship combat encounters.
+**Prerequisites**: Familiarity with Star Trek Adventures 2nd Edition ruleset (Momentum, Threat, 2d20 system).
 
 ---
 
-## Screenshots
+## Milestones (VTT Transition)
 
-**Role Selection** - Choose to join as a Player or Game Master
-![Role Selection Screen](Screenshot%20-%20Star%20Trek%20Adventures%20Role%20Selection%20Screen.png)
+| Milestone | Status | Description |
+|-----------|--------|-------------|
+| **M1** | ✅ Complete | Database Schema Migration |
+| **M2** | 🔄 In Progress | Campaign Management |
+| **M3** | Pending | Scene Management |
+| **M4** | Pending | Character/Ship CRUD |
+| **M5** | Pending | Combat Integration |
+| **M6** | Pending | UI/UX Overhaul |
 
-**Viewscreen** - Tactical display showing the hex map, ship status, and resources
-![Viewscreen Tactical Display](Screenshot%20-%20Battle%20at%20the%20Neutral%20Zone%20Tactical%20Display%20Round%201.png)
-
-**GM View** - Manage all ships, Momentum/Threat pools, and take actions for enemy vessels
-![GM Control Screen](Screenshot%20-%20Battle%20at%20the%20Neutral%20Zone%20Round%201.png)
-
-**Player View** - See your turn summary and wait during enemy turns
-![Player View During Enemy Turn](Screenshot%20-%20Battle%20at%20the%20Neutral%20Zone%20Enemy%20Turn%20Round%201.png)
+See `docs/delivery_plan.md` for full VTT transition plan.
 
 ---
 
-## Features
+## Current Features
 
-### What's Ready
+- **Campaign Management**: Create/join campaigns, GM password protection
+- **Multiplayer**: Multiple players on own devices, turn claiming
+- **Starship Combat**: Hex-based tactical map, shields, breaches, Momentum/Threat
+- **Bridge Actions**: Tactical, Science, Engineering, Conn, Command stations
+- **View Modes**: Player, GM, and shared Viewscreen
 
-**Campaign & Multiplayer Support**
-- Create campaigns with GM password protection
-- Multiple players join from their own devices
-- Players claim characters and choose bridge positions (Captain, Helm, Tactical, etc.)
-- Turn claiming system for organized multiplayer combat
+---
 
-**Starship Combat**
-- Hex-based tactical map with terrain (nebulae, asteroid fields, dust clouds)
-- Full damage system: shields, breaches, system destruction
-- Reserve power management
-- Momentum pool (shared, max 6) and Threat pool
-- Turn-based combat with player/enemy alternation
-- Fog of war - ships hidden in dense terrain until detected
-- Combat logging for all actions
+## VTT Roadmap
 
-**Bridge Station Actions**
-- **Tactical**: Fire Weapons, Calibrate Weapons, Targeting Solution, Modulate Shields, Lock On, Defensive Fire
-- **Science**: Calibrate Sensors, Scan for Weakness, Sensor Sweep
-- **Engineering**: Damage Control, Regain Power, Regenerate Shields, Reroute Power
-- **Conn/Helm**: Impulse, Thrusters, Attack Pattern, Evasive Action, Maneuver, Ram
-- **Command**: Rally
-- **Standard**: Pass, Change Position, Raise/Lower Shields, Arm/Disarm Weapons
-
-**Three View Modes**
-1. **Player View**: Individual controls for your station's actions
-2. **GM View**: Full encounter control, enemy ship management, overrides
-3. **Viewscreen**: Read-only tactical display for TV/projector
-
-**Hailing System**
-- Ships can hail each other
-- Audio notifications when hailed
-
-### What's Coming (Not Yet Implemented)
-
-- Operations Station actions (Transporters, etc.)
-- Medical Station actions
-- Command Station: Direct action
-- Cloaking mechanics
-- Warp travel
-- Ship talents
-- Full character sheet integration (focuses, values, talents)
-- Keep the Initiative momentum spend
-- Sound effects for combat events
+Full VTT feature roadmap is tracked in `docs/delivery_plan.md`. Current focus: Campaign Management (M2).
 
 ---
 

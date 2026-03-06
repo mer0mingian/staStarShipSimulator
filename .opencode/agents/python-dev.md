@@ -17,4 +17,6 @@ permission:
     "python-development/python-observability": allow
     "python-development/python-configuration": allow
     "python-dev-agents/python-pro": allow
+    "modern-python": allow
+    "solid": allow
 ---
