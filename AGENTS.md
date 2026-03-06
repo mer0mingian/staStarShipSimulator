@@ -129,6 +129,21 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
+## Documentation Structure
+
+This project uses **progressive disclosure** - essential info first, detailed references on demand.
+
+| Level | Files | When to Use |
+|-------|-------|-------------|
+| **Start Here** | `docs/delivery_plan.md` | Understand VTT transition roadmap |
+| **Current Work** | `docs/milestone2_tasks.md` | Execute in-progress milestone tasks |
+| **Reference** | `docs/rules_reference.md`, `docs/objects.md` | Game rules, data models |
+| **Archive** | `docs/open_questions.md`, `docs/learnings_and_decisions.md` | Historical context |
+
+See `docs/README.md` for full documentation guide.
+
+---
+
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
 # Code Style Guidelines
