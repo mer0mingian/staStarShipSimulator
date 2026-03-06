@@ -3,6 +3,8 @@
 import json
 import uuid
 import secrets
+from datetime import datetime, timedelta
+from sqlalchemy import or_
 from flask import (
     Blueprint,
     render_template,
@@ -55,7 +57,14 @@ def player_home():
         if session_token:
             my_memberships = (
                 session.query(CampaignPlayerRecord)
-                .filter_by(session_token=session_token, is_active=True)
+                .filter(
+                    CampaignPlayerRecord.session_token == session_token,
+                    CampaignPlayerRecord.is_active == True,
+                    or_(
+                        CampaignPlayerRecord.token_expires_at == None,
+                        CampaignPlayerRecord.token_expires_at > datetime.now(),
+                    ),
+                )
                 .all()
             )
             my_campaign_ids = [m.campaign_id for m in my_memberships]
@@ -124,6 +133,7 @@ def new_campaign():
                 campaign_id=campaign.id,
                 player_name=gm_name,
                 session_token=gm_token,
+                token_expires_at=datetime.now() + timedelta(days=30),
                 is_gm=True,
                 position="gm",  # GM has no bridge position
             )
@@ -189,7 +199,14 @@ def campaign_dashboard(campaign_id: str):
             if session_token:
                 current_player = (
                     session.query(CampaignPlayerRecord)
-                    .filter_by(session_token=session_token, campaign_id=campaign.id)
+                    .filter(
+                        CampaignPlayerRecord.session_token == session_token,
+                        CampaignPlayerRecord.campaign_id == campaign.id,
+                        or_(
+                            CampaignPlayerRecord.token_expires_at == None,
+                            CampaignPlayerRecord.token_expires_at > datetime.now(),
+                        ),
+                    )
                     .first()
                 )
                 if current_player:
@@ -407,7 +424,14 @@ def join_campaign(campaign_id: str):
         if session_token:
             existing = (
                 session.query(CampaignPlayerRecord)
-                .filter_by(session_token=session_token, campaign_id=campaign.id)
+                .filter(
+                    CampaignPlayerRecord.session_token == session_token,
+                    CampaignPlayerRecord.campaign_id == campaign.id,
+                    or_(
+                        CampaignPlayerRecord.token_expires_at == None,
+                        CampaignPlayerRecord.token_expires_at > datetime.now(),
+                    ),
+                )
                 .first()
             )
             if existing:
@@ -439,6 +463,7 @@ def join_campaign(campaign_id: str):
                     # Generate new session token for this player
                     player_token = secrets.token_urlsafe(32)
                     player.session_token = player_token
+                    player.token_expires_at = datetime.now() + timedelta(days=30)
                     session.commit()
 
                     response = redirect(
@@ -513,7 +538,14 @@ def player_dashboard(campaign_id: str):
 
         current_player = (
             session.query(CampaignPlayerRecord)
-            .filter_by(session_token=session_token, campaign_id=campaign.id)
+            .filter(
+                CampaignPlayerRecord.session_token == session_token,
+                CampaignPlayerRecord.campaign_id == campaign.id,
+                or_(
+                    CampaignPlayerRecord.token_expires_at == None,
+                    CampaignPlayerRecord.token_expires_at > datetime.now(),
+                ),
+            )
             .first()
         )
 
@@ -606,16 +638,21 @@ def switch_character(campaign_id: str):
             if campaign:
                 player = (
                     session.query(CampaignPlayerRecord)
-                    .filter_by(
-                        session_token=session_token,
-                        campaign_id=campaign.id,
-                        is_gm=False,
+                    .filter(
+                        CampaignPlayerRecord.session_token == session_token,
+                        CampaignPlayerRecord.campaign_id == campaign.id,
+                        CampaignPlayerRecord.is_gm == False,
+                        or_(
+                            CampaignPlayerRecord.token_expires_at == None,
+                            CampaignPlayerRecord.token_expires_at > datetime.now(),
+                        ),
                     )
                     .first()
                 )
                 if player:
                     # Release the character by setting back to unclaimed token
                     player.session_token = f"unclaimed_{uuid.uuid4()}"
+                    player.token_expires_at = None
                     session.commit()
     finally:
         session.close()
@@ -706,8 +743,14 @@ def api_update_campaign(campaign_id: str):
 
             gm = (
                 session.query(CampaignPlayerRecord)
-                .filter_by(
-                    session_token=session_token, campaign_id=campaign.id, is_gm=True
+                .filter(
+                    CampaignPlayerRecord.session_token == session_token,
+                    CampaignPlayerRecord.campaign_id == campaign.id,
+                    CampaignPlayerRecord.is_gm == True,
+                    or_(
+                        CampaignPlayerRecord.token_expires_at == None,
+                        CampaignPlayerRecord.token_expires_at > datetime.now(),
+                    ),
                 )
                 .first()
             )
@@ -818,6 +861,7 @@ def api_generate_random_campaign():
             campaign_id=campaign.id,
             player_name="Q",
             session_token=gm_token,
+            token_expires_at=datetime.now() + timedelta(days=30),
             is_gm=True,
             position="gm",  # GM has no bridge position
         )
@@ -1045,7 +1089,14 @@ def api_update_player_position(campaign_id: str, player_id: int):
         # Get current user
         current_user = (
             session.query(CampaignPlayerRecord)
-            .filter_by(session_token=session_token, campaign_id=campaign.id)
+            .filter(
+                CampaignPlayerRecord.session_token == session_token,
+                CampaignPlayerRecord.campaign_id == campaign.id,
+                or_(
+                    CampaignPlayerRecord.token_expires_at == None,
+                    CampaignPlayerRecord.token_expires_at > datetime.now(),
+                ),
+            )
             .first()
         )
 
@@ -1215,6 +1266,7 @@ def api_release_player(campaign_id: str, player_id: int):
 
         # Reset to unclaimed state
         player.session_token = f"unclaimed_{uuid.uuid4()}"
+        player.token_expires_at = None
         session.commit()
 
         return jsonify(
@@ -1290,6 +1342,54 @@ def api_get_player(campaign_id: str, player_id: int):
                 "character": character_data,
             }
         )
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/refresh-token", methods=["POST"])
+def api_refresh_token(campaign_id: str):
+    """API: Refresh session token for the current player."""
+    session = get_session()
+    try:
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        # Get current player from session token
+        session_token = request.cookies.get("sta_session_token")
+        if not session_token:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        player = (
+            session.query(CampaignPlayerRecord)
+            .filter(
+                CampaignPlayerRecord.session_token == session_token,
+                CampaignPlayerRecord.campaign_id == campaign.id,
+                or_(
+                    CampaignPlayerRecord.token_expires_at == None,
+                    CampaignPlayerRecord.token_expires_at > datetime.now(),
+                ),
+            )
+            .first()
+        )
+
+        if not player:
+            return jsonify({"error": "Invalid session token"}), 401
+
+        # Generate new session token
+        new_token = secrets.token_urlsafe(32)
+        player.session_token = new_token
+        # Set expiration to 30 days from now
+        player.token_expires_at = datetime.now() + timedelta(days=30)
+        session.commit()
+
+        # Set new cookie with 30-day max age
+        response = jsonify({"success": True})
+        response.set_cookie("sta_session_token", new_token, max_age=60 * 60 * 24 * 30)
+        return response
     finally:
         session.close()
 
@@ -1522,6 +1622,126 @@ def api_add_ship(campaign_id: str):
                 "success": True,
                 "ship_id": ship_id,
                 "campaign_ship_id": campaign_ship.id,
+            }
+        )
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/link-character", methods=["POST"])
+def api_link_character(campaign_id: str):
+    """API: Link VTT character to campaign player (GM only).
+
+    Links an external VTT character ID to a player record in the campaign.
+    """
+    session = get_session()
+    try:
+        session_token = request.cookies.get("sta_session_token")
+        if not session_token:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        gm = (
+            session.query(CampaignPlayerRecord)
+            .filter_by(session_token=session_token, campaign_id=campaign.id, is_gm=True)
+            .first()
+        )
+
+        if not gm:
+            return jsonify({"error": "Only GM can link characters"}), 403
+
+        data = request.get_json()
+        player_id = data.get("player_id")
+        vtt_character_id = data.get("vtt_character_id")
+
+        if not player_id:
+            return jsonify({"error": "player_id required"}), 400
+        if vtt_character_id is None:
+            return jsonify({"error": "vtt_character_id required"}), 400
+
+        player = (
+            session.query(CampaignPlayerRecord)
+            .filter_by(id=player_id, campaign_id=campaign.id)
+            .first()
+        )
+
+        if not player:
+            return jsonify({"error": "Player not found"}), 404
+
+        player.vtt_character_id = vtt_character_id
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "player_id": player.id,
+                "vtt_character_id": player.vtt_character_id,
+            }
+        )
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/link-ship", methods=["POST"])
+def api_link_ship(campaign_id: str):
+    """API: Link VTT ship to campaign (GM only).
+
+    Links an external VTT ship ID to a ship record in the campaign pool.
+    """
+    session = get_session()
+    try:
+        session_token = request.cookies.get("sta_session_token")
+        if not session_token:
+            return jsonify({"error": "Not authenticated"}), 401
+
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        gm = (
+            session.query(CampaignPlayerRecord)
+            .filter_by(session_token=session_token, campaign_id=campaign.id, is_gm=True)
+            .first()
+        )
+
+        if not gm:
+            return jsonify({"error": "Only GM can link ships"}), 403
+
+        data = request.get_json()
+        campaign_ship_id = data.get("campaign_ship_id")
+        vtt_ship_id = data.get("vtt_ship_id")
+
+        if not campaign_ship_id:
+            return jsonify({"error": "campaign_ship_id required"}), 400
+        if vtt_ship_id is None:
+            return jsonify({"error": "vtt_ship_id required"}), 400
+
+        campaign_ship = (
+            session.query(CampaignShipRecord)
+            .filter_by(id=campaign_ship_id, campaign_id=campaign.id)
+            .first()
+        )
+
+        if not campaign_ship:
+            return jsonify({"error": "Ship not found in campaign"}), 404
+
+        campaign_ship.vtt_ship_id = vtt_ship_id
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "campaign_ship_id": campaign_ship.id,
+                "vtt_ship_id": campaign_ship.vtt_ship_id,
             }
         )
     finally:
@@ -2191,7 +2411,15 @@ def api_create_scene(campaign_id: str):
         session_token = request.cookies.get("sta_session_token")
         gm = (
             session.query(CampaignPlayerRecord)
-            .filter_by(campaign_id=campaign.id, is_gm=True)
+            .filter(
+                CampaignPlayerRecord.session_token == session_token,
+                CampaignPlayerRecord.campaign_id == campaign.id,
+                CampaignPlayerRecord.is_gm == True,
+                or_(
+                    CampaignPlayerRecord.token_expires_at == None,
+                    CampaignPlayerRecord.token_expires_at > datetime.now(),
+                ),
+            )
             .first()
         )
 
@@ -2416,35 +2644,91 @@ def api_convert_scene(scene_id: int):
                 "message": f"Scene converted from {old_type} to {new_type}",
             }
         )
+    finally:
+        session.close()
 
-        if not gm or session_token != gm.session_token:
-            return jsonify({"error": "Only GM can convert scenes"}), 403
+
+# =============================================================================
+# Campaign Resource Pool API
+# =============================================================================
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/resources", methods=["GET"])
+def api_get_campaign_resources(campaign_id: str):
+    """API: Get campaign momentum and threat pools."""
+    session = get_session()
+    try:
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        return jsonify(
+            {
+                "momentum": campaign.momentum,
+                "threat": campaign.threat,
+                "momentum_max": 6,
+            }
+        )
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/momentum", methods=["POST"])
+def api_update_campaign_momentum(campaign_id: str):
+    """API: Add or subtract campaign momentum."""
+    session = get_session()
+    try:
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
 
         data = request.get_json()
-        new_type = data.get("scene_type")
+        amount = data.get("amount", 0)
 
-        if new_type not in (
-            "narrative",
-            "starship_encounter",
-            "personal_encounter",
-            "social_encounter",
-        ):
-            return jsonify({"error": "Invalid scene type"}), 400
-
-        old_type = scene.scene_type
-        scene.scene_type = new_type
-
-        # Update has_map based on type (social encounters don't have maps)
-        scene.has_map = new_type != "social_encounter"
+        campaign.momentum = max(0, min(6, campaign.momentum + amount))
 
         session.commit()
 
         return jsonify(
             {
                 "success": True,
-                "old_type": old_type,
-                "new_type": new_type,
-                "message": f"Scene converted from {old_type} to {new_type}",
+                "momentum": campaign.momentum,
+                "momentum_max": 6,
+            }
+        )
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/api/campaign/<campaign_id>/threat", methods=["POST"])
+def api_update_campaign_threat(campaign_id: str):
+    """API: Add or subtract campaign threat."""
+    session = get_session()
+    try:
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        data = request.get_json()
+        amount = data.get("amount", 0)
+
+        campaign.threat = max(0, campaign.threat + amount)
+
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "threat": campaign.threat,
             }
         )
     finally:

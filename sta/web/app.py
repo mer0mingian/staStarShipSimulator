@@ -24,11 +24,13 @@ def create_app():
     from .routes.api import api_bp
     from .routes.campaigns import campaigns_bp
     from .routes.scenes import scenes_bp
+    from .routes.universe import universe_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(encounters_bp, url_prefix="/encounters")
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(campaigns_bp, url_prefix="/campaigns")
     app.register_blueprint(scenes_bp, url_prefix="/scenes")
+    app.register_blueprint(universe_bp, url_prefix="")
 
     return app

@@ -7,16 +7,25 @@ permission:
     "superpowers/test-driven-development": allow
     "superpowers/systematic-debugging": allow
     "superpowers/verification-before-completion": allow
-    "python-development/async-python-patterns": allow
-    "python-development/python-error-handling": allow
-    "python-development/python-resource-management": allow
-    "python-development/python-packaging": allow
-    "python-development/python-testing-patterns": allow
-    "python-development/python-type-safety": allow
-    "python-development/python-code-style": allow
-    "python-development/python-observability": allow
-    "python-development/python-configuration": allow
-    "python-dev-agents/python-pro": allow
-    "modern-python": allow
+    "async-python-patterns": allow
+    "python-error-handling": allow
+    "python-resource-management": allow
+    "python-packaging": allow
+    "python-testing-patterns": allow
+    "python-type-safety": allow
+    "python-code-style": allow
+    "python-observability": allow
+    "python-configuration": allow
+    "python-design-patterns": allow
+    "python-resilience": allow
+    "python-project-structure": allow
+    "python-anti-patterns": allow
+    "python-background-jobs": allow
+    "python-performance-optimization": allow
     "solid": allow
+    "modern-python": allow
+    "fastapi-templates": allow
+    "databases": allow
+    "uv-package-manager": allow
+    "docker-expert": allow
 ---

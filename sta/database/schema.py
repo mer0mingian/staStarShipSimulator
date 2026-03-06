@@ -412,6 +412,10 @@ class CampaignRecord(Base):
     # Campaign state
     is_active: Mapped[bool] = mapped_column(default=True)
 
+    # Campaign-level resource pools
+    momentum: Mapped[int] = mapped_column(Integer, default=0)
+    threat: Mapped[int] = mapped_column(Integer, default=0)
+
     # GM password (hashed) - default is "ENGAGE1"
     gm_password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
@@ -444,6 +448,13 @@ class CampaignPlayerRecord(Base):
     session_token: Mapped[Optional[str]] = mapped_column(
         String(100), unique=True, nullable=True
     )
+    # Token expiration for security
+    token_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, default=None
+    )
+
+    # VTT character reference (for linking to external VTT character data)
+    vtt_character_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Bridge position assignment
     position: Mapped[str] = mapped_column(String(20), default="captain")
@@ -467,6 +478,9 @@ class CampaignShipRecord(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"))
     ship_id: Mapped[int] = mapped_column(ForeignKey("starships.id"))
+
+    # VTT ship reference (for linking to external VTT ship data)
+    vtt_ship_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Metadata
     is_available: Mapped[bool] = mapped_column(
