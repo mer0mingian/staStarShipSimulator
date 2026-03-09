@@ -12,6 +12,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 import random
 
+import sta.web  # Must load sta.web submodule before patching sta.web.* routes
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 
@@ -25,6 +27,8 @@ from sta.database.schema import (
     CampaignPlayerRecord,
     SceneRecord,
 )
+
+import sta.web  # Ensure routes are loaded to avoid AttributeError
 
 
 # ============== SHARED TEST DATABASE ==============

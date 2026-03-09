@@ -26,7 +26,12 @@ from sta.database import (
     CampaignNPCRecord,
     StarshipRecord,
     CampaignShipRecord,
+    VTTCharacterRecord,
+    VTTShipRecord,
+    EncounterRecord,
+    PersonnelEncounterRecord,
 )
+from sta.database.schema import SceneParticipantRecord, SceneShipRecord
 from sta.models.enums import Position
 
 
@@ -653,5 +658,1035 @@ def remove_npc_from_scene(scene_id: int, scene_npc_id: int):
         session.commit()
 
         return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+# =============================================================================
+# GM Authentication Helper
+# =============================================================================
+
+
+def _require_gm_auth(session, campaign_id: int):
+    """Verify GM authentication for a campaign. Returns GM player or raises 401."""
+    session_token = request.cookies.get("sta_session_token")
+    if not session_token:
+        return None, jsonify({"error": "GM authentication required"}), 401
+
+    gm_player = (
+        session.query(CampaignPlayerRecord)
+        .filter_by(campaign_id=campaign_id, is_gm=True)
+        .first()
+    )
+
+    if not gm_player or session_token != gm_player.session_token:
+        return None, jsonify({"error": "GM authentication required"}), 401
+
+    return gm_player, None, None
+
+
+def _build_closing_options(session, scene):
+    """Build closing options payload for a scene."""
+    next_ids = json.loads(scene.next_scene_ids_json or "[]")
+    draft_next = (
+        session.query(SceneRecord)
+        .filter(SceneRecord.id.in_(next_ids), SceneRecord.status == "draft")
+        .all()
+    )
+    return {
+        "next_scene_candidates": [
+            {"id": s.id, "name": s.name, "status": s.status} for s in draft_next
+        ],
+        "allow_create_new": True,
+        "allow_return_overview": True,
+    }
+
+
+# =============================================================================
+# Scene Connections API
+# =============================================================================
+
+
+@scenes_bp.route("/<int:scene_id>/connections", methods=["GET"])
+def get_scene_connections(scene_id: int):
+    """Get scene connections (next and previous scene IDs)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        # Verify GM auth
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        next_ids = json.loads(scene.next_scene_ids_json or "[]")
+        previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+        return jsonify({"next_scene_ids": next_ids, "previous_scene_ids": previous_ids})
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/connections", methods=["PUT"])
+def update_scene_connections(scene_id: int):
+    """Update scene connections (replace with given lists)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        data = request.get_json() or {}
+
+        # Get current values
+        current_next_ids = json.loads(scene.next_scene_ids_json or "[]")
+        current_previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+
+        # Determine new next_ids
+        if "next_scene_ids" in data:
+            try:
+                next_ids_input = [int(i) for i in data["next_scene_ids"]]
+            except (ValueError, TypeError):
+                return jsonify({"error": "next_scene_ids must be integers"}), 400
+            # Filter to only those that exist in the same campaign
+            valid_next_ids = []
+            for nid in next_ids_input:
+                target = (
+                    session.query(SceneRecord)
+                    .filter_by(id=nid, campaign_id=scene.campaign_id)
+                    .first()
+                )
+                if target:
+                    valid_next_ids.append(nid)
+            next_ids = valid_next_ids
+        else:
+            next_ids = current_next_ids
+
+        # Determine new previous_ids
+        if "previous_scene_ids" in data:
+            try:
+                prev_ids_input = [int(i) for i in data["previous_scene_ids"]]
+            except (ValueError, TypeError):
+                return jsonify({"error": "previous_scene_ids must be integers"}), 400
+            valid_prev_ids = []
+            for pid in prev_ids_input:
+                target = (
+                    session.query(SceneRecord)
+                    .filter_by(id=pid, campaign_id=scene.campaign_id)
+                    .first()
+                )
+                if target:
+                    valid_prev_ids.append(pid)
+            previous_ids = valid_prev_ids
+        else:
+            previous_ids = current_previous_ids
+
+        scene.next_scene_ids_json = json.dumps(next_ids)
+        scene.previous_scene_ids_json = json.dumps(previous_ids)
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "next_scene_ids": next_ids,
+                "previous_scene_ids": previous_ids,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/connections/next", methods=["POST"])
+def add_next_connection(scene_id: int):
+    """Add a next scene connection (bidirectional)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        data = request.get_json() or {}
+        target_scene_id = data.get("target_scene_id")
+        if target_scene_id is None:
+            return jsonify({"error": "target_scene_id required"}), 400
+
+        if target_scene_id == scene_id:
+            return jsonify({"error": "Cannot connect scene to itself"}), 400
+
+        # Check if already connected BEFORE checking target existence
+        next_ids = json.loads(scene.next_scene_ids_json or "[]")
+        if target_scene_id in next_ids:
+            return jsonify({"error": "Scenes already connected"}), 400
+
+        target = session.query(SceneRecord).filter_by(id=target_scene_id).first()
+        if not target:
+            return jsonify({"error": "Target scene not found"}), 400
+
+        if target.campaign_id != scene.campaign_id:
+            return jsonify({"error": "Target scene must be in same campaign"}), 400
+
+        # Add to scene's next
+        next_ids.append(target_scene_id)
+        scene.next_scene_ids_json = json.dumps(next_ids)
+
+        # Add to target's previous
+        previous_ids = json.loads(target.previous_scene_ids_json or "[]")
+        if scene_id not in previous_ids:
+            previous_ids.append(scene_id)
+            target.previous_scene_ids_json = json.dumps(previous_ids)
+
+        session.commit()
+
+        # Return updated connections for the scene
+        updated_next = json.loads(scene.next_scene_ids_json or "[]")
+        updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
+        return jsonify(
+            {
+                "success": True,
+                "next_scene_ids": updated_next,
+                "previous_scene_ids": updated_previous,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/connections/previous", methods=["POST"])
+def add_previous_connection(scene_id: int):
+    """Add a previous scene connection (scene_id will be the target's next)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        data = request.get_json() or {}
+        target_scene_id = data.get("target_scene_id")
+        if target_scene_id is None:
+            return jsonify({"error": "target_scene_id required"}), 400
+
+        if target_scene_id == scene_id:
+            return jsonify({"error": "Cannot connect scene to itself"}), 400
+
+        # Check if already connected (scene's previous includes target) BEFORE existence check
+        previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+        if target_scene_id in previous_ids:
+            return jsonify({"error": "Connection already exists"}), 400
+
+        target = session.query(SceneRecord).filter_by(id=target_scene_id).first()
+        if not target:
+            return jsonify({"error": "Target scene not found"}), 400
+
+        if target.campaign_id != scene.campaign_id:
+            return jsonify({"error": "Target scene must be in same campaign"}), 400
+
+        # Add to scene's previous
+        previous_ids.append(target_scene_id)
+        scene.previous_scene_ids_json = json.dumps(previous_ids)
+
+        # Add to target's next
+        target_next_ids = json.loads(target.next_scene_ids_json or "[]")
+        if scene_id not in target_next_ids:
+            target_next_ids.append(scene_id)
+            target.next_scene_ids_json = json.dumps(target_next_ids)
+
+        session.commit()
+
+        # Return updated connections for the scene
+        updated_next = json.loads(scene.next_scene_ids_json or "[]")
+        updated_previous = previous_ids
+        return jsonify(
+            {
+                "success": True,
+                "next_scene_ids": updated_next,
+                "previous_scene_ids": updated_previous,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/connections/next/<int:target_id>", methods=["DELETE"])
+def remove_next_connection(scene_id: int, target_id: int):
+    """Remove a next scene connection (bidirectional)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        # Remove target from scene.next_scene_ids regardless of target existence
+        next_ids = json.loads(scene.next_scene_ids_json or "[]")
+        if target_id not in next_ids:
+            # Nothing to remove, but still return success (idempotent)
+            updated_next = next_ids
+            updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
+            return jsonify(
+                {
+                    "success": True,
+                    "next_scene_ids": updated_next,
+                    "previous_scene_ids": updated_previous,
+                }
+            )
+        new_next = [i for i in next_ids if i != target_id]
+        scene.next_scene_ids_json = json.dumps(new_next)
+
+        # Remove scene from target.previous_scene_ids if target exists
+        target = session.query(SceneRecord).filter_by(id=target_id).first()
+        if target:
+            previous_ids = json.loads(target.previous_scene_ids_json or "[]")
+            new_previous = [i for i in previous_ids if i != scene_id]
+            target.previous_scene_ids_json = json.dumps(new_previous)
+
+        session.commit()
+
+        # Return updated connections for the scene
+        updated_next = new_next
+        updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
+        return jsonify(
+            {
+                "success": True,
+                "next_scene_ids": updated_next,
+                "previous_scene_ids": updated_previous,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route(
+    "/<int:scene_id>/connections/previous/<int:target_id>", methods=["DELETE"]
+)
+def remove_previous_connection(scene_id: int, target_id: int):
+    """Remove a previous scene connection (bidirectional)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        # Remove target from scene.previous_scene_ids regardless of target existence
+        previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+        if target_id not in previous_ids:
+            # Nothing to remove, but still return success (idempotent)
+            updated_next = json.loads(scene.next_scene_ids_json or "[]")
+            updated_previous = previous_ids
+            return jsonify(
+                {
+                    "success": True,
+                    "next_scene_ids": updated_next,
+                    "previous_scene_ids": updated_previous,
+                }
+            )
+        new_previous = [i for i in previous_ids if i != target_id]
+        scene.previous_scene_ids_json = json.dumps(new_previous)
+
+        # Remove scene from target.next_scene_ids if target exists
+        target = session.query(SceneRecord).filter_by(id=target_id).first()
+        if target:
+            target_next_ids = json.loads(target.next_scene_ids_json or "[]")
+            new_target_next = [i for i in target_next_ids if i != scene_id]
+            target.next_scene_ids_json = json.dumps(new_target_next)
+
+        session.commit()
+
+        # Return updated connections for the scene
+        updated_next = json.loads(scene.next_scene_ids_json or "[]")
+        updated_previous = new_previous
+        return jsonify(
+            {
+                "success": True,
+                "next_scene_ids": updated_next,
+                "previous_scene_ids": updated_previous,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+# =============================================================================
+# Scene Participants API
+# =============================================================================
+
+
+@scenes_bp.route("/<int:scene_id>/participants", methods=["GET"])
+def get_scene_participants(scene_id: int):
+    """Get all participants (characters) for a scene."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        # Verify GM auth
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        participants = (
+            session.query(SceneParticipantRecord).filter_by(scene_id=scene_id).all()
+        )
+
+        result = []
+        for p in participants:
+            char = (
+                session.query(VTTCharacterRecord).filter_by(id=p.character_id).first()
+            )
+            if not char:
+                continue
+
+            player_name = None
+            if p.player_id:
+                player = (
+                    session.query(CampaignPlayerRecord)
+                    .filter_by(id=p.player_id)
+                    .first()
+                )
+                if player:
+                    player_name = player.player_name
+
+            result.append(
+                {
+                    "id": p.id,
+                    "character_id": char.id,
+                    "name": char.name,
+                    "type": "pc" if p.player_id else "npc",
+                    "is_visible_to_players": p.is_visible_to_players,
+                    "player_id": p.player_id,
+                    "player_name": player_name,
+                }
+            )
+
+        return jsonify(result)
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/participants", methods=["POST"])
+def add_scene_participant(scene_id: int):
+    """Add a participant (character) to a scene."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        # Verify GM auth
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        data = request.get_json() or {}
+        character_id = data.get("character_id")
+        is_visible = data.get("is_visible_to_players", False)
+        player_id = data.get("player_id")  # may be None
+
+        if not character_id:
+            return jsonify({"error": "character_id required"}), 400
+
+        # Fetch character
+        char = session.query(VTTCharacterRecord).filter_by(id=character_id).first()
+        if not char:
+            return jsonify({"error": "Character not found"}), 404
+
+        # Verify character belongs to this campaign
+        if char.campaign_id != scene.campaign_id:
+            return jsonify({"error": "Character does not belong to this campaign"}), 400
+
+        # If a player is assigned, validate the player
+        if player_id is not None:
+            player = (
+                session.query(CampaignPlayerRecord)
+                .filter_by(id=player_id, campaign_id=scene.campaign_id)
+                .first()
+            )
+            if not player:
+                return jsonify({"error": "Player not found in campaign"}), 400
+
+            # If player has a linked VTT character, ensure it matches this character
+            if player.vtt_character_id and player.vtt_character_id != character_id:
+                return jsonify(
+                    {"error": "Player is not assigned to this character"}
+                ), 400
+
+            # Check that this player is not already assigned to another character in this scene
+            existing_player = (
+                session.query(SceneParticipantRecord)
+                .filter_by(scene_id=scene_id, player_id=player_id)
+                .first()
+            )
+            if existing_player:
+                return jsonify(
+                    {"error": "Player already assigned to a character in this scene"}
+                ), 400
+
+        # Check that this character is not already in this scene
+        existing_char = (
+            session.query(SceneParticipantRecord)
+            .filter_by(scene_id=scene_id, character_id=character_id)
+            .first()
+        )
+        if existing_char:
+            return jsonify({"error": "Character already in scene"}), 400
+
+        # Create participant
+        participant = SceneParticipantRecord(
+            scene_id=scene_id,
+            character_id=character_id,
+            player_id=player_id,
+            is_visible_to_players=is_visible,
+        )
+        session.add(participant)
+        session.commit()
+
+        return jsonify({"success": True, "participant_id": participant.id})
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/participants/<int:participant_id>", methods=["PUT"])
+def update_scene_participant(scene_id: int, participant_id: int):
+    """Update a scene participant."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        # Verify GM auth
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        participant = (
+            session.query(SceneParticipantRecord)
+            .filter_by(id=participant_id, scene_id=scene_id)
+            .first()
+        )
+        if not participant:
+            return jsonify({"error": "Participant not found"}), 404
+
+        data = request.get_json() or {}
+        if "is_visible_to_players" in data:
+            participant.is_visible_to_players = data["is_visible_to_players"]
+
+        if "player_id" in data:
+            new_player_id = data["player_id"]  # can be None to unassign
+            # If setting a player, verify uniqueness (different from current)
+            if new_player_id is not None:
+                # Verify player belongs to campaign
+                player = (
+                    session.query(CampaignPlayerRecord)
+                    .filter_by(id=new_player_id, campaign_id=scene.campaign_id)
+                    .first()
+                )
+                if not player:
+                    return jsonify({"error": "Player not found in campaign"}), 400
+
+                # Check if this player already assigned to another character in this scene
+                existing = (
+                    session.query(SceneParticipantRecord)
+                    .filter_by(scene_id=scene_id, player_id=new_player_id)
+                    .filter(SceneParticipantRecord.id != participant_id)
+                    .first()
+                )
+                if existing:
+                    return jsonify(
+                        {
+                            "error": "Player already assigned to another character in this scene"
+                        }
+                    ), 400
+
+                # Also verify that the player's vtt_character_id matches the character_id (if they have one)
+                if (
+                    player.vtt_character_id
+                    and player.vtt_character_id != participant.character_id
+                ):
+                    return jsonify(
+                        {"error": "Player is not assigned to this character"}
+                    ), 400
+            # Update player_id
+            participant.player_id = new_player_id
+
+        session.commit()
+
+        return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+@scenes_bp.route(
+    "/<int:scene_id>/participants/<int:participant_id>", methods=["DELETE"]
+)
+def remove_scene_participant(scene_id: int, participant_id: int):
+    """Remove a participant from a scene."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        # Verify GM auth
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        participant = (
+            session.query(SceneParticipantRecord)
+            .filter_by(id=participant_id, scene_id=scene_id)
+            .first()
+        )
+        if not participant:
+            return jsonify({"error": "Participant not found"}), 404
+
+        session.delete(participant)
+        session.commit()
+
+        return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+# =============================================================================
+# Scene Ships API
+# =============================================================================
+
+
+@scenes_bp.route("/<int:scene_id>/ships", methods=["GET"])
+def get_scene_ships(scene_id: int):
+    """Get all ships for a scene."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        # Verify GM auth
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        scene_ships = session.query(SceneShipRecord).filter_by(scene_id=scene_id).all()
+
+        result = []
+        for ss in scene_ships:
+            ship = session.query(VTTShipRecord).filter_by(id=ss.ship_id).first()
+            if ship:
+                result.append(
+                    {
+                        "ship_id": ship.id,
+                        "name": ship.name,
+                        "is_visible_to_players": ss.is_visible_to_players,
+                    }
+                )
+
+        return jsonify(result)
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/ships", methods=["POST"])
+def add_scene_ship(scene_id: int):
+    """Add a ship to a scene."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        # Verify GM auth
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        data = request.get_json() or {}
+        ship_id = data.get("ship_id")
+        is_visible = data.get("is_visible_to_players", False)
+
+        if not ship_id:
+            return jsonify({"error": "ship_id required"}), 400
+
+        # Verify ship exists
+        ship = session.query(VTTShipRecord).filter_by(id=ship_id).first()
+        if not ship:
+            return jsonify({"error": "Ship not found"}), 404
+
+        # Verify ship belongs to campaign via campaign_ships
+        campaign_ship = (
+            session.query(CampaignShipRecord)
+            .filter_by(campaign_id=scene.campaign_id, ship_id=ship_id)
+            .first()
+        )
+        if not campaign_ship:
+            return jsonify({"error": "Ship not in campaign"}), 400
+
+        # Check if already in scene
+        existing = (
+            session.query(SceneShipRecord)
+            .filter_by(scene_id=scene_id, ship_id=ship_id)
+            .first()
+        )
+        if existing:
+            return jsonify({"error": "Ship already in scene"}), 400
+
+        scene_ship = SceneShipRecord(
+            scene_id=scene_id,
+            ship_id=ship_id,
+            is_visible_to_players=is_visible,
+        )
+        session.add(scene_ship)
+        session.commit()
+
+        return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/ships/<int:ship_id>", methods=["PUT"])
+def update_scene_ship(scene_id: int, ship_id: int):
+    """Update a ship in a scene."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        # Verify GM auth
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        scene_ship = (
+            session.query(SceneShipRecord)
+            .filter_by(scene_id=scene_id, ship_id=ship_id)
+            .first()
+        )
+        if not scene_ship:
+            return jsonify({"error": "Ship not found in scene"}), 404
+
+        data = request.get_json() or {}
+        if "is_visible_to_players" in data:
+            scene_ship.is_visible_to_players = data["is_visible_to_players"]
+
+        session.commit()
+
+        return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/ships/<int:ship_id>", methods=["DELETE"])
+def remove_scene_ship(scene_id: int, ship_id: int):
+    """Remove a ship from a scene."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        # Verify GM auth
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        scene_ship = (
+            session.query(SceneShipRecord)
+            .filter_by(scene_id=scene_id, ship_id=ship_id)
+            .first()
+        )
+        if not scene_ship:
+            return jsonify({"error": "Ship not found in scene"}), 404
+
+        session.delete(scene_ship)
+        session.commit()
+
+        return jsonify({"success": True})
+    finally:
+        session.close()
+
+
+# =============================================================================
+# Scene Activation & Termination & Config (Milestone 3.4)
+# =============================================================================
+
+
+@scenes_bp.route("/<int:scene_id>/closing-options", methods=["GET"])
+def get_closing_options(scene_id: int):
+    """Get closing options for a scene (candidate next scenes, etc.)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+        return jsonify(_build_closing_options(session, scene))
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/activate", methods=["POST"])
+def activate_scene(scene_id: int):
+    """Activate a scene, creating appropriate encounter records."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+        if scene.status != "draft":
+            return jsonify({"error": "Scene must be in draft status to activate"}), 400
+        campaign = session.query(CampaignRecord).filter_by(id=scene.campaign_id).first()
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        # Reduce campaign momentum by 1 (minimum 0)
+        campaign.momentum = max(0, campaign.momentum - 1)
+
+        if scene.scene_type == "starship_encounter":
+            if not campaign.active_ship_id:
+                return jsonify({"error": "Campaign has no active ship assigned"}), 400
+            scene_ships = (
+                session.query(SceneShipRecord).filter_by(scene_id=scene.id).all()
+            )
+            if not scene_ships:
+                return jsonify(
+                    {"error": "Starship encounter must have at least one ship in scene"}
+                ), 400
+            ship_ids = [ss.ship_id for ss in scene_ships]
+            if campaign.active_ship_id not in ship_ids:
+                return jsonify(
+                    {"error": "Player ship must be included in scene ships"}
+                ), 400
+            npc_ship_ids = [sid for sid in ship_ids if sid != campaign.active_ship_id]
+            encounter = EncounterRecord(
+                encounter_id=str(uuid.uuid4()),
+                name=scene.name,
+                campaign_id=campaign.id,
+                player_ship_id=campaign.active_ship_id,
+                player_position=scene.scene_position or "captain",
+                enemy_ship_ids_json=json.dumps(npc_ship_ids),
+                tactical_map_json=scene.tactical_map_json or "{}",
+                is_active=True,
+            )
+            session.add(encounter)
+            session.flush()
+            scene.encounter_id = encounter.id
+
+        elif scene.scene_type == "personal_encounter":
+            participants = (
+                session.query(SceneParticipantRecord).filter_by(scene_id=scene.id).all()
+            )
+            if not participants:
+                return jsonify(
+                    {"error": "Personal encounter must have at least one participant"}
+                ), 400
+            character_states = []
+            for p in participants:
+                char = (
+                    session.query(VTTCharacterRecord)
+                    .filter_by(id=p.character_id)
+                    .first()
+                )
+                if not char:
+                    continue
+                is_player = p.player_id is not None
+                char_state = {
+                    "character_id": char.id,
+                    "name": char.name,
+                    "is_player": is_player,
+                    "stress": char.stress,
+                    "determination": char.determination,
+                    "stress_max": char.stress_max,
+                    "determination_max": char.determination_max,
+                    "is_defeated": char.stress >= char.stress_max,
+                    "injuries": [],
+                    "protection": 0,
+                }
+                character_states.append(char_state)
+            encounter = PersonnelEncounterRecord(
+                scene_id=scene.id,
+                momentum=campaign.momentum,
+                threat=campaign.threat,
+                character_states_json=json.dumps(character_states),
+                tactical_map_json=scene.tactical_map_json or "{}",
+                is_active=True,
+            )
+            session.add(encounter)
+            session.flush()
+        else:
+            # Narrative or other types: activation is just status change
+            pass
+
+        scene.status = "active"
+        session.commit()
+
+        response_data = {"success": True, "scene_id": scene.id, "status": scene.status}
+        if scene.scene_type == "starship_encounter":
+            response_data["encounter_id"] = encounter.id
+        elif scene.scene_type == "personal_encounter":
+            response_data["personnel_encounter_id"] = encounter.id
+        return jsonify(response_data)
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/end", methods=["POST"])
+def end_scene(scene_id: int):
+    """End an active scene, reducing momentum and deactivating encounter."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+        if scene.status != "active":
+            return jsonify({"error": "Scene must be active to end"}), 400
+        campaign = session.query(CampaignRecord).filter_by(id=scene.campaign_id).first()
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        # Cap momentum at 6 before reducing by 1 (minimum 0)
+        campaign.momentum = max(0, min(campaign.momentum, 6) - 1)
+        scene.status = "completed"
+
+        # Deactivate linked encounter
+        if scene.encounter_id:
+            encounter = (
+                session.query(EncounterRecord).filter_by(id=scene.encounter_id).first()
+            )
+            if encounter:
+                encounter.is_active = False
+        else:
+            personnel_encounter = (
+                session.query(PersonnelEncounterRecord)
+                .filter_by(scene_id=scene.id)
+                .first()
+            )
+            if personnel_encounter:
+                personnel_encounter.is_active = False
+
+        session.commit()
+
+        closing_opts = _build_closing_options(session, scene)
+        return jsonify(
+            {
+                "success": True,
+                "momentum_remaining": campaign.momentum,
+                "closing_options": closing_opts,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/config", methods=["GET"])
+def get_scene_config(scene_id: int):
+    """Get scene encounter configuration."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+        if scene.encounter_config_json:
+            try:
+                config = json.loads(scene.encounter_config_json)
+                return jsonify(config)
+            except json.JSONDecodeError:
+                return jsonify({}), 200
+        return jsonify({}), 200
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/config", methods=["PUT"])
+def update_scene_config(scene_id: int):
+    """Update scene encounter configuration."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "JSON body required"}), 400
+        allowed_keys = {"npc_turn_mode", "gm_spends_threat_to_start"}
+        unknown_keys = set(data.keys()) - allowed_keys
+        if unknown_keys:
+            return jsonify(
+                {"error": f"Invalid config keys: {', '.join(unknown_keys)}"}
+            ), 400
+        if "npc_turn_mode" in data and data["npc_turn_mode"] not in (
+            "all_npcs",
+            "num_pcs",
+        ):
+            return jsonify(
+                {"error": "Invalid npc_turn_mode; must be 'all_npcs' or 'num_pcs'"}
+            ), 400
+        if "gm_spends_threat_to_start" in data and not isinstance(
+            data["gm_spends_threat_to_start"], bool
+        ):
+            return jsonify(
+                {"error": "gm_spends_threat_to_start must be a boolean"}
+            ), 400
+        scene.encounter_config_json = json.dumps(data)
+        session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
     finally:
         session.close()

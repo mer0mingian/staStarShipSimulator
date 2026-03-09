@@ -30,6 +30,8 @@ from sta.database import (
     CampaignNPCRecord,
     SceneRecord,
     NPCRecord,
+    VTTCharacterRecord,
+    VTTShipRecord,
 )
 from sta.generators import generate_character, generate_starship
 from sta.models.enums import Position
@@ -152,6 +154,123 @@ def new_campaign():
             return response
         finally:
             session.close()
+
+
+# =============================================================================
+# Scene Management Helper Endpoints (M3)
+# =============================================================================
+
+
+@campaigns_bp.route("/<int:campaign_id>/characters/available", methods=["GET"])
+def get_campaign_available_characters(campaign_id: int):
+    """Get characters available to add to scenes (PCs and NPCs)."""
+    session = get_session()
+    try:
+        # Verify campaign exists
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        # GM auth required
+        session_token = request.cookies.get("sta_session_token")
+        gm_player = (
+            session.query(CampaignPlayerRecord)
+            .filter_by(campaign_id=campaign.id, is_gm=True)
+            .first()
+        )
+        if not gm_player or session_token != gm_player.session_token:
+            return jsonify({"error": "GM authentication required"}), 401
+
+        result = []
+
+        # Get PCs: campaign_players with vtt_character_id
+        campaign_players = (
+            session.query(CampaignPlayerRecord)
+            .filter_by(campaign_id=campaign.id, is_gm=False)
+            .all()
+        )
+        pc_char_ids = set()
+        for cp in campaign_players:
+            if cp.vtt_character_id:
+                char = (
+                    session.query(VTTCharacterRecord)
+                    .filter_by(id=cp.vtt_character_id)
+                    .first()
+                )
+                if char:
+                    result.append(
+                        {
+                            "id": char.id,
+                            "name": char.name,
+                            "type": "pc",
+                            "player_id": cp.id,
+                            "player_name": cp.player_name,
+                        }
+                    )
+                    pc_char_ids.add(char.id)
+
+        # Get NPCs: VTT characters with campaign_id = campaign.id and not already listed as PCs
+        npc_chars = (
+            session.query(VTTCharacterRecord)
+            .filter(
+                VTTCharacterRecord.campaign_id == campaign.id,
+                ~VTTCharacterRecord.id.in_(pc_char_ids) if pc_char_ids else True,
+            )
+            .all()
+        )
+        for char in npc_chars:
+            result.append(
+                {
+                    "id": char.id,
+                    "name": char.name,
+                    "type": "npc",
+                    "player_id": None,
+                    "player_name": None,
+                }
+            )
+
+        return jsonify(result)
+    finally:
+        session.close()
+
+
+@campaigns_bp.route("/<int:campaign_id>/ships/available", methods=["GET"])
+def get_campaign_available_ships(campaign_id: int):
+    """Get ships available to add to scenes."""
+    session = get_session()
+    try:
+        # Verify campaign exists
+        campaign = (
+            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        # GM auth required
+        session_token = request.cookies.get("sta_session_token")
+        gm_player = (
+            session.query(CampaignPlayerRecord)
+            .filter_by(campaign_id=campaign.id, is_gm=True)
+            .first()
+        )
+        if not gm_player or session_token != gm_player.session_token:
+            return jsonify({"error": "GM authentication required"}), 401
+
+        campaign_ships = (
+            session.query(CampaignShipRecord).filter_by(campaign_id=campaign.id).all()
+        )
+
+        result = []
+        for cs in campaign_ships:
+            ship = session.query(VTTShipRecord).filter_by(id=cs.ship_id).first()
+            if ship:
+                result.append({"id": ship.id, "name": ship.name})
+
+        return jsonify(result)
+    finally:
+        session.close()
 
     # GET - show form
     return render_template("campaign_new.html")
