@@ -91,9 +91,11 @@ This document captures key learnings from user feedback and decisions made durin
 
 ### Learnings
 
-1. **Agent Count**: 3 agents recommended for optimal parallelism
-2. **Worktree Usage**: Git worktrees recommended for isolation
-3. **Model Budget**: Use free models (MiniMax, Big Pickle) for development
+1. **Agent Count**: 3 agents recommended for optimal parallelism.
+2. **Worktree Usage**: Git worktrees are essential for isolation when agents work on same branch.
+3. **Model Budget**: Use free models (MiniMax, Big Pickle) for development.
+4. **Conflict Resolution**: When merging feature branches with parallel changes, expect conflicts in shared files (e.g., `scenes.py`). Resolve by carefully combining both sides' logic.
+5. **Test Environment**: Agents must ensure virtualenv exists; if missing, `uv venv` + `uv pip install -r requirements*.txt` fixes.
 
 ### Decisions
 
@@ -102,10 +104,17 @@ This document captures key learnings from user feedback and decisions made durin
    - Agent 2: API & Backend (python-dev skill)  
    - Agent 3: Tests & Integration (code-reviewer skill)
 
-2. **Worktree Management**: Use git worktrees for each feature branch
+2. **Worktree Management**: Use git worktrees for each feature branch; agents commit to their own worktree branch then merge to main feature branch.
+
 3. **Model Configuration**:
    - Dev agents: `opencode/minimax-m2.5-free`
    - Code review: `opencode/claude-sonnet-4-5`
+
+4. **Workflow**:
+   - Create worktree from base: `git worktree add -b <task-branch> <path> <base-branch>`
+   - Agent works, tests, commits, pushes
+   - Main branch merges each task branch
+   - Resolve conflicts by taking both sides' distinct functions/endpoints
 
 ## Git Workflow
 

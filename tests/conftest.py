@@ -16,6 +16,7 @@ import sta.web  # Must load sta.web submodule before patching sta.web.* routes
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.pool import StaticPool
 
 from sta.database.schema import (
     Base,
@@ -42,7 +43,12 @@ def get_test_engine():
     """Get or create the shared test engine."""
     global _test_engine
     if _test_engine is None:
-        _test_engine = create_engine("sqlite:///:memory:", echo=False)
+        _test_engine = create_engine(
+            "sqlite:///:memory:",
+            echo=False,
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
         Base.metadata.create_all(_test_engine)
     return _test_engine
 

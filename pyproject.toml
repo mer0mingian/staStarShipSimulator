@@ -1,0 +1,32 @@
+[project]
+name = "sta-starship-simulator"
+version = "0.1.0"
+description = "Star Trek Adventures Starship Simulator"
+requires-python = ">=3.13"
+
+dependencies = [
+    "flask",
+    "sqlalchemy",
+    "werkzeug",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+    "pytest-cov",
+]
+
+[tool.uv]
+python = "3.13"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"

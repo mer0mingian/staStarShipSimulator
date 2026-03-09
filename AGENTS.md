@@ -129,6 +129,54 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
+## Parallel Worktree Workflow (For Future Self)
+
+When working on a feature that requires parallel agent coordination:
+
+1. **Create base feature branch** from `develop` (or `main`):
+   ```bash
+   git checkout -b feature/milestone-task
+   ```
+
+2. **Launch agents** with subagent-driven-development, assigning each to its own task. Instruct them to:
+   - Create a separate git worktree: `git worktree add -b <task-branch> ../<task-name> feature/milestone-task`
+   - Work in that isolated directory
+   - Implement, test, commit, and push their branch
+   - Report back completion
+
+3. **Merge task branches** back to the base feature branch:
+   ```bash
+   git merge <task-branch>
+   ```
+   Resolve conflicts by combining distinct functionality (keep both agents' changes).
+
+4. **Cleanup** worktrees after merge:
+   ```bash
+   git worktree remove ../<task-name>
+   ```
+
+5. **Testing**: Run full test suite in base branch after merges.
+
+### Common Pitfalls & Detection
+
+- **Import errors in tests**: If tests fail with `module 'sta' has no attribute 'web'`, add `import sta.web` before any `mock.patch("sta.web.routes.*")` in `tests/conftest.py`. This ensures the submodule is loaded.
+- **Virtualenv missing**: Agents may find `.venv` absent in worktree. They should run `uv venv && uv pip install -r requirements*.txt`.
+- **Branch confusion**: Agents may commit to detached HEAD if worktree created incorrectly. Always create a named branch in worktree: `git worktree add -b my-task ../my-task feature/base`.
+- **Merge conflicts**: Shared files (e.g., `scenes.py`) will have overlapping changes. Resolve by merging logic, not discarding one side. Look for distinct endpoint functions; keep both.
+
+### Model Override
+
+When invoking an agent, specify model explicitly if needed:
+```json
+{
+  "model": "openrouter/stepfun/step-3.5-flash:free"
+}
+```
+
+Use this for cost savings or when default model fails.
+
+---
+
 ## Documentation Structure
 
 This project uses **progressive disclosure** - essential info first, detailed references on demand.

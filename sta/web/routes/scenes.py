@@ -1139,12 +1139,6 @@ def add_scene_participant(scene_id: int):
             if not player:
                 return jsonify({"error": "Player not found in campaign"}), 400
 
-            # If player has a linked VTT character, ensure it matches this character
-            if player.vtt_character_id and player.vtt_character_id != character_id:
-                return jsonify(
-                    {"error": "Player is not assigned to this character"}
-                ), 400
-
             # Check that this player is not already assigned to another character in this scene
             existing_player = (
                 session.query(SceneParticipantRecord)
@@ -1154,6 +1148,12 @@ def add_scene_participant(scene_id: int):
             if existing_player:
                 return jsonify(
                     {"error": "Player already assigned to a character in this scene"}
+                ), 400
+
+            # If player has a linked VTT character, ensure it matches this character
+            if player.vtt_character_id and player.vtt_character_id != character_id:
+                return jsonify(
+                    {"error": "Player is not assigned to this character"}
                 ), 400
 
         # Check that this character is not already in this scene

@@ -18,7 +18,7 @@ class TestSceneShipsAPI:
     @pytest.fixture
     def setup_scene_with_ship(self, test_session, sample_campaign):
         """Create a scene and campaign ship."""
-        campaign_id = sample_campaign["campaign"].id
+        campaign_id = sample_campaign["campaign"].campaign_id
 
         # Create a scene
         scene = SceneRecord(
@@ -151,7 +151,7 @@ class TestSceneShipsAPI:
 
         # Create a ship not linked to campaign
         other_ship = VTTShipRecord(
-            campaign_id=data["campaign"].id,
+            campaign_id=data["campaign"].campaign_id,
             name="Orphan Ship",
             ship_class="Shuttle",
             scale=2,
@@ -372,6 +372,7 @@ class TestAvailableShipsHelper:
             resistance=4,
         )
         test_session.add(ship1)
+        test_session.flush()
 
         ship2 = VTTShipRecord(
             campaign_id=campaign_id,
@@ -407,6 +408,7 @@ class TestAvailableShipsHelper:
             resistance=6,
         )
         test_session.add(ship2)
+        test_session.flush()
 
         # Add to campaign_ships
         cs1 = CampaignShipRecord(campaign_id=campaign_id, ship_id=ship1.id)
@@ -427,7 +429,7 @@ class TestAvailableShipsHelper:
     def test_available_ships_requires_auth(self, client, setup_campaign_ships):
         """Unauthenticated cannot access available ships."""
         data = setup_campaign_ships
-        campaign_id = data["campaign"].id
+        campaign_id = data["campaign"].campaign_id
 
         response = client.get(f"/campaigns/{campaign_id}/ships/available")
         assert response.status_code == 401
@@ -435,7 +437,7 @@ class TestAvailableShipsHelper:
     def test_available_ships_returns_list(self, client, setup_campaign_ships):
         """GM gets list of ships in campaign."""
         data = setup_campaign_ships
-        campaign_id = data["campaign"].id
+        campaign_id = data["campaign"].campaign_id
         gm_token = data["gm"].session_token
         client.set_cookie("sta_session_token", gm_token)
 
