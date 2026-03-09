@@ -12,6 +12,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 import random
 
+import sta.web  # Must load sta.web submodule before patching sta.web.* routes
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 
