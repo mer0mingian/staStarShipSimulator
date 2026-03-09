@@ -703,6 +703,344 @@ def _build_closing_options(session, scene):
 
 
 # =============================================================================
+# Scene Connections API
+# =============================================================================
+
+
+@scenes_bp.route("/<int:scene_id>/connections", methods=["GET"])
+def get_scene_connections(scene_id: int):
+    """Get scene connections (next and previous scene IDs)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        # Verify GM auth
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        next_ids = json.loads(scene.next_scene_ids_json or "[]")
+        previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+        return jsonify({"next_scene_ids": next_ids, "previous_scene_ids": previous_ids})
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/connections", methods=["PUT"])
+def update_scene_connections(scene_id: int):
+    """Update scene connections (replace with given lists)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        data = request.get_json() or {}
+
+        # Get current values
+        current_next_ids = json.loads(scene.next_scene_ids_json or "[]")
+        current_previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+
+        # Determine new next_ids
+        if "next_scene_ids" in data:
+            try:
+                next_ids_input = [int(i) for i in data["next_scene_ids"]]
+            except (ValueError, TypeError):
+                return jsonify({"error": "next_scene_ids must be integers"}), 400
+            # Filter to only those that exist in the same campaign
+            valid_next_ids = []
+            for nid in next_ids_input:
+                target = (
+                    session.query(SceneRecord)
+                    .filter_by(id=nid, campaign_id=scene.campaign_id)
+                    .first()
+                )
+                if target:
+                    valid_next_ids.append(nid)
+            next_ids = valid_next_ids
+        else:
+            next_ids = current_next_ids
+
+        # Determine new previous_ids
+        if "previous_scene_ids" in data:
+            try:
+                prev_ids_input = [int(i) for i in data["previous_scene_ids"]]
+            except (ValueError, TypeError):
+                return jsonify({"error": "previous_scene_ids must be integers"}), 400
+            valid_prev_ids = []
+            for pid in prev_ids_input:
+                target = (
+                    session.query(SceneRecord)
+                    .filter_by(id=pid, campaign_id=scene.campaign_id)
+                    .first()
+                )
+                if target:
+                    valid_prev_ids.append(pid)
+            previous_ids = valid_prev_ids
+        else:
+            previous_ids = current_previous_ids
+
+        scene.next_scene_ids_json = json.dumps(next_ids)
+        scene.previous_scene_ids_json = json.dumps(previous_ids)
+        session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "next_scene_ids": next_ids,
+                "previous_scene_ids": previous_ids,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/connections/next", methods=["POST"])
+def add_next_connection(scene_id: int):
+    """Add a next scene connection (bidirectional)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        data = request.get_json() or {}
+        target_scene_id = data.get("target_scene_id")
+        if target_scene_id is None:
+            return jsonify({"error": "target_scene_id required"}), 400
+
+        if target_scene_id == scene_id:
+            return jsonify({"error": "Cannot connect scene to itself"}), 400
+
+        # Check if already connected BEFORE checking target existence
+        next_ids = json.loads(scene.next_scene_ids_json or "[]")
+        if target_scene_id in next_ids:
+            return jsonify({"error": "Scenes already connected"}), 400
+
+        target = session.query(SceneRecord).filter_by(id=target_scene_id).first()
+        if not target:
+            return jsonify({"error": "Target scene not found"}), 400
+
+        if target.campaign_id != scene.campaign_id:
+            return jsonify({"error": "Target scene must be in same campaign"}), 400
+
+        # Add to scene's next
+        next_ids.append(target_scene_id)
+        scene.next_scene_ids_json = json.dumps(next_ids)
+
+        # Add to target's previous
+        previous_ids = json.loads(target.previous_scene_ids_json or "[]")
+        if scene_id not in previous_ids:
+            previous_ids.append(scene_id)
+            target.previous_scene_ids_json = json.dumps(previous_ids)
+
+        session.commit()
+
+        # Return updated connections for the scene
+        updated_next = json.loads(scene.next_scene_ids_json or "[]")
+        updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
+        return jsonify(
+            {
+                "success": True,
+                "next_scene_ids": updated_next,
+                "previous_scene_ids": updated_previous,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/connections/previous", methods=["POST"])
+def add_previous_connection(scene_id: int):
+    """Add a previous scene connection (scene_id will be the target's next)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        data = request.get_json() or {}
+        target_scene_id = data.get("target_scene_id")
+        if target_scene_id is None:
+            return jsonify({"error": "target_scene_id required"}), 400
+
+        if target_scene_id == scene_id:
+            return jsonify({"error": "Cannot connect scene to itself"}), 400
+
+        # Check if already connected (scene's previous includes target) BEFORE existence check
+        previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+        if target_scene_id in previous_ids:
+            return jsonify({"error": "Connection already exists"}), 400
+
+        target = session.query(SceneRecord).filter_by(id=target_scene_id).first()
+        if not target:
+            return jsonify({"error": "Target scene not found"}), 400
+
+        if target.campaign_id != scene.campaign_id:
+            return jsonify({"error": "Target scene must be in same campaign"}), 400
+
+        # Add to scene's previous
+        previous_ids.append(target_scene_id)
+        scene.previous_scene_ids_json = json.dumps(previous_ids)
+
+        # Add to target's next
+        target_next_ids = json.loads(target.next_scene_ids_json or "[]")
+        if scene_id not in target_next_ids:
+            target_next_ids.append(scene_id)
+            target.next_scene_ids_json = json.dumps(target_next_ids)
+
+        session.commit()
+
+        # Return updated connections for the scene
+        updated_next = json.loads(scene.next_scene_ids_json or "[]")
+        updated_previous = previous_ids
+        return jsonify(
+            {
+                "success": True,
+                "next_scene_ids": updated_next,
+                "previous_scene_ids": updated_previous,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/connections/next/<int:target_id>", methods=["DELETE"])
+def remove_next_connection(scene_id: int, target_id: int):
+    """Remove a next scene connection (bidirectional)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        # Remove target from scene.next_scene_ids regardless of target existence
+        next_ids = json.loads(scene.next_scene_ids_json or "[]")
+        if target_id not in next_ids:
+            # Nothing to remove, but still return success (idempotent)
+            updated_next = next_ids
+            updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
+            return jsonify(
+                {
+                    "success": True,
+                    "next_scene_ids": updated_next,
+                    "previous_scene_ids": updated_previous,
+                }
+            )
+        new_next = [i for i in next_ids if i != target_id]
+        scene.next_scene_ids_json = json.dumps(new_next)
+
+        # Remove scene from target.previous_scene_ids if target exists
+        target = session.query(SceneRecord).filter_by(id=target_id).first()
+        if target:
+            previous_ids = json.loads(target.previous_scene_ids_json or "[]")
+            new_previous = [i for i in previous_ids if i != scene_id]
+            target.previous_scene_ids_json = json.dumps(new_previous)
+
+        session.commit()
+
+        # Return updated connections for the scene
+        updated_next = new_next
+        updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
+        return jsonify(
+            {
+                "success": True,
+                "next_scene_ids": updated_next,
+                "previous_scene_ids": updated_previous,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route(
+    "/<int:scene_id>/connections/previous/<int:target_id>", methods=["DELETE"]
+)
+def remove_previous_connection(scene_id: int, target_id: int):
+    """Remove a previous scene connection (bidirectional)."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        # Remove target from scene.previous_scene_ids regardless of target existence
+        previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+        if target_id not in previous_ids:
+            # Nothing to remove, but still return success (idempotent)
+            updated_next = json.loads(scene.next_scene_ids_json or "[]")
+            updated_previous = previous_ids
+            return jsonify(
+                {
+                    "success": True,
+                    "next_scene_ids": updated_next,
+                    "previous_scene_ids": updated_previous,
+                }
+            )
+        new_previous = [i for i in previous_ids if i != target_id]
+        scene.previous_scene_ids_json = json.dumps(new_previous)
+
+        # Remove scene from target.next_scene_ids if target exists
+        target = session.query(SceneRecord).filter_by(id=target_id).first()
+        if target:
+            target_next_ids = json.loads(target.next_scene_ids_json or "[]")
+            new_target_next = [i for i in target_next_ids if i != scene_id]
+            target.next_scene_ids_json = json.dumps(new_target_next)
+
+        session.commit()
+
+        # Return updated connections for the scene
+        updated_next = json.loads(scene.next_scene_ids_json or "[]")
+        updated_previous = new_previous
+        return jsonify(
+            {
+                "success": True,
+                "next_scene_ids": updated_next,
+                "previous_scene_ids": updated_previous,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+# =============================================================================
 # Scene Participants API
 # =============================================================================
 
