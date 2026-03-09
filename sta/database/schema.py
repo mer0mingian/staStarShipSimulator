@@ -3,7 +3,15 @@
 import json
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, JSON
+from sqlalchemy import (
+    String,
+    Integer,
+    Text,
+    DateTime,
+    ForeignKey,
+    JSON,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from sta.models.character import Character, Attributes, Disciplines
@@ -519,6 +527,13 @@ class SceneRecord(Base):
     has_map: Mapped[bool] = mapped_column(default=False)
     tactical_map_json: Mapped[str] = mapped_column(Text, default="{}")
 
+    # Scene connections (for branching narratives)
+    next_scene_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    previous_scene_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    # Encounter configuration (for dynamic scene generation)
+    encounter_config_json: Mapped[str] = mapped_column(Text, default="{}")
+
     # Starship combat specific fields
     player_ship_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("starships.id"), nullable=True
@@ -529,6 +544,39 @@ class SceneRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
+    )
+
+
+class SceneShipRecord(Base):
+    """Ships assigned to a scene (replaces enemy_ships_json)."""
+
+    __tablename__ = "scene_ships"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scene_id: Mapped[int] = mapped_column(ForeignKey("scenes.id"), nullable=False)
+    ship_id: Mapped[int] = mapped_column(ForeignKey("starships.id"), nullable=False)
+    is_visible_to_players: Mapped[bool] = mapped_column(default=False)
+
+    __table_args__ = (UniqueConstraint("scene_id", "ship_id", name="uq_scene_ship"),)
+
+
+class SceneParticipantRecord(Base):
+    """Characters assigned to a scene (replaces characters_present_json)."""
+
+    __tablename__ = "scene_participants"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scene_id: Mapped[int] = mapped_column(ForeignKey("scenes.id"), nullable=False)
+    character_id: Mapped[int] = mapped_column(
+        ForeignKey("vtt_characters.id"), nullable=False
+    )
+    player_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("campaign_players.id"), nullable=True
+    )
+    is_visible_to_players: Mapped[bool] = mapped_column(default=False)
+
+    __table_args__ = (
+        UniqueConstraint("scene_id", "character_id", name="uq_scene_participant"),
     )
 
 

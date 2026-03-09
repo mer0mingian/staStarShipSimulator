@@ -26,7 +26,11 @@ from sta.database import (
     CampaignNPCRecord,
     StarshipRecord,
     CampaignShipRecord,
+    EncounterRecord,
+    PersonnelEncounterRecord,
+    VTTCharacterRecord,
 )
+from sta.database.schema import SceneParticipantRecord, SceneShipRecord
 from sta.models.enums import Position
 
 
@@ -653,5 +657,296 @@ def remove_npc_from_scene(scene_id: int, scene_npc_id: int):
         session.commit()
 
         return jsonify({"success": True})
+    finally:
+        session.close()
+
+# =============================================================================
+# Scene Activation, Termination & Config (M3 Task 3.4)
+# =============================================================================
+
+
+def _require_gm_auth(session, campaign_id: int):
+    """Verify GM authentication for a campaign. Returns GM player or raises 401."""
+    session_token = request.cookies.get("sta_session_token")
+    if not session_token:
+        return None, jsonify({"error": "GM authentication required"}), 401
+
+    gm_player = (
+        session.query(CampaignPlayerRecord)
+        .filter_by(campaign_id=campaign_id, is_gm=True)
+        .first()
+    )
+
+    if not gm_player or session_token != gm_player.session_token:
+        return None, jsonify({"error": "GM authentication required"}), 401
+
+    return gm_player, None, None
+
+
+def _build_closing_options(session, scene):
+    """Build closing options payload for a scene."""
+    next_ids = json.loads(scene.next_scene_ids_json or "[]")
+    draft_next = (
+        session.query(SceneRecord)
+        .filter(SceneRecord.id.in_(next_ids), SceneRecord.status == "draft")
+        .all()
+    )
+    return {
+        "next_scene_candidates": [
+            {"id": s.id, "name": s.name, "status": s.status} for s in draft_next
+        ],
+        "allow_create_new": True,
+        "allow_return_overview": True,
+    }
+
+
+@scenes_bp.route("/<int:scene_id>/activate", methods=["POST"])
+def activate_scene(scene_id: int):
+    """Activate a scene, creating appropriate encounter records."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        if scene.status != "draft":
+            return jsonify({"error": "Scene must be in draft status to activate"}), 400
+
+        campaign = session.query(CampaignRecord).filter_by(id=scene.campaign_id).first()
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        # Reduce campaign momentum by 1 (minimum 0)
+        campaign.momentum = max(0, campaign.momentum - 1)
+
+        if scene.scene_type == "starship_encounter":
+            if not campaign.active_ship_id:
+                return jsonify({"error": "Campaign has no active ship assigned"}), 400
+
+            scene_ships = session.query(SceneShipRecord).filter_by(scene_id=scene.id).all()
+            if not scene_ships:
+                return jsonify(
+                    {"error": "Starship encounter must have at least one ship in scene"}
+                ), 400
+
+            ship_ids = [ss.ship_id for ss in scene_ships]
+            if campaign.active_ship_id not in ship_ids:
+                return jsonify(
+                    {"error": "Player ship must be included in scene ships"}
+                ), 400
+
+            npc_ship_ids = [sid for sid in ship_ids if sid != campaign.active_ship_id]
+
+            encounter = EncounterRecord(
+                encounter_id=str(uuid.uuid4()),
+                name=scene.name,
+                campaign_id=campaign.id,
+                player_ship_id=campaign.active_ship_id,
+                player_position=scene.scene_position or "captain",
+                enemy_ship_ids_json=json.dumps(npc_ship_ids),
+                tactical_map_json=scene.tactical_map_json or "{}",
+                is_active=True,
+            )
+            session.add(encounter)
+            session.flush()
+            scene.encounter_id = encounter.id
+
+        elif scene.scene_type == "personal_encounter":
+            participants = (
+                session.query(SceneParticipantRecord)
+                .filter_by(scene_id=scene.id)
+                .all()
+            )
+            if not participants:
+                return jsonify(
+                    {"error": "Personal encounter must have at least one participant"}
+                ), 400
+
+            character_states = []
+            for p in participants:
+                char = (
+                    session.query(VTTCharacterRecord)
+                    .filter_by(id=p.character_id)
+                    .first()
+                )
+                if not char:
+                    continue
+                is_player = p.player_id is not None
+                char_state = {
+                    "character_id": char.id,
+                    "name": char.name,
+                    "is_player": is_player,
+                    "stress": char.stress,
+                    "stress_max": char.stress_max,
+                    "determination": char.determination,
+                    "determination_max": char.determination_max,
+                    "is_defeated": char.stress >= char.stress_max,
+                    "injuries": [],
+                    "protection": 0,
+                }
+                character_states.append(char_state)
+
+            encounter = PersonnelEncounterRecord(
+                scene_id=scene.id,
+                momentum=campaign.momentum,
+                threat=campaign.threat,
+                character_states_json=json.dumps(character_states),
+                tactical_map_json=scene.tactical_map_json or "{}",
+                is_active=True,
+            )
+            session.add(encounter)
+            session.flush()
+
+        else:
+            # Narrative or other types: activation is just status change
+            pass
+
+        scene.status = "active"
+        session.commit()
+
+        response_data = {"success": True, "status": scene.status}
+        if scene.scene_type == "starship_encounter":
+            response_data["encounter_id"] = encounter.id
+        elif scene.scene_type == "personal_encounter":
+            response_data["personnel_encounter_id"] = encounter.id
+        return jsonify(response_data)
+
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/end", methods=["POST"])
+def end_scene(scene_id: int):
+    """End an active scene, reducing momentum and deactivating encounter."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        if scene.status != "active":
+            return jsonify({"error": "Scene must be active to end"}), 400
+
+        campaign = session.query(CampaignRecord).filter_by(id=scene.campaign_id).first()
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        # Cap momentum at 6 before reducing by 1 (minimum 0)
+        campaign.momentum = max(0, min(campaign.momentum, 6) - 1)
+        scene.status = "completed"
+
+        # Deactivate linked encounter
+        if scene.encounter_id:
+            encounter = (
+                session.query(EncounterRecord).filter_by(id=scene.encounter_id).first()
+            )
+            if encounter:
+                encounter.is_active = False
+        else:
+            personnel_encounter = (
+                session.query(PersonnelEncounterRecord)
+                .filter_by(scene_id=scene.id)
+                .first()
+            )
+            if personnel_encounter:
+                personnel_encounter.is_active = False
+
+        session.commit()
+
+        closing_opts = _build_closing_options(session, scene)
+        return jsonify(
+            {
+                "success": True,
+                "momentum_remaining": campaign.momentum,
+                "closing_options": closing_opts,
+            }
+        )
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/config", methods=["GET"])
+def get_scene_config(scene_id: int):
+    """Get scene encounter configuration."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        if scene.encounter_config_json:
+            try:
+                config = json.loads(scene.encounter_config_json)
+                return jsonify(config)
+            except json.JSONDecodeError:
+                return jsonify({}), 200
+        return jsonify({}), 200
+    finally:
+        session.close()
+
+
+@scenes_bp.route("/<int:scene_id>/config", methods=["PUT"])
+def update_scene_config(scene_id: int):
+    """Update scene encounter configuration."""
+    session = get_session()
+    try:
+        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
+        if not scene:
+            return jsonify({"error": "Scene not found"}), 404
+
+        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
+        if response:
+            return response, status
+
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "JSON body required"}), 400
+
+        allowed_keys = {"npc_turn_mode", "gm_spends_threat_to_start"}
+        unknown_keys = set(data.keys()) - allowed_keys
+        if unknown_keys:
+            return jsonify(
+                {"error": f"Invalid config keys: {', '.join(unknown_keys)}"}
+            ), 400
+
+        if "npc_turn_mode" in data and data["npc_turn_mode"] not in (
+            "all_npcs",
+            "num_pcs",
+        ):
+            return jsonify(
+                {"error": "Invalid npc_turn_mode; must be 'all_npcs' or 'num_pcs'"}
+            ), 400
+
+        if "gm_spends_threat_to_start" in data and not isinstance(
+            data["gm_spends_threat_to_start"], bool
+        ):
+            return jsonify(
+                {"error": "gm_spends_threat_to_start must be a boolean"}
+            ), 400
+
+        scene.encounter_config_json = json.dumps(data)
+        session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
     finally:
         session.close()
