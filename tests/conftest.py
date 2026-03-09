@@ -26,6 +26,8 @@ from sta.database.schema import (
     SceneRecord,
 )
 
+import sta.web  # Ensure routes are loaded to avoid AttributeError
+
 
 # ============== SHARED TEST DATABASE ==============
 

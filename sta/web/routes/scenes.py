@@ -1141,6 +1141,9 @@ def activate_scene(scene_id: int):
         if not campaign:
             return jsonify({"error": "Campaign not found"}), 404
 
+        # Reduce campaign momentum by 1 (minimum 0)
+        campaign.momentum = max(0, campaign.momentum - 1)
+
         if scene.scene_type == "starship_encounter":
             if not campaign.active_ship_id:
                 return jsonify({"error": "Campaign has no active ship assigned"}), 400
@@ -1249,8 +1252,8 @@ def end_scene(scene_id: int):
         if not campaign:
             return jsonify({"error": "Campaign not found"}), 404
 
-        # Reduce campaign momentum by 1 (minimum 0)
-        campaign.momentum = max(0, campaign.momentum - 1)
+        # Cap momentum at 6 before reducing by 1 (minimum 0)
+        campaign.momentum = max(0, min(campaign.momentum, 6) - 1)
         scene.status = "completed"
 
         # Deactivate linked encounter
@@ -1274,6 +1277,7 @@ def end_scene(scene_id: int):
         closing_opts = _build_closing_options(session, scene)
         return jsonify(
             {
+                "success": True,
                 "momentum_remaining": campaign.momentum,
                 "closing_options": closing_opts,
             }

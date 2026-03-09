@@ -6,4 +6,6 @@ permission:
     "superpowers/using-superpowers": allow
     "superpowers/brainstorming": allow
     "superpowers/writing-plans": allow
+    "superpowers/subagent-driven-development": allow
+    "git-advanced-workflows": allow
 ---
