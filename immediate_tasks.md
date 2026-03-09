@@ -7,8 +7,8 @@
 - [x] Task 3.3: Participants & ships CRUD
 - [x] Task 3.4: Activation/termination/config
 - [x] All M3 tests passing (43/43)
-- [ ] Fix pre-existing test failures in `test_scene_participants.py` and `test_scene_ships.py` (campaign_id vs id mismatch)
-- [ ] Initialize `pyproject.toml` for uv project
+- [x] Fix pre-existing test failures in `test_scene_participants.py` and `test_scene_ships.py` (campaign_id vs id mismatch)
+- [x] Initialize `pyproject.toml` for uv project
 - [ ] Review and merge PR #8 to `vtt-scope` (user action)
 
 ## Next Steps (M4 Preparation)
