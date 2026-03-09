@@ -225,7 +225,7 @@ class TestSceneParticipantsAPI:
         assert "Character not found" in response.get_json()["error"]
 
     def test_add_participant_character_not_in_campaign(
-        self, client, setup_scene_with_data
+        self, client, setup_scene_with_data, test_session
     ):
         """POST participants fails if character does not belong to campaign."""
         data = setup_scene_with_data
@@ -265,7 +265,6 @@ class TestSceneParticipantsAPI:
             determination=1,
             determination_max=1,
         )
-        test_session = get_session()
         test_session.add(other_char)
         test_session.commit()
         char_id = other_char.id
@@ -322,7 +321,7 @@ class TestSceneParticipantsAPI:
         )
 
     def test_add_participant_player_already_assigned(
-        self, client, setup_scene_with_data
+        self, client, setup_scene_with_data, test_session
     ):
         """POST participants fails if player already assigned to another character in scene."""
         data = setup_scene_with_data
@@ -376,7 +375,6 @@ class TestSceneParticipantsAPI:
             determination=1,
             determination_max=1,
         )
-        test_session = get_session()
         test_session.add(other_pc)
         test_session.commit()
 
@@ -465,7 +463,9 @@ class TestSceneParticipantsAPI:
         assert participants[0]["player_id"] is None
         assert participants[0]["type"] == "npc"  # should now be NPC type
 
-    def test_update_participant_reassign_player(self, client, setup_scene_with_data):
+    def test_update_participant_reassign_player(
+        self, client, setup_scene_with_data, test_session
+    ):
         """PUT participant can reassign player to another character."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
@@ -480,7 +480,6 @@ class TestSceneParticipantsAPI:
             is_gm=False,
             position="tactical",
         )
-        test_session = get_session()
         test_session.add(other_player)
         test_session.flush()
 
@@ -785,7 +784,7 @@ class TestAvailableCharactersHelper:
     ):
         """Unauthenticated cannot access available characters."""
         data = setup_campaign_characters
-        campaign_id = data["campaign"].id
+        campaign_id = data["campaign"].campaign_id
 
         response = client.get(f"/campaigns/{campaign_id}/characters/available")
         assert response.status_code == 401
@@ -795,7 +794,7 @@ class TestAvailableCharactersHelper:
     ):
         """GM gets list of all characters not already in a scene context."""
         data = setup_campaign_characters
-        campaign_id = data["campaign"].id
+        campaign_id = data["campaign"].campaign_id
         gm_token = data["gm"].session_token
         client.set_cookie("sta_session_token", gm_token)
 
