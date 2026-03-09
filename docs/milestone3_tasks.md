@@ -378,6 +378,65 @@ After Task 3.1 completes:
 
 ---
 
+## Task 3.5: Flask to FastAPI Migration (Post-M3)
+
+**Agent**: python-dev
+**Estimated Time**: 2-4 hours
+**Priority**: Low (can be deferred to M4 or later)
+
+### Rationale
+- FastAPI provides automatic OpenAPI documentation
+- Better type validation with Pydantic
+- Native async support for future improvements
+- Modern Python web framework standard
+
+### Scope
+
+1. **App Factory** (`sta/web/app.py`):
+   - Convert Flask app factory to FastAPI
+   - Replace Blueprints with APIRouter
+   - Add CORS middleware
+
+2. **Route Conversion** (all files in `sta/web/routes/`):
+   - `main.py` → FastAPI routes with `@router.get/post`
+   - `campaigns.py` → FastAPI routes
+   - `scenes.py` → FastAPI routes
+   - `encounters.py` → FastAPI routes  
+   - `universe.py` → FastAPI routes
+   - `api.py` → FastAPI routes
+
+3. **Request/Response**:
+   - Replace `flask.request` with FastAPI `Request` dependency
+   - Replace `jsonify` with FastAPI `JSONResponse`
+   - Add Pydantic models for request/response validation
+
+4. **Template Rendering**:
+   - FastAPI can still use Jinja2 templates via `from fastapi import Request`
+   - Keep existing HTML templates (no change needed)
+
+5. **Database Integration**:
+   - Keep SQLAlchemy setup (works with both)
+   - Keep session management
+
+### Testing
+- Update test fixtures if needed
+- Ensure all existing endpoints work with new framework
+
+### Files to Modify
+- `sta/web/app.py` - Complete rewrite
+- `sta/web/routes/main.py`
+- `sta/web/routes/campaigns.py`
+- `sta/web/routes/scenes.py`
+- `sta/web/routes/encounters.py`
+- `sta/web/routes/universe.py`
+- `sta/web/routes/api.py`
+
+### Dependencies to Add
+- `fastapi`
+- `uvicorn` (for dev server)
+
+---
+
 ## Questions for User (None Remaining)
 
 All clarifications provided. Proceeding with this plan.

@@ -201,18 +201,18 @@ The application will be available at **http://localhost:5001**
 
 ### Running Tests
 
-```bash
-# Install test dependencies
-pip install -r requirements-dev.txt
+The project uses `uv` for fast dependency management.
 
-# Run all tests
-pytest
+```bash
+# Create virtual environment and install dependencies
+uv venv
+uv pip install -r requirements.txt -r requirements-dev.txt
+
+# Run tests using uv
+uv run pytest tests/ -v
 
 # Run with coverage
-pytest --cov=sta
-
-# Run specific test file
-pytest tests/test_turn_order.py
+uv run pytest --cov=sta tests/
 ```
 
 ### Development Mode with Hot Reload
