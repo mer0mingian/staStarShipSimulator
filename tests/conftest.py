@@ -29,6 +29,16 @@ from sta.database.schema import (
     SceneRecord,
 )
 
+from sta.database.vtt_schema import (
+    VTTCharacterRecord,
+    VTTShipRecord,
+    UniverseLibraryRecord,
+    UniverseItemRecord,
+    TraitRecord,
+    TalentRecord,
+    WeaponRecord,
+)
+
 import sta.web  # Ensure routes are loaded to avoid AttributeError
 
 
@@ -109,8 +119,11 @@ def app():
                             with patch(
                                 "sta.web.routes.universe.get_session", mock_get_session
                             ):
-                                # Import and create app after patching
-                                from sta.web.app import create_app
+                                with patch(
+                                    "sta.web.routes.ships.get_session", mock_get_session
+                                ):
+                                    # Import and create app after patching
+                                    from sta.web.app import create_app
 
                                 flask_app = create_app()
                                 flask_app.config["TESTING"] = True
