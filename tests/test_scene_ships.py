@@ -18,11 +18,12 @@ class TestSceneShipsAPI:
     @pytest.fixture
     def setup_scene_with_ship(self, test_session, sample_campaign):
         """Create a scene and campaign ship."""
-        campaign_id = sample_campaign["campaign"].campaign_id
+        # Use integer PK for database FK columns
+        campaign_id = sample_campaign["campaign"].id
 
         # Create a scene
         scene = SceneRecord(
-            campaign_id=campaign_id,
+            campaign_id=campaign_id,  # integer FK
             name="Test Space Battle",
             scene_type="starship_encounter",
             status="active",
@@ -142,7 +143,9 @@ class TestSceneShipsAPI:
         assert response.status_code == 404
         assert "Ship not found" in response.get_json()["error"]
 
-    def test_add_ship_not_in_campaign(self, client, setup_scene_with_ship):
+    def test_add_ship_not_in_campaign(
+        self, client, setup_scene_with_ship, test_session
+    ):
         """POST ships fails if ship not in campaign_ships."""
         data = setup_scene_with_ship
         scene_id = data["scene"].id
@@ -151,7 +154,7 @@ class TestSceneShipsAPI:
 
         # Create a ship not linked to campaign
         other_ship = VTTShipRecord(
-            campaign_id=data["campaign"].campaign_id,
+            campaign_id=data["campaign"].id,  # integer PK
             name="Orphan Ship",
             ship_class="Shuttle",
             scale=2,
@@ -183,10 +186,10 @@ class TestSceneShipsAPI:
             shields_max=0,
             resistance=0,
         )
-        test_session = get_session()
         test_session.add(other_ship)
-        test_session.commit()
+        test_session.flush()
         orphan_ship_id = other_ship.id
+        test_session.commit()
 
         response = client.post(
             f"/scenes/{scene_id}/ships", json={"ship_id": orphan_ship_id}

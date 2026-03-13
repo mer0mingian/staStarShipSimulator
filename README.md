@@ -17,9 +17,9 @@ This app digitizes the starship combat experience for STA 2e tabletop sessions. 
 | Milestone | Status | Description |
 |-----------|--------|-------------|
 | **M1** | ✅ Complete | Database Schema Migration |
-| **M2** | 🔄 In Progress | Campaign Management |
-| **M3** | Pending | Scene Management |
-| **M4** | Pending | Character/Ship CRUD |
+| **M2** | ✅ Complete | Campaign Management |
+| **M3** | ✅ Complete | Scene Management |
+| **M4** | ✅ Complete | Character/Ship CRUD |
 | **M5** | Pending | Combat Integration |
 | **M6** | Pending | UI/UX Overhaul |
 
@@ -29,7 +29,10 @@ See `docs/delivery_plan.md` for full VTT transition plan.
 
 ## Current Features
 
-- **Campaign Management**: Create/join campaigns, GM password protection
+- **Campaign Management**: Create/join campaigns, GM password protection, Universe Library
+- **Character Management**: Full CRUD, species/role, attributes/disciplines, stress/determination, talents
+- **Ship Management**: Full CRUD, systems/departments, weapons, shields, breaches, crew quality
+- **Scene Management**: Narrative/starship/personal/social scenes, participants, connections, activation
 - **Multiplayer**: Multiple players on own devices, turn claiming
 - **Starship Combat**: Hex-based tactical map, shields, breaches, Momentum/Threat
 - **Bridge Actions**: Tactical, Science, Engineering, Conn, Command stations
@@ -39,7 +42,7 @@ See `docs/delivery_plan.md` for full VTT transition plan.
 
 ## VTT Roadmap
 
-Full VTT feature roadmap is tracked in `docs/delivery_plan.md`. Current focus: Campaign Management (M2).
+Full VTT feature roadmap is tracked in `docs/delivery_plan.md`. Completed: M1-M4. Next: M5 (Combat Integration).
 
 ---
 
