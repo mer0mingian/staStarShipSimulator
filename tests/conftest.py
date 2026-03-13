@@ -27,30 +27,18 @@ from sta.database.schema import (
 )
 from sta.database.vtt_schema import VTTCharacterRecord, VTTShipRecord
 from sta.database import get_db
+from sta.database.async_db import engine as async_engine, AsyncSessionLocal
 
 # ============== SHARED TEST DATABASE ==============
 
-_test_engine = None
 _test_session_factory = None
-
-
-def get_test_engine():
-    global _test_engine
-    if _test_engine is None:
-        _test_engine = create_async_engine(
-            "sqlite+aiosqlite:///:memory:",
-            echo=False,
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-    return _test_engine
 
 
 async def get_test_session_factory():
     global _test_session_factory
     if _test_session_factory is None:
         _test_session_factory = async_sessionmaker(
-            bind=get_test_engine(), expire_on_commit=False
+            bind=async_engine, expire_on_commit=False
         )
     return _test_session_factory
 
@@ -60,8 +48,7 @@ async def get_test_session_factory():
 
 @pytest.fixture(scope="function", autouse=True)
 async def reset_db():
-    engine = get_test_engine()
-    async with engine.begin() as conn:
+    async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield

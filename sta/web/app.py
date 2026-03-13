@@ -50,20 +50,20 @@ def create_app():
     from sta.web.routes.main_router import main_router
     from sta.web.routes.encounters_router import encounters_router
     from sta.web.routes.api_router import api_router
-    from sta.web.routes.campaigns_router import campaigns_router
-    from sta.web.routes.scenes_router import scenes_router
-    from sta.web.routes.universe_router import universe_router
-    from sta.web.routes.characters_router import characters_router
-    from sta.web.routes.ships_router import ships_router
+    # from sta.web.routes.campaigns_router import campaigns_router # TODO: Migrate to FastAPI
+    # from sta.web.routes.scenes_router import scenes_router # TODO: Migrate to FastAPI
+    # from sta.web.routes.universe_router import universe_router # TODO: Migrate to FastAPI
+    # from sta.web.routes.characters_router import characters_router # TODO: Migrate to FastAPI
+    # from sta.web.routes.ships_router import ships_router # TODO: Migrate to FastAPI
 
     # Register routers with prefixes mirroring original blueprint URLs
     app.include_router(main_router, prefix="")
     app.include_router(encounters_router, prefix="/encounters")
-    app.include_router(api_router, prefix="/api")
-    app.include_router(campaigns_router, prefix="/campaigns")
-    app.include_router(scenes_router, prefix="/scenes")
-    app.include_router(universe_router, prefix="")
-    app.include_router(characters_router, prefix="")
-    app.include_router(ships_router, prefix="")
+    app.include_router(api_router)  # api_router already has prefix="/api"
+    # app.include_router(campaigns_router, prefix="/campaigns") # TODO: Migrate to FastAPI
+    # app.include_router(scenes_router, prefix="/scenes") # TODO: Migrate to FastAPI
+    # app.include_router(universe_router, prefix="") # TODO: Migrate to FastAPI
+    # app.include_router(characters_router, prefix="") # TODO: Migrate to FastAPI
+    # app.include_router(ships_router, prefix="") # TODO: Migrate to FastAPI
 
     return app
