@@ -200,6 +200,30 @@ This document captures key learnings from user feedback and decisions made durin
 
 2. **Removal Plan**: Delete legacy code in final cleanup milestone
 
+## Milestone 4: Character/Ship CRUD
+
+### Learnings
+- Completed character and ship CRUD APIs.
+- Integrated character/ship management with the Universe Library.
+- Implemented import/export functionality for VTT records.
+- Identified some LSP errors in `campaigns.py` and `scenes.py` that need monitoring during future milestones.
+
+### Decisions
+- Successfully completed Milestone 4.
+- Milestone 4 is now marked as complete in the delivery plan.
+
+## Milestone 5: Combat Integration
+
+### Learnings
+- Milestone 5 requires bridging the gap between new VTT models (`VTTCharacterRecord`, `VTTShipRecord`) and the legacy combat system.
+- `EncounterRecord` currently manages combat state but needs updates to fully support VTT records and multiple players.
+
+### Decisions
+- Created a detailed task list in `docs/tasks/milestone5_tasks.md`.
+- Implementation will focus on a unified `VTTCombatManager` in `sta/mechanics/vtt_combat.py`.
+- Action system will be adapted to handle VTT records natively.
+- UI integration will focus on updating existing `combat.html` and `combat_gm.html` templates to use new VTT APIs.
+
 ## Continuous Update Instructions
 
 This document should be continuously updated throughout the project:

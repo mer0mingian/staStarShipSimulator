@@ -44,9 +44,9 @@ brainstorming → writing-plans → (subagent-driven-development OR executing-pl
 ### Supporting Skills
 
 - **using-git-worktrees:** Creates isolated workspace on new branch (used by writing-plans)
-- **systematic-debugging:** For troubleshooting issues
-- **test-driven-development:** For writing failing tests first
-- **verification-before-completion:** For confirming fixes work
+- **python-debugging:** For troubleshooting Python issues using pdb/logging
+- **python-verification:** For TDD, pytest, and performance profiling
+- **python-code-quality:** For review checklists and enforcing SOLID/anti-patterns
 
 ## Skill Invocation Guidelines
 
@@ -59,22 +59,31 @@ brainstorming → writing-plans → (subagent-driven-development OR executing-pl
 | "Implement", "work through tasks" | subagent-driven-development    |
 | "Parallel", "batch"               | executing-plans                |
 | "Complete", "finish", "merge"     | finishing-a-development-branch |
-| "Debug", "why is this broken"     | systematic-debugging           |
-| "Write tests", "TDD"              | test-driven-development        |
-| "Verify fix", "confirm it works"  | verification-before-completion |
+| "Debug", "why is this broken"     | python-debugging               |
+| "Write tests", "TDD"              | python-verification            |
+| "Verify fix", "confirm it works"  | python-verification            |
+| "Review code", "audit"            | python-code-quality            |
 
 ---
 
 ## AI Assistant Rules & Project Constraints (CRITICAL)
 
-- **Minimal Changes:** Keep changes to existing files absolutely minimal! This is a private extension to an open-source project, and compatibility with the upstream branch is paramount.
-- **Dependency Management:**
-  - Do not introduce additional dependencies unless absolutely necessary.
-  - Use `uv` for virtual environment management.
+- **Model Choice**: ALWAYS use `opencode/minimax-m2.5-free` for all tasks (development, review, debugging) until further notice.
+- **Minimal Changes**: Keep changes to existing files absolutely minimal! This is a private extension to an open-source project, and compatibility with the upstream branch is paramount.
+- **Dependency Management & Testing**:
+  - ALWAYS use the `python-environment` skill for dependency management and environment setup.
+  - ALWAYS use the `python-verification` skill for running tests and verifying completion.
+  - Test commands (MUST use `uv`):
+    ```bash
+    uv venv
+    uv pip install -r requirements.txt -r requirements-dev.txt
+    uv run pytest tests/ -v
+    uv run pytest --cov=sta tests/
+    ```
   - Ensure `.venv` is created and used for requirements.
   - Check `.gitignore` to ensure `.venv` is excluded.
-- **Reference Files:** Do NOT read or reference `STA2e_Core Rulebook_DIGITAL_v1.1.txt`. Use `starshiprules.md` and other extracted reference files instead.
-- **Document Learnings:** After every significant user interaction, decision, or milestone completion, update `docs/learnings_and_decisions.md` to capture what was learned and what was decided.
+- **Reference Files**: Do NOT read or reference `STA2e_Core Rulebook_DIGITAL_v1.1.txt`. Use `starshiprules.md` and other extracted reference files instead.
+- **Document Learnings**: After every significant user interaction, decision, or milestone completion, update `docs/learnings_and_decisions.md` to capture what was learned and what was decided.
 
 ## 1. Think Before Coding
 
@@ -143,10 +152,10 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 When working on a feature that requires parallel agent coordination:
 
-1. **Create base feature branch** from `develop` (or `main`):
+1. **Create base feature branch** from `vtt-scope`:
 
    ```bash
-   git checkout -b feature/milestone-task
+   git checkout -b feature/milestone-task vtt-scope
    ```
 2. **Launch agents** with subagent-driven-development, assigning each to its own task. Instruct them to:
 
