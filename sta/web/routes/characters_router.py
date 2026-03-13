@@ -23,7 +23,7 @@ from sta.database.vtt_schema import (
 )
 from sta.generators.data import GENERAL_TALENTS
 
-characters_router = APIRouter(prefix="/characters", tags=["characters"])
+characters_router = APIRouter(tags=["characters"])
 
 VALID_STATES = ["Ok", "Fatigued", "Injured", "Dead"]
 
@@ -67,7 +67,7 @@ def _serialize_character(char: VTTCharacterRecord) -> dict:
 # =============================================================================
 
 
-@characters_router.get("/api/characters")
+@characters_router.get("/characters")
 async def list_characters(
     campaign_id: Optional[int] = None,
     char_type: Optional[str] = None,
@@ -87,7 +87,7 @@ async def list_characters(
     return [_serialize_character(c) for c in characters]
 
 
-@characters_router.get("/api/characters/{char_id}")
+@characters_router.get("/characters/{char_id}")
 async def get_character(char_id: int, db: AsyncSession = Depends(get_db)):
     """Get single character with full details."""
     stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
@@ -100,42 +100,44 @@ async def get_character(char_id: int, db: AsyncSession = Depends(get_db)):
     return _serialize_character(char)
 
 
-@characters_router.post("/api/characters")
+@characters_router.post("/characters", status_code=status.HTTP_201_CREATED)
 async def create_character(
+    data: dict = Body(...),
     db: AsyncSession = Depends(get_db),
-    name: str = Form("Unnamed Character"),
-    species: Optional[str] = Form(None),
-    rank: Optional[str] = Form(None),
-    role: Optional[str] = Form(None),
-    attributes_json: str = Form("{}"),
-    disciplines_json: str = Form("{}"),
-    talents_json: str = Form("[]"),
-    focuses_json: str = Form("[]"),
-    stress: int = Form(0),
-    stress_max: int = Form(5),
-    determination: int = Form(0),
-    determination_max: int = Form(3),
-    character_type: str = Form("support"),
-    pronouns: Optional[str] = Form(None),
-    avatar_url: Optional[str] = Form(None),
-    description: Optional[str] = Form(None),
-    values_json: str = Form("[]"),
-    equipment_json: str = Form("[]"),
-    environment: Optional[str] = Form(None),
-    upbringing: Optional[str] = Form(None),
-    career_path: Optional[str] = Form(None),
-    campaign_id: Optional[int] = Form(None),
-    is_visible_to_players: bool = Form(True),
 ):
     """Create new character with validation."""
+    name = data.get("name", "Unnamed Character")
+    species = data.get("species")
+    rank = data.get("rank")
+    role = data.get("role")
+    attributes = data.get("attributes", {})
+    disciplines = data.get("disciplines", {})
+    talents = data.get("talents", [])
+    focuses = data.get("focuses", [])
+    stress = data.get("stress", 0)
+    stress_max = data.get("stress_max", 5)
+    determination = data.get("determination", 0)
+    determination_max = data.get("determination_max", 3)
+    character_type = data.get("character_type", "support")
+    pronouns = data.get("pronouns")
+    avatar_url = data.get("avatar_url")
+    description = data.get("description")
+    values = data.get("values", [])
+    equipment = data.get("equipment", [])
+    environment = data.get("environment")
+    upbringing = data.get("upbringing")
+    career_path = data.get("career_path")
+    campaign_id = data.get("campaign_id")
+    is_visible_to_players = data.get("is_visible_to_players", True)
+
     try:
-        attributes = json.loads(attributes_json)
-    except json.JSONDecodeError:
+        attributes_json = json.dumps(attributes)
+    except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid attributes JSON")
 
     try:
-        disciplines = json.loads(disciplines_json)
-    except json.JSONDecodeError:
+        disciplines_json = json.dumps(disciplines)
+    except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid disciplines JSON")
 
     for attr_name, value in attributes.items():
@@ -171,8 +173,8 @@ async def create_character(
         role=role,
         attributes_json=attributes_json,
         disciplines_json=disciplines_json,
-        talents_json=talents_json,
-        focuses_json=focuses_json,
+        talents_json=json.dumps(talents),
+        focuses_json=json.dumps(focuses),
         stress=stress,
         stress_max=stress_max,
         determination=determination,
@@ -181,8 +183,8 @@ async def create_character(
         pronouns=pronouns,
         avatar_url=avatar_url,
         description=description,
-        values_json=values_json,
-        equipment_json=equipment_json,
+        values_json=json.dumps(values),
+        equipment_json=json.dumps(equipment),
         environment=environment,
         upbringing=upbringing,
         career_path=career_path,
@@ -197,7 +199,7 @@ async def create_character(
     return _serialize_character(char)
 
 
-@characters_router.put("/api/characters/{char_id}")
+@characters_router.put("/characters/{char_id}")
 async def update_character(
     char_id: int,
     db: AsyncSession = Depends(get_db),
@@ -338,7 +340,7 @@ async def update_character(
     return _serialize_character(char)
 
 
-@characters_router.delete("/api/characters/{char_id}")
+@characters_router.delete("/characters/{char_id}")
 async def delete_character(
     char_id: int,
     db: AsyncSession = Depends(get_db),
@@ -377,7 +379,7 @@ async def delete_character(
 # =============================================================================
 
 
-@characters_router.get("/api/characters/{char_id}/model")
+@characters_router.get("/characters/{char_id}/model")
 async def get_character_model(char_id: int, db: AsyncSession = Depends(get_db)):
     """Return character as legacy Character model."""
     stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
@@ -433,7 +435,7 @@ async def get_character_model(char_id: int, db: AsyncSession = Depends(get_db)):
 # =============================================================================
 
 
-@characters_router.put("/api/characters/{char_id}/stress")
+@characters_router.put("/characters/{char_id}/stress")
 async def adjust_stress(
     char_id: int,
     adjustment: int = Body(..., embed=True),
@@ -463,7 +465,7 @@ async def adjust_stress(
     }
 
 
-@characters_router.put("/api/characters/{char_id}/determination")
+@characters_router.put("/characters/{char_id}/determination")
 async def adjust_determination(
     char_id: int,
     adjustment: int = Body(..., embed=True),
@@ -498,7 +500,7 @@ async def adjust_determination(
 # =============================================================================
 
 
-@characters_router.put("/api/characters/{char_id}/state")
+@characters_router.put("/characters/{char_id}/state")
 async def update_character_state(
     char_id: int, state: str = Body(..., embed=True), db: AsyncSession = Depends(get_db)
 ):
@@ -526,7 +528,7 @@ async def update_character_state(
 # =============================================================================
 
 
-@characters_router.get("/api/characters/{char_id}/talents")
+@characters_router.get("/characters/{char_id}/talents")
 async def list_talents(char_id: int, db: AsyncSession = Depends(get_db)):
     """List available talents for a character."""
     stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
@@ -544,7 +546,7 @@ async def list_talents(char_id: int, db: AsyncSession = Depends(get_db)):
     }
 
 
-@characters_router.post("/api/characters/{char_id}/talents")
+@characters_router.post("/characters/{char_id}/talents")
 async def add_talent(
     char_id: int,
     talent_name: str = Body(..., embed=True),

@@ -50,14 +50,26 @@ def create_app():
     from sta.web.routes.ships_router import ships_router
 
     # Register routers with prefixes mirroring original blueprint URLs
+    # Note: Some routers have internal prefixes, others rely on the include_router prefix
     app.include_router(main_router, prefix="")
-    app.include_router(encounters_router, prefix="/encounters")
+    app.include_router(
+        encounters_router, prefix="/encounters"
+    )  # internal prefix="/encounters"
     app.include_router(api_router, prefix="/api")
-    app.include_router(campaigns_router, prefix="/campaigns")
-    app.include_router(scenes_router, prefix="/scenes")
-    app.include_router(universe_router, prefix="")
-    app.include_router(characters_router, prefix="")
-    app.include_router(ships_router, prefix="")
+    app.include_router(
+        campaigns_router, prefix="/campaigns"
+    )  # internal prefix="/campaigns"
+    # scenes_router has internal prefix="/scenes", so include_router should add no additional prefix
+    app.include_router(scenes_router, prefix="")  # Results in /scenes
+    app.include_router(
+        universe_router, prefix="/api"
+    )  # internal prefix="/universe" -> /api/universe
+    app.include_router(
+        characters_router, prefix="/api"
+    )  # internal prefix="/characters" -> /api/characters
+    app.include_router(
+        ships_router, prefix="/api"
+    )  # internal prefix="/ships" -> /api/ships
 
     return app
 

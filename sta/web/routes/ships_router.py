@@ -23,7 +23,7 @@ from sta.database.vtt_schema import (
 )
 from sta.models.enums import SystemType, CrewQuality
 
-ships_router = APIRouter(prefix="/ships", tags=["ships"])
+ships_router = APIRouter(tags=["ships"])
 
 
 def _serialize_ship(ship: VTTShipRecord) -> dict:
@@ -65,7 +65,7 @@ def _serialize_ship(ship: VTTShipRecord) -> dict:
 # =============================================================================
 
 
-@ships_router.get("/api/ships")
+@ships_router.get("/ships")
 async def list_ships(
     campaign_id: Optional[int] = None, db: AsyncSession = Depends(get_db)
 ):
@@ -80,7 +80,7 @@ async def list_ships(
     return [_serialize_ship(s) for s in ships]
 
 
-@ships_router.get("/api/ships/{ship_id}")
+@ships_router.get("/ships/{ship_id}")
 async def get_ship(ship_id: int, db: AsyncSession = Depends(get_db)):
     """Get single ship with full details."""
     stmt = select(VTTShipRecord).filter(VTTShipRecord.id == ship_id)
@@ -93,39 +93,31 @@ async def get_ship(ship_id: int, db: AsyncSession = Depends(get_db)):
     return _serialize_ship(ship)
 
 
-@ships_router.post("/api/ships")
+@ships_router.post("/ships", status_code=status.HTTP_201_CREATED)
 async def create_ship(
+    data: dict = Body(...),
     db: AsyncSession = Depends(get_db),
-    name: str = Form("Unnamed Ship"),
-    ship_class: Optional[str] = Form(None),
-    registry: Optional[str] = Form(None),
-    scale: int = Form(4),
-    systems_json: str = Form("{}"),
-    departments_json: str = Form("{}"),
-    weapons_json: str = Form("[]"),
-    talents_json: str = Form("[]"),
-    traits_json: str = Form("[]"),
-    breaches_json: str = Form("[]"),
-    shields: int = Form(0),
-    shields_max: int = Form(0),
-    resistance: int = Form(0),
-    has_reserve_power: bool = Form(True),
-    shields_raised: bool = Form(False),
-    weapons_armed: bool = Form(False),
-    crew_quality: Optional[str] = Form(None),
-    campaign_id: Optional[int] = Form(None),
-    is_visible_to_players: bool = Form(True),
 ):
     """Create new ship with validation."""
-    try:
-        systems = json.loads(systems_json)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid systems JSON")
-
-    try:
-        departments = json.loads(departments_json)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid departments JSON")
+    name = data.get("name", "Unnamed Ship")
+    ship_class = data.get("ship_class")
+    registry = data.get("registry")
+    scale = data.get("scale", 4)
+    systems = data.get("systems", {})
+    departments = data.get("departments", {})
+    weapons = data.get("weapons", [])
+    talents = data.get("talents", [])
+    traits = data.get("traits", [])
+    breaches = data.get("breaches", [])
+    shields = data.get("shields", 0)
+    shields_max = data.get("shields_max", 0)
+    resistance = data.get("resistance", 0)
+    has_reserve_power = data.get("has_reserve_power", True)
+    shields_raised = data.get("shields_raised", False)
+    weapons_armed = data.get("weapons_armed", False)
+    crew_quality = data.get("crew_quality")
+    campaign_id = data.get("campaign_id")
+    is_visible_to_players = data.get("is_visible_to_players", True)
 
     for sys_name, value in systems.items():
         if not (7 <= value <= 12):
@@ -151,12 +143,12 @@ async def create_ship(
         ship_class=ship_class,
         ship_registry=registry,
         scale=scale,
-        systems_json=systems_json,
-        departments_json=departments_json,
-        weapons_json=weapons_json,
-        talents_json=talents_json,
-        traits_json=traits_json,
-        breaches_json=breaches_json,
+        systems_json=json.dumps(systems),
+        departments_json=json.dumps(departments),
+        weapons_json=json.dumps(weapons),
+        talents_json=json.dumps(talents),
+        traits_json=json.dumps(traits),
+        breaches_json=json.dumps(breaches),
         shields=shields,
         shields_max=shields_max,
         resistance=resistance,
@@ -175,7 +167,7 @@ async def create_ship(
     return _serialize_ship(ship)
 
 
-@ships_router.put("/api/ships/{ship_id}")
+@ships_router.put("/ships/{ship_id}")
 async def update_ship(
     ship_id: int,
     db: AsyncSession = Depends(get_db),
@@ -320,7 +312,7 @@ async def update_ship(
     return _serialize_ship(ship)
 
 
-@ships_router.delete("/api/ships/{ship_id}")
+@ships_router.delete("/ships/{ship_id}")
 async def delete_ship(
     ship_id: int,
     db: AsyncSession = Depends(get_db),
@@ -359,7 +351,7 @@ async def delete_ship(
 # =============================================================================
 
 
-@ships_router.get("/api/ships/{ship_id}/model")
+@ships_router.get("/ships/{ship_id}/model")
 async def get_ship_model(ship_id: int, db: AsyncSession = Depends(get_db)):
     """Return ship as legacy Starship model."""
     stmt = select(VTTShipRecord).filter(VTTShipRecord.id == ship_id)
@@ -423,7 +415,7 @@ async def get_ship_model(ship_id: int, db: AsyncSession = Depends(get_db)):
 # =============================================================================
 
 
-@ships_router.put("/api/ships/{ship_id}/shields")
+@ships_router.put("/ships/{ship_id}/shields")
 async def adjust_shields(
     ship_id: int,
     shields: Optional[int] = Body(None, embed=True),
@@ -463,7 +455,7 @@ async def adjust_shields(
 # =============================================================================
 
 
-@ships_router.put("/api/ships/{ship_id}/power")
+@ships_router.put("/ships/{ship_id}/power")
 async def adjust_power(
     ship_id: int,
     current: Optional[int] = Body(None, embed=True),
@@ -498,7 +490,7 @@ async def adjust_power(
 # =============================================================================
 
 
-@ships_router.put("/api/ships/{ship_id}/breach")
+@ships_router.put("/ships/{ship_id}/breach")
 async def adjust_breach(
     ship_id: int,
     system: str = Body(..., embed=True),
@@ -548,7 +540,7 @@ async def adjust_breach(
 # =============================================================================
 
 
-@ships_router.put("/api/ships/{ship_id}/weapons")
+@ships_router.put("/ships/{ship_id}/weapons")
 async def update_weapons(
     ship_id: int,
     weapons: list = Body(..., embed=True),
@@ -570,7 +562,7 @@ async def update_weapons(
     }
 
 
-@ships_router.post("/api/ships/{ship_id}/weapons/{weapon_name}/arm")
+@ships_router.post("/ships/{ship_id}/weapons/{weapon_name}/arm")
 async def arm_weapon(
     ship_id: int,
     weapon_name: str,
@@ -611,7 +603,7 @@ async def arm_weapon(
 # =============================================================================
 
 
-@ships_router.get("/api/ships/{ship_id}/crew-quality")
+@ships_router.get("/ships/{ship_id}/crew-quality")
 async def get_crew_quality(ship_id: int, db: AsyncSession = Depends(get_db)):
     """Get crew quality (NPC ships only)."""
     stmt = select(VTTShipRecord).filter(VTTShipRecord.id == ship_id)
@@ -626,7 +618,7 @@ async def get_crew_quality(ship_id: int, db: AsyncSession = Depends(get_db)):
     }
 
 
-@ships_router.put("/api/ships/{ship_id}/crew-quality")
+@ships_router.put("/ships/{ship_id}/crew-quality")
 async def set_crew_quality(
     ship_id: int,
     crew_quality: str = Body(..., embed=True),
