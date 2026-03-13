@@ -161,14 +161,23 @@ def new_campaign():
 # =============================================================================
 
 
-@campaigns_bp.route("/<int:campaign_id>/characters/available", methods=["GET"])
-def get_campaign_available_characters(campaign_id: int):
+@campaigns_bp.route("/<campaign_id>/characters/available", methods=["GET"])
+def get_campaign_available_characters(campaign_id: str):
     """Get characters available to add to scenes (PCs and NPCs)."""
     session = get_session()
     try:
-        # Verify campaign exists
+        # Verify campaign exists - lookup by string campaign_id
         campaign = (
             session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
+        )
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+
+        # GM auth required - use integer PK for FK lookup
+        gm_player = (
+            session.query(CampaignPlayerRecord)
+            .filter_by(campaign_id=campaign.id, is_gm=True)
+            .first()
         )
         if not campaign:
             return jsonify({"error": "Campaign not found"}), 404
@@ -236,19 +245,19 @@ def get_campaign_available_characters(campaign_id: int):
         session.close()
 
 
-@campaigns_bp.route("/<int:campaign_id>/ships/available", methods=["GET"])
-def get_campaign_available_ships(campaign_id: int):
+@campaigns_bp.route("/<campaign_id>/ships/available", methods=["GET"])
+def get_campaign_available_ships(campaign_id: str):
     """Get ships available to add to scenes."""
     session = get_session()
     try:
-        # Verify campaign exists
+        # Verify campaign exists - lookup by string campaign_id
         campaign = (
             session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
         )
         if not campaign:
             return jsonify({"error": "Campaign not found"}), 404
 
-        # GM auth required
+        # GM auth required - use integer PK for FK lookup
         session_token = request.cookies.get("sta_session_token")
         gm_player = (
             session.query(CampaignPlayerRecord)
