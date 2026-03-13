@@ -18,7 +18,8 @@ from sta.database.schema import SceneShipRecord, SceneParticipantRecord
 class TestSceneActivationAPI:
     """Tests for POST /api/scenes/<id>/activate."""
 
-    def test_activate_starship_success(
+    @pytest.mark.asyncio
+    async def test_activate_starship_success(
         self, client, test_session, sample_campaign, sample_enemy_ship_data
     ):
         """Activating a starship scene creates EncounterRecord, reduces momentum, sets scene active."""
@@ -27,7 +28,7 @@ class TestSceneActivationAPI:
 
         # Set initial momentum to 5
         campaign.momentum = 5
-        test_session.commit()
+        await test_session.commit()
 
         # Create a draft starship scene
         scene = SceneRecord(
@@ -37,7 +38,7 @@ class TestSceneActivationAPI:
             status="draft",
         )
         test_session.add(scene)
-        test_session.flush()
+        await test_session.flush()
 
         # Add player ship to scene_ships (campaign.active_ship_id)
         player_ship_id = campaign.active_ship_id
@@ -50,26 +51,26 @@ class TestSceneActivationAPI:
         # Add an enemy ship
         enemy_ship = StarshipRecord(**sample_enemy_ship_data)
         test_session.add(enemy_ship)
-        test_session.flush()
+        await test_session.flush()
         test_session.add(
             SceneShipRecord(
                 scene_id=scene.id, ship_id=enemy_ship.id, is_visible_to_players=False
             )
         )
-        test_session.commit()
+        await test_session.commit()
 
         scene_id = scene.id
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
         response = client.post(f"/scenes/{scene_id}/activate")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data["success"] is True
         assert data["status"] == "active"
         assert "encounter_id" in data
 
         # Commit to expire session and see changes
-        test_session.commit()
+        await test_session.commit()
 
         # Check scene status updated
         updated_scene = test_session.query(SceneRecord).filter_by(id=scene_id).first()
@@ -94,14 +95,15 @@ class TestSceneActivationAPI:
         )
         assert updated_campaign.momentum == 4
 
-    def test_activate_starship_fails_if_campaign_no_active_ship(
+    @pytest.mark.asyncio
+    async def test_activate_starship_fails_if_campaign_no_active_ship(
         self, client, test_session, sample_campaign
     ):
         """Activation fails if campaign has no active ship."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
         campaign.active_ship_id = None
-        test_session.commit()
+        await test_session.commit()
 
         scene = SceneRecord(
             campaign_id=campaign.id,
@@ -110,22 +112,23 @@ class TestSceneActivationAPI:
             status="draft",
         )
         test_session.add(scene)
-        test_session.commit()
+        await test_session.commit()
         scene_id = scene.id
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
         response = client.post(f"/scenes/{scene_id}/activate")
         assert response.status_code == 400
-        data = response.get_json()
-        assert "Campaign has no active ship assigned" in data["error"]
+        data = response.json()
+        assert "Campaign has no active ship assigned" in data["detail"]
 
-    def test_activate_starship_fails_if_no_ships_in_scene(
+    @pytest.mark.asyncio
+    async def test_activate_starship_fails_if_no_ships_in_scene(
         self, client, test_session, sample_campaign
     ):
         """Activation fails if no ships added to scene."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
-        test_session.commit()  # ensure active_ship exists
+        await test_session.commit()  # ensure active_ship exists
 
         scene = SceneRecord(
             campaign_id=campaign.id,
@@ -134,16 +137,17 @@ class TestSceneActivationAPI:
             status="draft",
         )
         test_session.add(scene)
-        test_session.commit()
+        await test_session.commit()
         scene_id = scene.id
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
         response = client.post(f"/scenes/{scene_id}/activate")
         assert response.status_code == 400
-        data = response.get_json()
-        assert "must have at least one ship in scene" in data["error"]
+        data = response.json()
+        assert "must have at least one ship in scene" in data["detail"]
 
-    def test_activate_starship_fails_if_player_ship_not_in_scene(
+    @pytest.mark.asyncio
+    async def test_activate_starship_fails_if_player_ship_not_in_scene(
         self, client, test_session, sample_campaign, sample_enemy_ship_data
     ):
         """Activation fails if campaign's active ship is not in scene_ships."""
@@ -154,7 +158,7 @@ class TestSceneActivationAPI:
         # Add only an enemy ship, not the player ship
         enemy_ship = StarshipRecord(**sample_enemy_ship_data)
         test_session.add(enemy_ship)
-        test_session.flush()
+        await test_session.flush()
 
         scene = SceneRecord(
             campaign_id=campaign.id,
@@ -163,28 +167,29 @@ class TestSceneActivationAPI:
             status="draft",
         )
         test_session.add(scene)
-        test_session.flush()
+        await test_session.flush()
 
         test_session.add(
             SceneShipRecord(
                 scene_id=scene.id, ship_id=enemy_ship.id, is_visible_to_players=False
             )
         )
-        test_session.commit()
+        await test_session.commit()
         scene_id = scene.id
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
         response = client.post(f"/scenes/{scene_id}/activate")
         assert response.status_code == 400
-        data = response.get_json()
-        assert "Player ship must be included in scene ships" in data["error"]
+        data = response.json()
+        assert "Player ship must be included in scene ships" in data["detail"]
 
-    def test_activate_personal_success(self, client, test_session, sample_campaign):
+    @pytest.mark.asyncio
+    async def test_activate_personal_success(self, client, test_session, sample_campaign):
         """Activating a personal scene creates PersonnelEncounterRecord with correct character states."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
         campaign.momentum = 3
-        test_session.commit()
+        await test_session.commit()
 
         # Create a PC character assigned to a player
         pc_char = VTTCharacterRecord(
@@ -219,7 +224,7 @@ class TestSceneActivationAPI:
             determination_max=3,
         )
         test_session.add(pc_char)
-        test_session.flush()
+        await test_session.flush()
 
         # Create an NPC character (no player)
         npc_char = VTTCharacterRecord(
@@ -254,7 +259,7 @@ class TestSceneActivationAPI:
             determination_max=3,
         )
         test_session.add(npc_char)
-        test_session.flush()
+        await test_session.flush()
 
         # Create a draft personal scene
         scene = SceneRecord(
@@ -264,7 +269,7 @@ class TestSceneActivationAPI:
             status="draft",
         )
         test_session.add(scene)
-        test_session.flush()
+        await test_session.flush()
 
         # Add participants: PC assigned to first player, NPC unassigned
         player = sample_campaign["players"][
@@ -286,19 +291,19 @@ class TestSceneActivationAPI:
                 is_visible_to_players=False,
             )
         )
-        test_session.commit()
+        await test_session.commit()
         scene_id = scene.id
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
         response = client.post(f"/scenes/{scene_id}/activate")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data["success"] is True
         assert data["status"] == "active"
         assert "personnel_encounter_id" in data
 
         # Commit test session to see changes
-        test_session.commit()
+        await test_session.commit()
 
         # Verify personnel encounter created
         pe_id = data["personnel_encounter_id"]
@@ -335,7 +340,8 @@ class TestSceneActivationAPI:
         )
         assert updated_campaign.momentum == 2
 
-    def test_activate_personal_fails_if_no_participants(
+    @pytest.mark.asyncio
+    async def test_activate_personal_fails_if_no_participants(
         self, client, test_session, sample_campaign
     ):
         """Activation fails if personal scene has no participants."""
@@ -349,21 +355,22 @@ class TestSceneActivationAPI:
             status="draft",
         )
         test_session.add(scene)
-        test_session.commit()
+        await test_session.commit()
         scene_id = scene.id
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
         response = client.post(f"/scenes/{scene_id}/activate")
         assert response.status_code == 400
-        data = response.get_json()
-        assert "must have at least one participant" in data["error"]
+        data = response.json()
+        assert "must have at least one participant" in data["detail"]
 
-    def test_activate_narrative_success(self, client, test_session, sample_campaign):
+    @pytest.mark.asyncio
+    async def test_activate_narrative_success(self, client, test_session, sample_campaign):
         """Activating a narrative scene just changes status to active; no encounter created."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
         campaign.momentum = 2
-        test_session.commit()
+        await test_session.commit()
 
         scene = SceneRecord(
             campaign_id=campaign.id,
@@ -372,20 +379,20 @@ class TestSceneActivationAPI:
             status="draft",
         )
         test_session.add(scene)
-        test_session.commit()
+        await test_session.commit()
         scene_id = scene.id
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
         response = client.post(f"/scenes/{scene_id}/activate")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data["success"] is True
         assert data["status"] == "active"
         assert "encounter_id" not in data
         assert "personnel_encounter_id" not in data
 
         # Commit to expire session and see changes
-        test_session.commit()
+        await test_session.commit()
 
         # Scene should be active, no encounter_id set
         updated_scene = test_session.query(SceneRecord).filter_by(id=scene_id).first()
@@ -398,7 +405,8 @@ class TestSceneActivationAPI:
         )
         assert updated_campaign.momentum == 1
 
-    def test_activate_fails_if_not_draft(self, client, test_session, sample_campaign):
+    @pytest.mark.asyncio
+    async def test_activate_fails_if_not_draft(self, client, test_session, sample_campaign):
         """Activation fails if scene is not in draft status."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
@@ -410,16 +418,17 @@ class TestSceneActivationAPI:
             status="active",
         )
         test_session.add(scene)
-        test_session.commit()
+        await test_session.commit()
         scene_id = scene.id
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
         response = client.post(f"/scenes/{scene_id}/activate")
         assert response.status_code == 400
-        data = response.get_json()
-        assert "must be in draft status" in data["error"]
+        data = response.json()
+        assert "must be in draft status" in data["detail"]
 
-    def test_activate_requires_gm_auth(self, client, test_session, sample_campaign):
+    @pytest.mark.asyncio
+    async def test_activate_requires_gm_auth(self, client, test_session, sample_campaign):
         """Activation requires GM authentication."""
         campaign = sample_campaign["campaign"]
         # No GM token set
@@ -430,7 +439,7 @@ class TestSceneActivationAPI:
             status="draft",
         )
         test_session.add(scene)
-        test_session.commit()
+        await test_session.commit()
         scene_id = scene.id
 
         response = client.post(f"/scenes/{scene_id}/activate")

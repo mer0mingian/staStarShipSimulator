@@ -8,7 +8,8 @@ from tests.conftest import *  # noqa: F401, F403
 class TestPersonnelEncounterAPI:
     """Test personnel encounter creation and status."""
 
-    def test_create_personnel_encounter(
+    @pytest.mark.asyncio
+    async def test_create_personnel_encounter(
         self, client, test_session, sample_campaign, scene_personal
     ):
         """Test creating a personnel encounter."""
@@ -17,11 +18,12 @@ class TestPersonnelEncounterAPI:
             headers={"Content-Type": "application/json"},
         )
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data["success"] is True
         assert "encounter_id" in data
 
-    def test_create_personnel_encounter_wrong_type(
+    @pytest.mark.asyncio
+    async def test_create_personnel_encounter_wrong_type(
         self, client, test_session, sample_campaign, scene
     ):
         """Test creating personnel encounter fails for non-personal scene."""
@@ -31,7 +33,8 @@ class TestPersonnelEncounterAPI:
         )
         assert response.status_code == 400
 
-    def test_get_personnel_status(
+    @pytest.mark.asyncio
+    async def test_get_personnel_status(
         self, client, test_session, sample_campaign, scene_personal
     ):
         """Test getting personnel encounter status."""
@@ -40,13 +43,14 @@ class TestPersonnelEncounterAPI:
 
         response = client.get(f"/api/personnel/{scene_personal.id}/status")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert "current_turn" in data
         assert "round" in data
         assert "momentum" in data
         assert "characters" in data
 
-    def test_add_character_to_personnel(
+    @pytest.mark.asyncio
+    async def test_add_character_to_personnel(
         self, client, test_session, sample_campaign, scene_personal
     ):
         """Test adding a character to personnel encounter."""
@@ -63,12 +67,13 @@ class TestPersonnelEncounterAPI:
             },
         )
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data["success"] is True
         assert data["character_index"] == 0
         assert data["character"]["name"] == "Test Character"
 
-    def test_get_personnel_actions(
+    @pytest.mark.asyncio
+    async def test_get_personnel_actions(
         self, client, test_session, sample_campaign, scene_personal
     ):
         """Test getting available personnel actions."""
@@ -77,14 +82,15 @@ class TestPersonnelEncounterAPI:
 
         response = client.get(f"/api/personnel/{scene_personal.id}/action-availability")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert "minor_actions" in data
         assert "major_actions" in data
         assert "Personnel Attack" in data["major_actions"]
         assert "First Aid" in data["major_actions"]
         assert "Guard" in data["major_actions"]
 
-    def test_self_targeting_prevention(
+    @pytest.mark.asyncio
+    async def test_self_targeting_prevention(
         self, client, test_session, sample_campaign, scene_personal
     ):
         """Test that characters cannot target themselves."""
@@ -110,10 +116,11 @@ class TestPersonnelEncounterAPI:
             },
         )
         assert response.status_code == 400
-        data = response.get_json()
-        assert "Cannot target yourself" in data["error"]
+        data = response.json()
+        assert "Cannot target yourself" in data["detail"]
 
-    def test_invalid_character_index(
+    @pytest.mark.asyncio
+    async def test_invalid_character_index(
         self, client, test_session, sample_campaign, scene_personal
     ):
         """Test that invalid character_index is rejected."""
@@ -143,7 +150,8 @@ class TestPersonnelEncounterAPI:
         )
         assert response.status_code == 400
 
-    def test_update_character_position(
+    @pytest.mark.asyncio
+    async def test_update_character_position(
         self, client, test_session, sample_campaign, scene_personal
     ):
         """Test updating character position on map."""
@@ -159,21 +167,23 @@ class TestPersonnelEncounterAPI:
             json={"character_index": 0, "position": {"q": 1, "r": -1}},
         )
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data["success"] is True
         assert data["position"] == {"q": 1, "r": -1}
 
-    def test_next_turn(self, client, test_session, sample_campaign, scene_personal):
+    @pytest.mark.asyncio
+    async def test_next_turn(self, client, test_session, sample_campaign, scene_personal):
         """Test advancing to next turn."""
         # Create encounter first
         client.post(f"/api/personnel/{scene_personal.id}/create")
 
         response = client.post(f"/api/personnel/{scene_personal.id}/next-turn")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data["success"] is True
 
-    def test_delete_personnel_encounter(
+    @pytest.mark.asyncio
+    async def test_delete_personnel_encounter(
         self, client, test_session, sample_campaign, scene_personal
     ):
         """Test deleting a personnel encounter."""
@@ -182,19 +192,20 @@ class TestPersonnelEncounterAPI:
 
         response = client.delete(f"/api/personnel/{scene_personal.id}")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data["success"] is True
 
 
 class TestPersonnelSceneActivation:
     """Test personnel encounter activation from scenes."""
 
-    def test_activate_personal_encounter_creates_record(
+    @pytest.mark.asyncio
+    async def test_activate_personal_encounter_creates_record(
         self, client, test_session, sample_campaign, scene_personal, gm_session
     ):
         """Test activating a personal encounter scene creates personnel encounter."""
         # Set GM session
-        client.set_cookie("sta_session_token", gm_session.session_token)
+        client.cookies.set("sta_session_token", gm_session.session_token)
 
         # Activate scene
         response = client.put(

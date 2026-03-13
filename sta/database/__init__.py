@@ -1,6 +1,6 @@
 """Database layer for STA Starship Simulator."""
 
-from .db import init_db, get_session, engine
+from .db import init_db, get_session, get_db, engine, async_engine
 from .schema import (
     CharacterRecord,
     StarshipRecord,

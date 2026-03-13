@@ -13,13 +13,14 @@ from sta.database.schema import (
 class TestVTTCharacterLinking:
     """Tests for linking VTT characters to campaign players."""
 
-    def test_link_vtt_character_to_player(self, client, test_session, sample_campaign):
+    @pytest.mark.asyncio
+    async def test_link_vtt_character_to_player(self, client, test_session, sample_campaign):
         """POST /campaigns/api/campaign/<id>/link-character should link VTT character."""
         campaign = sample_campaign["campaign"]
         player = sample_campaign["players"][1]  # Non-GM player
         gm_token = sample_campaign["players"][0].session_token
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/link-character",
@@ -27,11 +28,12 @@ class TestVTTCharacterLinking:
         )
         assert response.status_code == 200
 
-        data = response.get_json()
+        data = response.json()
         assert data["success"] is True
         assert data["vtt_character_id"] == 12345
 
-    def test_link_character_requires_gm_auth(
+    @pytest.mark.asyncio
+    async def test_link_character_requires_gm_auth(
         self, client, test_session, sample_campaign
     ):
         """Link character should require GM authentication."""
@@ -39,7 +41,7 @@ class TestVTTCharacterLinking:
         player = sample_campaign["players"][1]
         player_token = sample_campaign["players"][1].session_token
 
-        client.set_cookie("sta_session_token", player_token)
+        client.cookies.set("sta_session_token", player_token)
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/link-character",
@@ -47,7 +49,8 @@ class TestVTTCharacterLinking:
         )
         assert response.status_code == 403
 
-    def test_link_character_requires_authentication(
+    @pytest.mark.asyncio
+    async def test_link_character_requires_authentication(
         self, client, test_session, sample_campaign
     ):
         """Link character should require authentication."""
@@ -60,14 +63,15 @@ class TestVTTCharacterLinking:
         )
         assert response.status_code == 401
 
-    def test_link_character_requires_player_id(
+    @pytest.mark.asyncio
+    async def test_link_character_requires_player_id(
         self, client, test_session, sample_campaign
     ):
         """Link character should require player_id."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/link-character",
@@ -75,7 +79,8 @@ class TestVTTCharacterLinking:
         )
         assert response.status_code == 400
 
-    def test_link_character_requires_vtt_character_id(
+    @pytest.mark.asyncio
+    async def test_link_character_requires_vtt_character_id(
         self, client, test_session, sample_campaign
     ):
         """Link character should require vtt_character_id."""
@@ -83,7 +88,7 @@ class TestVTTCharacterLinking:
         gm_token = sample_campaign["players"][0].session_token
         player = sample_campaign["players"][1]
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/link-character",
@@ -91,14 +96,15 @@ class TestVTTCharacterLinking:
         )
         assert response.status_code == 400
 
-    def test_link_character_nonexistent_player(
+    @pytest.mark.asyncio
+    async def test_link_character_nonexistent_player(
         self, client, test_session, sample_campaign
     ):
         """Link character should return 404 for nonexistent player."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/link-character",
@@ -110,7 +116,8 @@ class TestVTTCharacterLinking:
 class TestVTTShipLinking:
     """Tests for linking VTT ships to campaign ship pool."""
 
-    def test_link_vtt_ship_to_campaign(
+    @pytest.mark.asyncio
+    async def test_link_vtt_ship_to_campaign(
         self, client, test_session, sample_campaign, sample_player_ship_data
     ):
         """POST /campaigns/api/campaign/<id>/link-ship should link VTT ship."""
@@ -119,16 +126,16 @@ class TestVTTShipLinking:
 
         ship = StarshipRecord(**sample_player_ship_data)
         test_session.add(ship)
-        test_session.flush()
+        await test_session.flush()
 
         campaign_ship = CampaignShipRecord(
             campaign_id=campaign.id,
             ship_id=ship.id,
         )
         test_session.add(campaign_ship)
-        test_session.commit()
+        await test_session.commit()
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/link-ship",
@@ -136,11 +143,12 @@ class TestVTTShipLinking:
         )
         assert response.status_code == 200
 
-        data = response.get_json()
+        data = response.json()
         assert data["success"] is True
         assert data["vtt_ship_id"] == 67890
 
-    def test_link_ship_requires_gm_auth(
+    @pytest.mark.asyncio
+    async def test_link_ship_requires_gm_auth(
         self, client, test_session, sample_campaign, sample_player_ship_data
     ):
         """Link ship should require GM authentication."""
@@ -149,16 +157,16 @@ class TestVTTShipLinking:
 
         ship = StarshipRecord(**sample_player_ship_data)
         test_session.add(ship)
-        test_session.flush()
+        await test_session.flush()
 
         campaign_ship = CampaignShipRecord(
             campaign_id=campaign.id,
             ship_id=ship.id,
         )
         test_session.add(campaign_ship)
-        test_session.commit()
+        await test_session.commit()
 
-        client.set_cookie("sta_session_token", player_token)
+        client.cookies.set("sta_session_token", player_token)
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/link-ship",
@@ -166,7 +174,8 @@ class TestVTTShipLinking:
         )
         assert response.status_code == 403
 
-    def test_link_ship_requires_authentication(
+    @pytest.mark.asyncio
+    async def test_link_ship_requires_authentication(
         self, client, test_session, sample_campaign, sample_player_ship_data
     ):
         """Link ship should require authentication."""
@@ -174,14 +183,14 @@ class TestVTTShipLinking:
 
         ship = StarshipRecord(**sample_player_ship_data)
         test_session.add(ship)
-        test_session.flush()
+        await test_session.flush()
 
         campaign_ship = CampaignShipRecord(
             campaign_id=campaign.id,
             ship_id=ship.id,
         )
         test_session.add(campaign_ship)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/link-ship",
@@ -189,14 +198,15 @@ class TestVTTShipLinking:
         )
         assert response.status_code == 401
 
-    def test_link_ship_requires_campaign_ship_id(
+    @pytest.mark.asyncio
+    async def test_link_ship_requires_campaign_ship_id(
         self, client, test_session, sample_campaign
     ):
         """Link ship should require campaign_ship_id."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/link-ship",
@@ -204,7 +214,8 @@ class TestVTTShipLinking:
         )
         assert response.status_code == 400
 
-    def test_link_ship_requires_vtt_ship_id(
+    @pytest.mark.asyncio
+    async def test_link_ship_requires_vtt_ship_id(
         self, client, test_session, sample_campaign, sample_player_ship_data
     ):
         """Link ship should require vtt_ship_id."""
@@ -213,16 +224,16 @@ class TestVTTShipLinking:
 
         ship = StarshipRecord(**sample_player_ship_data)
         test_session.add(ship)
-        test_session.flush()
+        await test_session.flush()
 
         campaign_ship = CampaignShipRecord(
             campaign_id=campaign.id,
             ship_id=ship.id,
         )
         test_session.add(campaign_ship)
-        test_session.commit()
+        await test_session.commit()
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/link-ship",
@@ -230,14 +241,15 @@ class TestVTTShipLinking:
         )
         assert response.status_code == 400
 
-    def test_link_ship_nonexistent_campaign_ship(
+    @pytest.mark.asyncio
+    async def test_link_ship_nonexistent_campaign_ship(
         self, client, test_session, sample_campaign
     ):
         """Link ship should return 404 for nonexistent campaign ship."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
 
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/link-ship",
@@ -249,7 +261,8 @@ class TestVTTShipLinking:
 class TestVTTFieldsInSchema:
     """Tests for VTT foreign key fields in schema."""
 
-    def test_campaign_player_has_vtt_character_id_field(
+    @pytest.mark.asyncio
+    async def test_campaign_player_has_vtt_character_id_field(
         self, test_session, sample_campaign
     ):
         """CampaignPlayerRecord should have vtt_character_id field."""
@@ -257,7 +270,8 @@ class TestVTTFieldsInSchema:
         assert hasattr(player, "vtt_character_id")
         assert player.vtt_character_id is None
 
-    def test_campaign_ship_has_vtt_ship_id_field(
+    @pytest.mark.asyncio
+    async def test_campaign_ship_has_vtt_ship_id_field(
         self, test_session, sample_campaign, sample_player_ship_data
     ):
         """CampaignShipRecord should have vtt_ship_id field."""
@@ -265,14 +279,14 @@ class TestVTTFieldsInSchema:
 
         ship = StarshipRecord(**sample_player_ship_data)
         test_session.add(ship)
-        test_session.flush()
+        await test_session.flush()
 
         campaign_ship = CampaignShipRecord(
             campaign_id=campaign.id,
             ship_id=ship.id,
         )
         test_session.add(campaign_ship)
-        test_session.commit()
+        await test_session.commit()
 
         assert hasattr(campaign_ship, "vtt_ship_id")
         assert campaign_ship.vtt_ship_id is None

@@ -19,7 +19,8 @@ from sta.database.vtt_schema import VTTShipRecord
 class TestShipCRUD:
     """Tests for Ship CRUD endpoints."""
 
-    def test_create_ship(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_create_ship(self, client, test_session):
         """Test creating a new ship with validation."""
         response = client.post(
             "/api/ships",
@@ -48,15 +49,16 @@ class TestShipCRUD:
                 "shields_max": 10,
                 "resistance": 4,
             },
-            content_type="application/json",
+            
         )
         assert response.status_code == 201
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "USS Endeavour"
         assert data["scale"] == 4
         assert data["shields"] == 10
 
-    def test_create_ship_invalid_system(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_create_ship_invalid_system(self, client, test_session):
         """Test creating ship with invalid system value (outside 7-12)."""
         response = client.post(
             "/api/ships",
@@ -80,12 +82,13 @@ class TestShipCRUD:
                     "security": 3,
                 },
             },
-            content_type="application/json",
+            
         )
         assert response.status_code == 400
-        assert "must be between 7-12" in json.loads(response.data)["error"]
+        assert "must be between 7-12" in response.json()["detail"]
 
-    def test_create_ship_invalid_department(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_create_ship_invalid_department(self, client, test_session):
         """Test creating ship with invalid department value (outside 0-5)."""
         response = client.post(
             "/api/ships",
@@ -109,12 +112,13 @@ class TestShipCRUD:
                     "security": 3,
                 },
             },
-            content_type="application/json",
+            
         )
         assert response.status_code == 400
-        assert "must be between 0-5" in json.loads(response.data)["error"]
+        assert "must be between 0-5" in response.json()["detail"]
 
-    def test_create_ship_invalid_scale(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_create_ship_invalid_scale(self, client, test_session):
         """Test creating ship with invalid scale (outside 1-7)."""
         response = client.post(
             "/api/ships",
@@ -138,12 +142,13 @@ class TestShipCRUD:
                     "security": 3,
                 },
             },
-            content_type="application/json",
+            
         )
         assert response.status_code == 400
-        assert "Scale must be between 1-7" in json.loads(response.data)["error"]
+        assert "Scale must be between 1-7" in response.json()["detail"]
 
-    def test_list_ships(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_list_ships(self, client, test_session):
         """Test listing all ships."""
         ship = VTTShipRecord(
             name="USS Test",
@@ -171,15 +176,16 @@ class TestShipCRUD:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.get("/api/ships")
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert len(data) == 1
         assert data[0]["name"] == "USS Test"
 
-    def test_list_ships_filter_by_campaign(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_list_ships_filter_by_campaign(self, client, test_session):
         """Test listing ships filtered by campaign_id."""
         ship1 = VTTShipRecord(
             name="USS Test 1",
@@ -234,15 +240,16 @@ class TestShipCRUD:
             ),
         )
         test_session.add_all([ship1, ship2])
-        test_session.commit()
+        await test_session.commit()
 
         response = client.get("/api/ships?campaign_id=1")
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert len(data) == 1
         assert data[0]["name"] == "USS Test 1"
 
-    def test_get_ship(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_get_ship(self, client, test_session):
         """Test getting a single ship."""
         ship = VTTShipRecord(
             name="USS GetTest",
@@ -270,20 +277,22 @@ class TestShipCRUD:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.get(f"/api/ships/{ship_id}")
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "USS GetTest"
 
-    def test_get_ship_not_found(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_get_ship_not_found(self, client, test_session):
         """Test getting a non-existent ship."""
         response = client.get("/api/ships/99999")
         assert response.status_code == 404
 
-    def test_update_ship(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_update_ship(self, client, test_session):
         """Test updating a ship."""
         ship = VTTShipRecord(
             name="USS Original",
@@ -311,19 +320,20 @@ class TestShipCRUD:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.put(
             f"/api/ships/{ship_id}",
             json={"name": "USS Updated"},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "USS Updated"
 
-    def test_update_ship_invalid_system(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_update_ship_invalid_system(self, client, test_session):
         """Test updating ship with invalid system value."""
         ship = VTTShipRecord(
             name="USS Test",
@@ -351,18 +361,19 @@ class TestShipCRUD:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.put(
             f"/api/ships/{ship_id}",
             json={"systems": {"comms": 15}},
-            content_type="application/json",
+            
         )
         assert response.status_code == 400
-        assert "must be between 7-12" in json.loads(response.data)["error"]
+        assert "must be between 7-12" in response.json()["detail"]
 
-    def test_delete_ship(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_delete_ship(self, client, test_session):
         """Test deleting a ship."""
         ship = VTTShipRecord(
             name="USS DeleteTest",
@@ -390,7 +401,7 @@ class TestShipCRUD:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.delete(f"/api/ships/{ship_id}")
@@ -403,7 +414,8 @@ class TestShipCRUD:
 class TestShipModel:
     """Tests for ship model endpoint."""
 
-    def test_get_ship_model(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_get_ship_model(self, client, test_session):
         """Test getting ship as legacy Starship model."""
         ship = VTTShipRecord(
             name="USS Model",
@@ -436,12 +448,12 @@ class TestShipModel:
             breaches_json=json.dumps([]),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.get(f"/api/ships/{ship_id}/model")
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "USS Model"
         assert data["registry"] == "NCC-1234"
         assert "systems" in data
@@ -451,7 +463,8 @@ class TestShipModel:
 class TestShipShields:
     """Tests for ship shields endpoints."""
 
-    def test_adjust_shields(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_adjust_shields(self, client, test_session):
         """Test adjusting shields."""
         ship = VTTShipRecord(
             name="USS Shields",
@@ -482,20 +495,21 @@ class TestShipShields:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.put(
             f"/api/ships/{ship_id}/shields",
             json={"shields": 5, "raised": False},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["shields"] == 5
         assert data["shields_raised"] == False
 
-    def test_adjust_shields_invalid(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_adjust_shields_invalid(self, client, test_session):
         """Test adjusting shields with invalid value."""
         ship = VTTShipRecord(
             name="USS Shields",
@@ -525,13 +539,13 @@ class TestShipShields:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.put(
             f"/api/ships/{ship_id}/shields",
             json={"shields": 15},
-            content_type="application/json",
+            
         )
         assert response.status_code == 400
 
@@ -539,7 +553,8 @@ class TestShipShields:
 class TestShipPower:
     """Tests for ship power endpoints."""
 
-    def test_adjust_power(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_adjust_power(self, client, test_session):
         """Test adjusting reserve power."""
         ship = VTTShipRecord(
             name="USS Power",
@@ -568,23 +583,24 @@ class TestShipPower:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.put(
             f"/api/ships/{ship_id}/power",
             json={"current": 0},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["has_reserve_power"] == False
 
 
 class TestShipBreaches:
     """Tests for ship breach endpoints."""
 
-    def test_add_breach(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_add_breach(self, client, test_session):
         """Test adding a system breach."""
         ship = VTTShipRecord(
             name="USS Breach",
@@ -613,21 +629,22 @@ class TestShipBreaches:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.put(
             f"/api/ships/{ship_id}/breach",
             json={"system": "structure", "potency": 2, "action": "add"},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert len(data["breaches"]) == 1
         assert data["breaches"][0]["system"] == "structure"
         assert data["breaches"][0]["potency"] == 2
 
-    def test_remove_breach(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_remove_breach(self, client, test_session):
         """Test removing a system breach."""
         ship = VTTShipRecord(
             name="USS Breach",
@@ -656,23 +673,24 @@ class TestShipBreaches:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.put(
             f"/api/ships/{ship_id}/breach",
             json={"system": "structure", "action": "remove"},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert len(data["breaches"]) == 0
 
 
 class TestShipWeapons:
     """Tests for ship weapons endpoints."""
 
-    def test_update_weapons(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_update_weapons(self, client, test_session):
         """Test updating weapons list."""
         ship = VTTShipRecord(
             name="USS Weapons",
@@ -701,7 +719,7 @@ class TestShipWeapons:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         weapons = [
@@ -718,14 +736,15 @@ class TestShipWeapons:
         response = client.put(
             f"/api/ships/{ship_id}/weapons",
             json={"weapons": weapons},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert len(data["weapons"]) == 1
         assert data["weapons"][0]["name"] == "Phaser Banks"
 
-    def test_arm_weapon(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_arm_weapon(self, client, test_session):
         """Test arming/disarming a weapon."""
         ship = VTTShipRecord(
             name="USS Weapons",
@@ -766,23 +785,24 @@ class TestShipWeapons:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.post(
             f"/api/ships/{ship_id}/weapons/Phaser%20Banks/arm",
             json={"armed": True},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["weapons_armed"] == True
 
 
 class TestShipCrewQuality:
     """Tests for ship crew quality endpoints."""
 
-    def test_get_crew_quality(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_get_crew_quality(self, client, test_session):
         """Test getting crew quality."""
         ship = VTTShipRecord(
             name="USS Crew",
@@ -811,15 +831,16 @@ class TestShipCrewQuality:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.get(f"/api/ships/{ship_id}/crew-quality")
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["crew_quality"] == "veteran"
 
-    def test_set_crew_quality(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_set_crew_quality(self, client, test_session):
         """Test setting crew quality."""
         ship = VTTShipRecord(
             name="USS Crew",
@@ -848,19 +869,20 @@ class TestShipCrewQuality:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.put(
             f"/api/ships/{ship_id}/crew-quality",
             json={"crew_quality": "exceptional"},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["crew_quality"] == "exceptional"
 
-    def test_set_crew_quality_invalid(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_set_crew_quality_invalid(self, client, test_session):
         """Test setting invalid crew quality."""
         ship = VTTShipRecord(
             name="USS Crew",
@@ -888,12 +910,12 @@ class TestShipCrewQuality:
             ),
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
         ship_id = ship.id
 
         response = client.put(
             f"/api/ships/{ship_id}/crew-quality",
             json={"crew_quality": "invalid_quality"},
-            content_type="application/json",
+            
         )
         assert response.status_code == 400

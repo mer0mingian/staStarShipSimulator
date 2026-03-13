@@ -15,7 +15,8 @@ import pytest
 class TestPlayerAlreadyActed:
     """Tests that players who have already acted are blocked from acting again."""
 
-    def test_reject_action_after_major_action(
+    @pytest.mark.asyncio
+    async def test_reject_action_after_major_action(
         self, client, multiplayer_encounter, claim_turn, execute_action, test_session
     ):
         """Test that a player cannot execute another action after completing a major action."""
@@ -44,7 +45,7 @@ class TestPlayerAlreadyActed:
         # Now it should be enemy turn, switch back to player
         encounter.current_turn = "player"
         encounter.current_player_id = None
-        test_session.commit()
+        await test_session.commit()
 
         # Try to execute another action with the same player
         second_action_response = execute_action(
@@ -55,10 +56,11 @@ class TestPlayerAlreadyActed:
 
         # Should be rejected
         assert second_action_response.status_code == 403
-        data = second_action_response.get_json()
-        assert "already acted" in data["error"].lower()
+        data = second_action_response.json()
+        assert "already acted" in data["detail"].lower()
 
-    def test_reject_claim_after_acted(
+    @pytest.mark.asyncio
+    async def test_reject_claim_after_acted(
         self, client, multiplayer_encounter, claim_turn, execute_action, test_session
     ):
         """Test that a player who has acted cannot claim the turn again."""
@@ -68,20 +70,21 @@ class TestPlayerAlreadyActed:
         # Mark player as already acted
         players_turns_used = {str(player.id): {"acted": True, "acted_at": "2025-01-01T00:00:00"}}
         encounter.players_turns_used_json = json.dumps(players_turns_used)
-        test_session.commit()
+        await test_session.commit()
 
         # Try to claim turn
         response = claim_turn(encounter.encounter_id, player.id)
 
         assert response.status_code == 400
-        data = response.get_json()
-        assert "already acted" in data["error"].lower()
+        data = response.json()
+        assert "already acted" in data["detail"].lower()
 
 
 class TestSinglePlayerMultiplayer:
     """Tests for the edge case of a single player in multiplayer mode."""
 
-    def test_single_player_one_turn_per_round(
+    @pytest.mark.asyncio
+    async def test_single_player_one_turn_per_round(
         self, client, test_session, sample_campaign, sample_enemy_ship_data
     ):
         """Test that a single player in multiplayer mode can only take one turn per round."""
@@ -102,12 +105,12 @@ class TestSinglePlayerMultiplayer:
         # Deactivate other players
         for p in players[2:]:
             p.is_active = False
-        test_session.commit()
+        await test_session.commit()
 
         # Create enemy ship
         enemy_ship = StarshipRecord(**sample_enemy_ship_data)
         test_session.add(enemy_ship)
-        test_session.flush()
+        await test_session.flush()
 
         # Create encounter with single active player
         encounter = EncounterRecord(
@@ -138,7 +141,7 @@ class TestSinglePlayerMultiplayer:
             }),
         )
         test_session.add(encounter)
-        test_session.commit()
+        await test_session.commit()
 
         encounter_id = encounter.encounter_id
 
@@ -146,7 +149,7 @@ class TestSinglePlayerMultiplayer:
         claim_response = client.post(
             f"/api/encounter/{encounter_id}/claim-turn",
             json={"player_id": single_player.id},
-            content_type="application/json",
+            
         )
         assert claim_response.status_code == 200
 
@@ -156,7 +159,7 @@ class TestSinglePlayerMultiplayer:
                 "action_name": "Attack Pattern",
                 "player_id": single_player.id,
             },
-            content_type="application/json",
+            
         )
         assert action_response.status_code == 200
 
@@ -168,7 +171,7 @@ class TestSinglePlayerMultiplayer:
         # Reset turn to player for the test
         encounter.current_turn = "player"
         encounter.current_player_id = None
-        test_session.commit()
+        await test_session.commit()
 
         second_action = client.post(
             f"/api/encounter/{encounter_id}/execute-action",
@@ -176,18 +179,19 @@ class TestSinglePlayerMultiplayer:
                 "action_name": "Calibrate Weapons",
                 "player_id": single_player.id,
             },
-            content_type="application/json",
+            
         )
 
         assert second_action.status_code == 403
         data = second_action.get_json()
-        assert "already acted" in data["error"].lower()
+        assert "already acted" in data["detail"].lower()
 
 
 class TestMultipleMinorActions:
     """Tests that minor actions don't allow infinite turns."""
 
-    def test_minor_actions_dont_mark_acted(
+    @pytest.mark.asyncio
+    async def test_minor_actions_dont_mark_acted(
         self, client, multiplayer_encounter, claim_turn, execute_action, get_encounter_status, test_session
     ):
         """Test that minor actions don't mark the player as acted, allowing major action after."""
@@ -221,7 +225,8 @@ class TestMultipleMinorActions:
         status2 = get_encounter_status(encounter.encounter_id)
         assert status2.get_json()["current_turn"] == "enemy"
 
-    def test_cannot_do_two_minor_actions(
+    @pytest.mark.asyncio
+    async def test_cannot_do_two_minor_actions(
         self, client, multiplayer_encounter, claim_turn, execute_action, test_session
     ):
         """Test that a player cannot execute two minor actions in one turn."""
@@ -247,13 +252,14 @@ class TestMultipleMinorActions:
         )
         assert second_minor.status_code == 403
         data = second_minor.get_json()
-        assert "minor action" in data["error"].lower()
+        assert "minor action" in data["detail"].lower()
 
 
 class TestFireWeaponEnforcement:
     """Tests for fire weapon action turn enforcement."""
 
-    def test_fire_weapon_respects_acted_flag(
+    @pytest.mark.asyncio
+    async def test_fire_weapon_respects_acted_flag(
         self, client, multiplayer_encounter, claim_turn, test_session
     ):
         """Test that fire weapon action checks if player has already acted."""
@@ -263,7 +269,7 @@ class TestFireWeaponEnforcement:
         # Mark player as already acted
         players_turns_used = {str(player.id): {"acted": True, "acted_at": "2025-01-01T00:00:00"}}
         encounter.players_turns_used_json = json.dumps(players_turns_used)
-        test_session.commit()
+        await test_session.commit()
 
         # Try to fire weapon
         response = client.post(
@@ -279,18 +285,19 @@ class TestFireWeaponEnforcement:
                 "bonus_dice": 0,
                 "player_id": player.id,
             },
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 403
-        data = response.get_json()
-        assert "already acted" in data["error"].lower()
+        data = response.json()
+        assert "already acted" in data["detail"].lower()
 
 
 class TestRamActionEnforcement:
     """Tests for ram action turn enforcement."""
 
-    def test_ram_respects_acted_flag(
+    @pytest.mark.asyncio
+    async def test_ram_respects_acted_flag(
         self, client, multiplayer_encounter, test_session
     ):
         """Test that ram action checks if player has already acted."""
@@ -300,7 +307,7 @@ class TestRamActionEnforcement:
         # Mark player as already acted
         players_turns_used = {str(player.id): {"acted": True, "acted_at": "2025-01-01T00:00:00"}}
         encounter.players_turns_used_json = json.dumps(players_turns_used)
-        test_session.commit()
+        await test_session.commit()
 
         # Try to ram
         response = client.post(
@@ -314,18 +321,19 @@ class TestRamActionEnforcement:
                 "bonus_dice": 0,
                 "player_id": player.id,
             },
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 403
-        data = response.get_json()
-        assert "already acted" in data["error"].lower()
+        data = response.json()
+        assert "already acted" in data["detail"].lower()
 
 
 class TestRoundReset:
     """Tests that player acted flags reset when round advances."""
 
-    def test_acted_flags_reset_on_round_advance(
+    @pytest.mark.asyncio
+    async def test_acted_flags_reset_on_round_advance(
         self, client, multiplayer_encounter, next_turn, test_session
     ):
         """Test that players can act again after round advances."""
@@ -343,21 +351,21 @@ class TestRoundReset:
         ships_turns_used = {str(enemy_ship.id): enemy_ship.scale}
         encounter.ships_turns_used_json = json.dumps(ships_turns_used)
 
-        test_session.commit()
+        await test_session.commit()
 
         initial_round = encounter.round
 
         # Advance turn - should advance the round
         response = next_turn(encounter.encounter_id)
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
 
         # Verify round advanced
         assert data["round"] == initial_round + 1
 
         # Verify players can act again (acted flags reset)
         # Refresh encounter from db
-        test_session.refresh(encounter)
+        await test_session.refresh(encounter)
         new_players_turns = json.loads(encounter.players_turns_used_json or "{}")
 
         # Should be empty or all acted=False

@@ -5,8 +5,13 @@ description = "Star Trek Adventures Starship Simulator"
 requires-python = ">=3.13"
 
 dependencies = [
+    "aiosqlite>=0.22.1",
+    "fastapi>=0.135.1",
     "flask",
+    "pydantic-settings>=2.13.1",
+    "python-multipart>=0.0.22",
     "sqlalchemy",
+    "uvicorn[standard]>=0.41.0",
     "werkzeug",
 ]
 
@@ -14,14 +19,11 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[dependency-groups]
-dev = [
-    "pytest>=9.0",
-    "pytest-cov",
-]
+[tool.hatch.build.targets.wheel]
+packages = ["sta"]
 
 [tool.uv]
-python = "3.13"
+managed = true
 
 [tool.ruff]
 line-length = 88
@@ -30,3 +32,11 @@ target-version = "py313"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest-asyncio>=1.3.0",
+]

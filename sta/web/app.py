@@ -3,6 +3,8 @@
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 from sta.database.async_db import engine, initialize_db
 # Note: We use os.getcwd() for root path reference, assuming this file is at the root of the web logic.
 # The actual project root is several directories up.
@@ -32,11 +34,19 @@ def create_app():
     # Configuration equivalent to Flask app.config
     app.config["SECRET_KEY"] = SECRET_KEY
 
-    # Upload folder setup (If necessary for routes handling file uploads)
-    upload_folder = os.path.join(os.getcwd(), "uploads")
-    os.makedirs(upload_folder, exist_ok=True)
-    app.config["UPLOAD_FOLDER"] = upload_folder
-    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+    # Session middleware
+    app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+
+    # Static files and uploads
+    root_path = os.path.dirname(__file__)
+
+    static_dir = os.path.join(root_path, "static")
+    if os.path.exists(static_dir):
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    upload_dir = os.path.join(root_path, "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=upload_dir), name="uploads")
 
     # Register APIRouters (replacing Flask Blueprints)
     # Must import routers from their corresponding new files (e.g., main.py -> main_router.py)
@@ -60,6 +70,3 @@ def create_app():
     app.include_router(ships_router, prefix="")
 
     return app
-
-
-# app = create_app() # This line might be needed elsewhere, keeping factory structure.

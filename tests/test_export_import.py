@@ -5,7 +5,7 @@ import pytest
 
 
 @pytest.fixture
-def sample_characters(test_session):
+async def sample_characters(test_session):
     """Create sample characters for export/import tests."""
     from sta.database.schema import CharacterRecord
 
@@ -80,13 +80,13 @@ def sample_characters(test_session):
 
     for char in chars:
         test_session.add(char)
-    test_session.commit()
+    await test_session.commit()
 
     return chars
 
 
 @pytest.fixture
-def sample_npcs(test_session):
+async def sample_npcs(test_session):
     """Create sample NPCs for export/import tests."""
     from sta.database.schema import NPCRecord
 
@@ -153,13 +153,13 @@ def sample_npcs(test_session):
 
     for npc in npcs:
         test_session.add(npc)
-    test_session.commit()
+    await test_session.commit()
 
     return npcs
 
 
 @pytest.fixture
-def sample_ships(test_session):
+async def sample_ships(test_session):
     """Create sample ships for export/import tests."""
     from sta.database.schema import StarshipRecord
 
@@ -247,7 +247,7 @@ def sample_ships(test_session):
 
     for ship in ships:
         test_session.add(ship)
-    test_session.commit()
+    await test_session.commit()
 
     return ships
 
@@ -255,12 +255,13 @@ def sample_ships(test_session):
 class TestCharacterExportImport:
     """Tests for character export/import endpoints."""
 
-    def test_export_characters(self, client, sample_characters):
+    @pytest.mark.asyncio
+    async def test_export_characters(self, client, sample_characters):
         """Test exporting characters."""
         response = client.get("/api/characters/export")
         assert response.status_code == 200
 
-        data = json.loads(response.data)
+        data = response.json()
         assert data["version"] == "1.0"
         assert "exported_at" in data
         assert len(data["characters"]) == 2
@@ -269,7 +270,8 @@ class TestCharacterExportImport:
         assert "Captain Picard" in names
         assert "Commander Riker" in names
 
-    def test_import_new_characters(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_new_characters(self, client, test_session):
         """Test importing new characters."""
         import_data = {
             "characters": [
@@ -305,11 +307,11 @@ class TestCharacterExportImport:
         response = client.post(
             "/api/characters/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["success"] is True
         assert data["imported"] == 1
         assert data["updated"] == 0
@@ -323,7 +325,8 @@ class TestCharacterExportImport:
         assert char is not None
         assert char.species == "Human"
 
-    def test_import_updates_existing_character(
+    @pytest.mark.asyncio
+    async def test_import_updates_existing_character(
         self, client, sample_characters, test_session
     ):
         """Test importing updates existing character by name."""
@@ -357,11 +360,11 @@ class TestCharacterExportImport:
         response = client.post(
             "/api/characters/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["success"] is True
         assert data["imported"] == 0
         assert data["updated"] == 1
@@ -374,7 +377,8 @@ class TestCharacterExportImport:
         )
         assert char.rank == "Captain (Updated)"
 
-    def test_import_multiple_characters(self, client, sample_characters):
+    @pytest.mark.asyncio
+    async def test_import_multiple_characters(self, client, sample_characters):
         """Test importing multiple characters."""
         import_data = {
             "characters": [
@@ -424,24 +428,26 @@ class TestCharacterExportImport:
         response = client.post(
             "/api/characters/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["imported"] == 2
 
-    def test_import_missing_key_fails(self, client):
+    @pytest.mark.asyncio
+    async def test_import_missing_key_fails(self, client):
         """Test importing without characters key fails."""
         response = client.post(
             "/api/characters/import",
             data=json.dumps({"something": "else"}),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 400
 
-    def test_import_missing_name_skips(self, client):
+    @pytest.mark.asyncio
+    async def test_import_missing_name_skips(self, client):
         """Test importing character without name is skipped."""
         import_data = {
             "characters": [
@@ -452,23 +458,24 @@ class TestCharacterExportImport:
         response = client.post(
             "/api/characters/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert len(data["errors"]) == 1
 
 
 class TestNPCExportImport:
     """Tests for NPC export/import endpoints."""
 
-    def test_export_npcs(self, client, sample_npcs):
+    @pytest.mark.asyncio
+    async def test_export_npcs(self, client, sample_npcs):
         """Test exporting NPCs."""
         response = client.get("/api/npcs/export")
         assert response.status_code == 200
 
-        data = json.loads(response.data)
+        data = response.json()
         assert data["version"] == "1.0"
         assert len(data["npcs"]) == 2
 
@@ -476,7 +483,8 @@ class TestNPCExportImport:
         assert "Ambassador Spock" in names
         assert "Dr. McCoy" in names
 
-    def test_import_new_npc(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_new_npc(self, client, test_session):
         """Test importing new NPC."""
         import_data = {
             "npcs": [
@@ -492,11 +500,11 @@ class TestNPCExportImport:
         response = client.post(
             "/api/npcs/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["success"] is True
         assert data["imported"] == 1
 
@@ -506,7 +514,8 @@ class TestNPCExportImport:
         assert npc is not None
         assert npc.affiliation == "Klingon"
 
-    def test_import_updates_existing_npc(self, client, sample_npcs, test_session):
+    @pytest.mark.asyncio
+    async def test_import_updates_existing_npc(self, client, sample_npcs, test_session):
         """Test importing updates existing NPC by name."""
         import_data = {
             "npcs": [
@@ -521,11 +530,11 @@ class TestNPCExportImport:
         response = client.post(
             "/api/npcs/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["updated"] == 1
 
         from sta.database.schema import NPCRecord
@@ -537,12 +546,13 @@ class TestNPCExportImport:
 class TestShipExportImport:
     """Tests for ship export/import endpoints."""
 
-    def test_export_ships(self, client, sample_ships):
+    @pytest.mark.asyncio
+    async def test_export_ships(self, client, sample_ships):
         """Test exporting ships."""
         response = client.get("/api/ships/export")
         assert response.status_code == 200
 
-        data = json.loads(response.data)
+        data = response.json()
         assert data["version"] == "1.0"
         assert len(data["ships"]) == 2
 
@@ -550,7 +560,8 @@ class TestShipExportImport:
         assert "USS Enterprise" in names
         assert "USS Voyager" in names
 
-    def test_import_new_ship(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_new_ship(self, client, test_session):
         """Test importing new ship."""
         import_data = {
             "ships": [
@@ -584,11 +595,11 @@ class TestShipExportImport:
         response = client.post(
             "/api/ships/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["success"] is True
         assert data["imported"] == 1
 
@@ -598,7 +609,8 @@ class TestShipExportImport:
         assert ship is not None
         assert ship.ship_class == "Defiant-class"
 
-    def test_import_updates_existing_ship(self, client, sample_ships, test_session):
+    @pytest.mark.asyncio
+    async def test_import_updates_existing_ship(self, client, sample_ships, test_session):
         """Test importing updates existing ship by name."""
         import_data = {
             "ships": [
@@ -629,11 +641,11 @@ class TestShipExportImport:
         response = client.post(
             "/api/ships/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["updated"] == 1
 
         from sta.database.schema import StarshipRecord
@@ -647,26 +659,28 @@ class TestShipExportImport:
 class TestBackupExport:
     """Tests for full backup endpoint."""
 
-    def test_export_full_backup(
+    @pytest.mark.asyncio
+    async def test_export_full_backup(
         self, client, sample_characters, sample_npcs, sample_ships
     ):
         """Test exporting full backup."""
         response = client.get("/api/backup")
         assert response.status_code == 200
 
-        data = json.loads(response.data)
+        data = response.json()
         assert data["version"] == "1.0"
         assert "exported_at" in data
         assert len(data["characters"]) == 2
         assert len(data["npcs"]) == 2
         assert len(data["ships"]) == 2
 
-    def test_backup_structure(
+    @pytest.mark.asyncio
+    async def test_backup_structure(
         self, client, sample_characters, sample_npcs, sample_ships
     ):
         """Test backup has correct structure."""
         response = client.get("/api/backup")
-        data = json.loads(response.data)
+        data = response.json()
 
         # Check top-level keys
         assert "version" in data

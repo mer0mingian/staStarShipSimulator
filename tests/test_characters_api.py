@@ -18,7 +18,7 @@ from sta.database.vtt_schema import VTTCharacterRecord
 class TestCharacterCRUD:
     """Tests for Character CRUD endpoints."""
 
-    def test_create_character(self, client, test_session):
+    async def test_create_character(self, client, test_session):
         """Test creating a new character with validation."""
         response = client.post(
             "/api/characters",
@@ -45,15 +45,14 @@ class TestCharacterCRUD:
                 "determination": 1,
                 "determination_max": 3,
             },
-            content_type="application/json",
         )
         assert response.status_code == 201
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "Test Character"
         assert data["stress"] == 3
         assert data["determination"] == 1
 
-    def test_create_character_invalid_attribute(self, client, test_session):
+    async def test_create_character_invalid_attribute(self, client, test_session):
         """Test creating character with invalid attribute (outside 7-12)."""
         response = client.post(
             "/api/characters",
@@ -76,12 +75,12 @@ class TestCharacterCRUD:
                     "security": 2,
                 },
             },
-            content_type="application/json",
+            
         )
         assert response.status_code == 400
-        assert "must be between 7-12" in json.loads(response.data)["error"]
+        assert "must be between 7-12" in response.json()["detail"]
 
-    def test_create_character_invalid_discipline(self, client, test_session):
+    async def test_create_character_invalid_discipline(self, client, test_session):
         """Test creating character with invalid discipline (outside 0-5)."""
         response = client.post(
             "/api/characters",
@@ -104,12 +103,12 @@ class TestCharacterCRUD:
                     "security": 2,
                 },
             },
-            content_type="application/json",
+            
         )
         assert response.status_code == 400
-        assert "must be between 0-5" in json.loads(response.data)["error"]
+        assert "must be between 0-5" in response.json()["detail"]
 
-    def test_create_character_invalid_stress(self, client, test_session):
+    async def test_create_character_invalid_stress(self, client, test_session):
         """Test creating character with invalid stress (above max)."""
         response = client.post(
             "/api/characters",
@@ -134,12 +133,12 @@ class TestCharacterCRUD:
                 "stress": 10,  # Invalid - above max
                 "stress_max": 5,
             },
-            content_type="application/json",
+            
         )
         assert response.status_code == 400
-        assert "Stress must be between" in json.loads(response.data)["error"]
+        assert "Stress must be between" in response.json()["detail"]
 
-    def test_list_characters(self, client, test_session):
+    async def test_list_characters(self, client, test_session):
         """Test listing all characters."""
         # Create test characters
         char1 = VTTCharacterRecord(
@@ -190,21 +189,21 @@ class TestCharacterCRUD:
         )
         test_session.add(char1)
         test_session.add(char2)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.get("/api/characters")
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert len(data) == 2
 
-    def test_list_characters_filter_by_campaign(self, client, test_session):
+    async def test_list_characters_filter_by_campaign(self, client, test_session):
         """Test filtering characters by campaign_id."""
         # Create campaign
         campaign = CampaignRecord(
             campaign_id="test-campaign", name="Test Campaign", is_active=True
         )
         test_session.add(campaign)
-        test_session.flush()
+        await test_session.flush()
 
         # Create characters with and without campaign
         char1 = VTTCharacterRecord(
@@ -256,15 +255,15 @@ class TestCharacterCRUD:
         )
         test_session.add(char1)
         test_session.add(char2)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.get(f"/api/characters?campaign_id={campaign.id}")
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert len(data) == 1
         assert data[0]["name"] == "Campaign Character"
 
-    def test_get_character(self, client, test_session):
+    async def test_get_character(self, client, test_session):
         """Test getting a single character."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -292,20 +291,20 @@ class TestCharacterCRUD:
             stress_max=5,
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.get(f"/api/characters/{char.id}")
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "Test Character"
         assert data["stress"] == 3
 
-    def test_get_character_not_found(self, client, test_session):
+    async def test_get_character_not_found(self, client, test_session):
         """Test getting non-existent character returns 404."""
         response = client.get("/api/characters/99999")
         assert response.status_code == 404
 
-    def test_update_character(self, client, test_session):
+    async def test_update_character(self, client, test_session):
         """Test updating a character."""
         char = VTTCharacterRecord(
             name="Original Name",
@@ -331,26 +330,26 @@ class TestCharacterCRUD:
             ),
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.put(
             f"/api/characters/{char.id}",
             json={"name": "Updated Name", "stress": 4},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "Updated Name"
         assert data["stress"] == 4
 
-    def test_delete_character(self, client, test_session):
+    async def test_delete_character(self, client, test_session):
         """Test deleting a character (GM only)."""
         # Create campaign with GM
         campaign = CampaignRecord(
             campaign_id="test-campaign", name="Test Campaign", is_active=True
         )
         test_session.add(campaign)
-        test_session.flush()
+        await test_session.flush()
 
         gm = CampaignPlayerRecord(
             campaign_id=campaign.id,
@@ -386,10 +385,10 @@ class TestCharacterCRUD:
             campaign_id=campaign.id,
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         # Set GM cookie
-        client.set_cookie("sta_session_token", "gm-token-123")
+        client.cookies.set("sta_session_token", "gm-token-123")
 
         response = client.delete(f"/api/characters/{char.id}")
         assert response.status_code == 200
@@ -402,7 +401,7 @@ class TestCharacterCRUD:
 class TestCharacterModel:
     """Tests for character model conversion."""
 
-    def test_get_character_model(self, client, test_session):
+    async def test_get_character_model(self, client, test_session):
         """Test returning character as legacy Character model."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -437,11 +436,11 @@ class TestCharacterModel:
             role="Command",
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.get(f"/api/characters/{char.id}/model")
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "Test Character"
         assert data["attributes"]["control"] == 9
         assert data["disciplines"]["command"] == 2
@@ -454,7 +453,7 @@ class TestCharacterModel:
 class TestStressDetermination:
     """Tests for stress and determination adjustment endpoints."""
 
-    def test_adjust_stress_increase(self, client, test_session):
+    async def test_adjust_stress_increase(self, client, test_session):
         """Test increasing stress."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -482,18 +481,18 @@ class TestStressDetermination:
             stress_max=5,
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.put(
             f"/api/characters/{char.id}/stress",
             json={"adjustment": 2},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["stress"] == 5  # Capped at max
 
-    def test_adjust_stress_decrease(self, client, test_session):
+    async def test_adjust_stress_decrease(self, client, test_session):
         """Test decreasing stress."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -521,18 +520,18 @@ class TestStressDetermination:
             stress_max=5,
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.put(
             f"/api/characters/{char.id}/stress",
             json={"adjustment": -2},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["stress"] == 1
 
-    def test_adjust_stress_min_zero(self, client, test_session):
+    async def test_adjust_stress_min_zero(self, client, test_session):
         """Test stress cannot go below zero."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -560,18 +559,18 @@ class TestStressDetermination:
             stress_max=5,
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.put(
             f"/api/characters/{char.id}/stress",
             json={"adjustment": -5},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["stress"] == 0
 
-    def test_adjust_determination(self, client, test_session):
+    async def test_adjust_determination(self, client, test_session):
         """Test adjusting determination."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -595,26 +594,24 @@ class TestStressDetermination:
                     "security": 2,
                 }
             ),
-            determination=1,
-            determination_max=3,
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.put(
             f"/api/characters/{char.id}/determination",
             json={"adjustment": 1},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["determination"] == 2
 
 
 class TestCharacterState:
     """Tests for character state management."""
 
-    def test_update_character_state(self, client, test_session):
+    async def test_update_character_state(self, client, test_session):
         """Test updating character state."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -641,18 +638,18 @@ class TestCharacterState:
             state="Ok",
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.put(
             f"/api/characters/{char.id}/state",
             json={"state": "Injured"},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert data["state"] == "Injured"
 
-    def test_update_character_state_invalid(self, client, test_session):
+    async def test_update_character_state_invalid(self, client, test_session):
         """Test updating character state with invalid value."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -678,12 +675,12 @@ class TestCharacterState:
             ),
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.put(
             f"/api/characters/{char.id}/state",
             json={"state": "InvalidState"},
-            content_type="application/json",
+            
         )
         assert response.status_code == 400
 
@@ -691,7 +688,7 @@ class TestCharacterState:
 class TestCharacterTalents:
     """Tests for character talent management."""
 
-    def test_list_talents(self, client, test_session):
+    async def test_list_talents(self, client, test_session):
         """Test listing available talents."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -718,15 +715,15 @@ class TestCharacterTalents:
             talents_json=json.dumps(["Bold (Command)"]),
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.get(f"/api/characters/{char.id}/talents")
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert "Bold (Command)" in data["character_talents"]
         assert "Bold (Conn)" in data["available_talents"]
 
-    def test_add_talent(self, client, test_session):
+    async def test_add_talent(self, client, test_session):
         """Test adding a talent to character."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -753,18 +750,18 @@ class TestCharacterTalents:
             talents_json=json.dumps([]),
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.post(
             f"/api/characters/{char.id}/talents",
             json={"talent_name": "Tough"},
-            content_type="application/json",
+            
         )
         assert response.status_code == 200
-        data = json.loads(response.data)
+        data = response.json()
         assert "Tough" in data["talents"]
 
-    def test_add_talent_already_has(self, client, test_session):
+    async def test_add_talent_already_has(self, client, test_session):
         """Test adding a talent character already has."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -791,17 +788,17 @@ class TestCharacterTalents:
             talents_json=json.dumps(["Tough"]),
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.post(
             f"/api/characters/{char.id}/talents",
             json={"talent_name": "Tough"},
-            content_type="application/json",
+            
         )
         assert response.status_code == 400
-        assert "already has this talent" in json.loads(response.data)["error"]
+        assert "already has this talent" in response.json()["detail"]
 
-    def test_add_talent_invalid(self, client, test_session):
+    async def test_add_talent_invalid(self, client, test_session):
         """Test adding an invalid talent."""
         char = VTTCharacterRecord(
             name="Test Character",
@@ -828,12 +825,12 @@ class TestCharacterTalents:
             talents_json=json.dumps([]),
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.post(
             f"/api/characters/{char.id}/talents",
             json={"talent_name": "InvalidTalent"},
-            content_type="application/json",
+            
         )
         assert response.status_code == 400
-        assert "Unknown talent" in json.loads(response.data)["error"]
+        assert "Unknown talent" in response.json()["detail"]

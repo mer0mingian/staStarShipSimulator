@@ -6,7 +6,7 @@ from sta.database.vtt_schema import VTTCharacterRecord, VTTShipRecord
 
 
 @pytest.fixture
-def sample_vtt_character(test_session):
+async def sample_vtt_character(test_session):
     """Create a sample VTT character for export/import tests."""
     char = VTTCharacterRecord(
         name="Captain Janeway",
@@ -50,13 +50,13 @@ def sample_vtt_character(test_session):
     )
 
     test_session.add(char)
-    test_session.commit()
+    await test_session.commit()
 
     return char
 
 
 @pytest.fixture
-def sample_vtt_ship(test_session):
+async def sample_vtt_ship(test_session):
     """Create a sample VTT ship for export/import tests."""
     ship = VTTShipRecord(
         name="USS Voyager",
@@ -108,7 +108,7 @@ def sample_vtt_ship(test_session):
     )
 
     test_session.add(ship)
-    test_session.commit()
+    await test_session.commit()
 
     return ship
 
@@ -116,12 +116,13 @@ def sample_vtt_ship(test_session):
 class TestVTTCharacterExportImport:
     """Tests for VTT Character export/import endpoints."""
 
-    def test_export_character(self, client, sample_vtt_character):
+    @pytest.mark.asyncio
+    async def test_export_character(self, client, sample_vtt_character):
         """Test exporting a single VTT character."""
         response = client.get(f"/api/vtt/characters/{sample_vtt_character.id}/export")
         assert response.status_code == 200
 
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "Captain Janeway"
         assert data["species"] == "Human"
         assert data["rank"] == "Captain"
@@ -133,12 +134,14 @@ class TestVTTCharacterExportImport:
         assert data["attributes"]["control"] == 9
         assert data["disciplines"]["command"] == 4
 
-    def test_export_character_not_found(self, client):
+    @pytest.mark.asyncio
+    async def test_export_character_not_found(self, client):
         """Test exporting non-existent character returns 404."""
         response = client.get("/api/vtt/characters/99999/export")
         assert response.status_code == 404
 
-    def test_import_character(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_character(self, client, test_session):
         """Test importing a new VTT character."""
         import_data = {
             "name": "New Character",
@@ -172,16 +175,17 @@ class TestVTTCharacterExportImport:
         response = client.post(
             "/api/vtt/characters/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 201
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "New Character"
         assert data["species"] == "Vulcan"
         assert data["rank"] == "Lieutenant"
 
-    def test_import_character_in_container(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_character_in_container(self, client, test_session):
         """Test importing character wrapped in 'characters' key."""
         import_data = {
             "characters": [
@@ -211,14 +215,15 @@ class TestVTTCharacterExportImport:
         response = client.post(
             "/api/vtt/characters/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 201
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "Container Character"
 
-    def test_import_character_invalid_attribute(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_character_invalid_attribute(self, client, test_session):
         """Test importing character with invalid attribute fails."""
         import_data = {
             "name": "Invalid Character",
@@ -244,13 +249,14 @@ class TestVTTCharacterExportImport:
         response = client.post(
             "/api/vtt/characters/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 400
-        assert "Attribute control must be between 7-12" in response.data.decode()
+        assert "Attribute control must be between 7-12" in response.content.decode()
 
-    def test_import_character_invalid_discipline(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_character_invalid_discipline(self, client, test_session):
         """Test importing character with invalid discipline fails."""
         import_data = {
             "name": "Invalid Character",
@@ -276,13 +282,14 @@ class TestVTTCharacterExportImport:
         response = client.post(
             "/api/vtt/characters/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 400
-        assert "Discipline command must be between 0-5" in response.data.decode()
+        assert "Discipline command must be between 0-5" in response.content.decode()
 
-    def test_import_character_invalid_stress(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_character_invalid_stress(self, client, test_session):
         """Test importing character with invalid stress fails."""
         import_data = {
             "name": "Invalid Character",
@@ -310,18 +317,19 @@ class TestVTTCharacterExportImport:
         response = client.post(
             "/api/vtt/characters/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 400
-        assert "Stress must be between 0-5" in response.data.decode()
+        assert "Stress must be between 0-5" in response.content.decode()
 
-    def test_import_character_no_data(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_character_no_data(self, client, test_session):
         """Test importing with no data fails."""
         response = client.post(
             "/api/vtt/characters/import",
             data=json.dumps(None),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 400
@@ -330,12 +338,13 @@ class TestVTTCharacterExportImport:
 class TestVTTShipExportImport:
     """Tests for VTT Ship export/import endpoints."""
 
-    def test_export_ship(self, client, sample_vtt_ship):
+    @pytest.mark.asyncio
+    async def test_export_ship(self, client, sample_vtt_ship):
         """Test exporting a single VTT ship."""
         response = client.get(f"/api/vtt/ships/{sample_vtt_ship.id}/export")
         assert response.status_code == 200
 
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "USS Voyager"
         assert data["ship_class"] == "Intrepid-class"
         assert data["ship_registry"] == "NCC-74656"
@@ -346,12 +355,14 @@ class TestVTTShipExportImport:
         assert data["systems"]["engines"] == 11
         assert data["departments"]["conn"] == 4
 
-    def test_export_ship_not_found(self, client):
+    @pytest.mark.asyncio
+    async def test_export_ship_not_found(self, client):
         """Test exporting non-existent ship returns 404."""
         response = client.get("/api/vtt/ships/99999/export")
         assert response.status_code == 404
 
-    def test_import_ship(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_ship(self, client, test_session):
         """Test importing a new VTT ship."""
         import_data = {
             "name": "USS Enterprise",
@@ -383,17 +394,18 @@ class TestVTTShipExportImport:
         response = client.post(
             "/api/vtt/ships/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 201
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "USS Enterprise"
         assert data["ship_class"] == "Constitution-class"
         assert data["ship_registry"] == "NCC-1701"
         assert data["scale"] == 6
 
-    def test_import_ship_in_container(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_ship_in_container(self, client, test_session):
         """Test importing ship wrapped in 'ships' key."""
         import_data = {
             "ships": [
@@ -424,14 +436,15 @@ class TestVTTShipExportImport:
         response = client.post(
             "/api/vtt/ships/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 201
-        data = json.loads(response.data)
+        data = response.json()
         assert data["name"] == "USS Discovery"
 
-    def test_import_ship_invalid_system(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_ship_invalid_system(self, client, test_session):
         """Test importing ship with invalid system value fails."""
         import_data = {
             "name": "Invalid Ship",
@@ -458,13 +471,14 @@ class TestVTTShipExportImport:
         response = client.post(
             "/api/vtt/ships/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 400
-        assert "System comms must be between 7-12" in response.data.decode()
+        assert "System comms must be between 7-12" in response.content.decode()
 
-    def test_import_ship_invalid_department(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_ship_invalid_department(self, client, test_session):
         """Test importing ship with invalid department value fails."""
         import_data = {
             "name": "Invalid Ship",
@@ -491,13 +505,14 @@ class TestVTTShipExportImport:
         response = client.post(
             "/api/vtt/ships/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 400
-        assert "Department command must be between 0-5" in response.data.decode()
+        assert "Department command must be between 0-5" in response.content.decode()
 
-    def test_import_ship_invalid_scale(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_ship_invalid_scale(self, client, test_session):
         """Test importing ship with invalid scale fails."""
         import_data = {
             "name": "Invalid Ship",
@@ -524,13 +539,14 @@ class TestVTTShipExportImport:
         response = client.post(
             "/api/vtt/ships/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 400
-        assert "Scale must be between 1-7" in response.data.decode()
+        assert "Scale must be between 1-7" in response.content.decode()
 
-    def test_import_ship_invalid_shields(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_ship_invalid_shields(self, client, test_session):
         """Test importing ship with invalid shields fails."""
         import_data = {
             "name": "Invalid Ship",
@@ -559,23 +575,25 @@ class TestVTTShipExportImport:
         response = client.post(
             "/api/vtt/ships/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 400
-        assert "Shields must be between 0-30" in response.data.decode()
+        assert "Shields must be between 0-30" in response.content.decode()
 
-    def test_import_ship_no_data(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_ship_no_data(self, client, test_session):
         """Test importing with no data fails."""
         response = client.post(
             "/api/vtt/ships/import",
             data=json.dumps(None),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 400
 
-    def test_import_ship_with_registry_key(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_import_ship_with_registry_key(self, client, test_session):
         """Test importing ship using 'registry' key instead of 'ship_registry'."""
         import_data = {
             "name": "USS Enterprise",
@@ -603,9 +621,9 @@ class TestVTTShipExportImport:
         response = client.post(
             "/api/vtt/ships/import",
             data=json.dumps(import_data),
-            content_type="application/json",
+            
         )
 
         assert response.status_code == 201
-        data = json.loads(response.data)
+        data = response.json()
         assert data["ship_registry"] == "NCC-1701"
