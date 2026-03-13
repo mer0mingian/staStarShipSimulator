@@ -19,7 +19,7 @@ Location: `sta/models/vtt/`
 - **`models.py`**: 
   - `Character` (Base), `Pc`, `Npc` - Support for Species, Traits, Talents, Attacks, Equipment.
   - `Ship` - Scale [1-7], Resistance, Systems (6), Departments (6), Power/Shields (simplified), Weapons.
-  - `Scene` - Status (Active/Archived/Connected), Participants (Player/Non-Player), Initiative Order, Situation Traits.
+  - `Scene` - Status (Draft/Active/Completed), Participants (Player/Non-Player), Initiative Order, Situation Traits.
 - **`campaign.py`**:
   - `Campaign` - Shared Momentum/Threat, Scenes list, GM/Player identity.
   - `UniverseLibrary` - GM's private reusable content.
@@ -52,10 +52,10 @@ Location: `sta/models/vtt/`
 - No existing Auth system (simple Name-Password proposed).
 
 ## Next Steps
-1. Answer open questions in `docs/open_questions.md`.
-2. Finalize Campaign & Scene specifications.
-3. Design Database Schema (SQLAlchemy).
-4. Implement UI navigation overhaul.
+1. **Milestone 4 Kickoff**: Begin Character/Ship CRUD implementation.
+2. **Documentation**: Create `docs/milestone4_tasks.md`.
+3. **Test Fixes**: Resolve remaining test harness issues if they block M4 setup.
+4. **Future Tech**: Plan Flask to FastAPI migration (Task 3.5 in `delivery_plan.md`).
 
 ## References
 - `docs/documentation/objects.md` - Object definitions.

@@ -64,6 +64,9 @@ class VTTCharacterRecord(Base):
         Text, default="[]"
     )  # Active status effects
 
+    # Character state (Ok, Fatigued, Injured, Dead)
+    state: Mapped[str] = mapped_column(String(20), default="Ok")
+
     # Campaign and scene associations
     campaign_id: Mapped[Optional[int]] = mapped_column(ForeignKey("campaigns.id"))
     scene_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scenes.id"))

@@ -12,4 +12,11 @@ permission:
     "python-development/python-design-patterns": allow
     "python-project-structure": allow
     "python-dev-agents/python-pro": allow
+    "api-design-principles": allow
+    "architecture-patterns": allow
+    "deployment-pipeline-design": allow
+    "design-system-patterns": allow
+    "microservices-patterns": allow
+    "software-architecture": allow
+    "using-superpowers": allow
 ---

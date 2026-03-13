@@ -14,6 +14,7 @@ from sta.database import (
     NPCRecord,
     PersonnelEncounterRecord,
 )
+from sta.database.vtt_schema import VTTCharacterRecord, VTTShipRecord
 from sta.mechanics import task_roll, assisted_task_roll
 from sta.models.enums import SystemType, TerrainType, Range
 from sta.models.combat import ActiveEffect, HexCoord, TacticalMap, HexTile
@@ -6565,6 +6566,285 @@ def import_ships():
             }
         )
 
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+# ===== VTT CHARACTER IMPORT/EXPORT =====
+
+
+def _serialize_vtt_character(char: VTTCharacterRecord) -> dict:
+    """Serialize a VTTCharacterRecord to JSON."""
+    return {
+        "id": char.id,
+        "name": char.name,
+        "species": char.species,
+        "rank": char.rank,
+        "role": char.role,
+        "attributes": json.loads(char.attributes_json),
+        "disciplines": json.loads(char.disciplines_json),
+        "talents": json.loads(char.talents_json),
+        "focuses": json.loads(char.focuses_json),
+        "stress": char.stress,
+        "stress_max": char.stress_max,
+        "determination": char.determination,
+        "determination_max": char.determination_max,
+        "character_type": char.character_type,
+        "pronouns": char.pronouns,
+        "avatar_url": char.avatar_url,
+        "description": char.description,
+        "values": json.loads(char.values_json),
+        "equipment": json.loads(char.equipment_json),
+        "environment": char.environment,
+        "upbringing": char.upbringing,
+        "career_path": char.career_path,
+        "campaign_id": char.campaign_id,
+        "scene_id": char.scene_id,
+        "is_visible_to_players": char.is_visible_to_players,
+        "created_at": char.created_at.isoformat() if char.created_at else None,
+        "updated_at": char.updated_at.isoformat() if char.updated_at else None,
+        "state": getattr(char, "state", "Ok"),
+    }
+
+
+@api_bp.route("/vtt/characters/<int:char_id>/export", methods=["GET"])
+def export_vtt_character(char_id: int):
+    """Export a VTT character as JSON."""
+    session = get_session()
+    try:
+        char = session.query(VTTCharacterRecord).filter_by(id=char_id).first()
+        if not char:
+            return jsonify({"error": "Character not found"}), 404
+
+        return jsonify(_serialize_vtt_character(char))
+    finally:
+        session.close()
+
+
+@api_bp.route("/vtt/characters/import", methods=["POST"])
+def import_vtt_character():
+    """Import a VTT character from JSON."""
+    session = get_session()
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        if isinstance(data, dict):
+            if "characters" in data:
+                if not data["characters"]:
+                    return jsonify({"error": "No characters to import"}), 400
+                data = data["characters"][0]
+            elif "name" not in data:
+                return jsonify(
+                    {"error": "Missing 'characters' key in request body"}
+                ), 400
+
+        name = data.get("name", "Unnamed Character")
+
+        attributes = data.get("attributes", {})
+        for attr_name, value in attributes.items():
+            if not (7 <= value <= 12):
+                return jsonify(
+                    {
+                        "error": f"Attribute {attr_name} must be between 7-12, got {value}"
+                    }
+                ), 400
+
+        disciplines = data.get("disciplines", {})
+        for disc_name, value in disciplines.items():
+            if not (0 <= value <= 5):
+                return jsonify(
+                    {
+                        "error": f"Discipline {disc_name} must be between 0-5, got {value}"
+                    }
+                ), 400
+
+        stress_max = data.get("stress_max", 5)
+        stress = data.get("stress", 0)
+        if not (0 <= stress <= stress_max):
+            return jsonify(
+                {"error": f"Stress must be between 0-{stress_max}, got {stress}"}
+            ), 400
+
+        determination_max = data.get("determination_max", 3)
+        determination = data.get("determination", 0)
+        if not (0 <= determination <= determination_max):
+            return jsonify(
+                {
+                    "error": f"Determination must be between 0-{determination_max}, got {determination}"
+                }
+            ), 400
+
+        char = VTTCharacterRecord(
+            name=name,
+            species=data.get("species"),
+            rank=data.get("rank"),
+            role=data.get("role"),
+            attributes_json=json.dumps(attributes),
+            disciplines_json=json.dumps(disciplines),
+            talents_json=json.dumps(data.get("talents", [])),
+            focuses_json=json.dumps(data.get("focuses", [])),
+            stress=stress,
+            stress_max=stress_max,
+            determination=determination,
+            determination_max=determination_max,
+            character_type=data.get("character_type", "support"),
+            pronouns=data.get("pronouns"),
+            avatar_url=data.get("avatar_url"),
+            description=data.get("description"),
+            values_json=json.dumps(data.get("values", [])),
+            equipment_json=json.dumps(data.get("equipment", [])),
+            environment=data.get("environment"),
+            upbringing=data.get("upbringing"),
+            career_path=data.get("career_path"),
+            campaign_id=data.get("campaign_id"),
+            is_visible_to_players=data.get("is_visible_to_players", True),
+        )
+
+        session.add(char)
+        session.commit()
+
+        return jsonify(_serialize_vtt_character(char)), 201
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        session.close()
+
+
+# ===== VTT SHIP IMPORT/EXPORT =====
+
+
+def _serialize_vtt_ship(ship: VTTShipRecord) -> dict:
+    """Serialize a VTTShipRecord to JSON."""
+    return {
+        "id": ship.id,
+        "name": ship.name,
+        "ship_class": ship.ship_class,
+        "ship_registry": ship.ship_registry,
+        "scale": ship.scale,
+        "systems": json.loads(ship.systems_json),
+        "departments": json.loads(ship.departments_json),
+        "weapons": json.loads(ship.weapons_json),
+        "talents": json.loads(ship.talents_json),
+        "traits": json.loads(ship.traits_json),
+        "breaches": json.loads(ship.breaches_json),
+        "shields": ship.shields,
+        "shields_max": ship.shields_max,
+        "resistance": ship.resistance,
+        "has_reserve_power": ship.has_reserve_power,
+        "shields_raised": ship.shields_raised,
+        "weapons_armed": ship.weapons_armed,
+        "crew_quality": ship.crew_quality,
+        "token_url": ship.token_url,
+        "token_scale": ship.token_scale,
+        "is_visible_to_players": ship.is_visible_to_players,
+        "vtt_position": json.loads(ship.vtt_position_json),
+        "vtt_status_effects": json.loads(ship.vtt_status_effects_json),
+        "vtt_facing_direction": ship.vtt_facing_direction,
+        "campaign_id": ship.campaign_id,
+        "scene_id": ship.scene_id,
+        "created_at": ship.created_at.isoformat() if ship.created_at else None,
+        "updated_at": ship.updated_at.isoformat() if ship.updated_at else None,
+    }
+
+
+@api_bp.route("/vtt/ships/<int:ship_id>/export", methods=["GET"])
+def export_vtt_ship(ship_id: int):
+    """Export a VTT ship as JSON."""
+    session = get_session()
+    try:
+        ship = session.query(VTTShipRecord).filter_by(id=ship_id).first()
+        if not ship:
+            return jsonify({"error": "Ship not found"}), 404
+
+        return jsonify(_serialize_vtt_ship(ship))
+    finally:
+        session.close()
+
+
+@api_bp.route("/vtt/ships/import", methods=["POST"])
+def import_vtt_ship():
+    """Import a VTT ship from JSON."""
+    session = get_session()
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        if isinstance(data, dict):
+            if "ships" in data:
+                if not data["ships"]:
+                    return jsonify({"error": "No ships to import"}), 400
+                data = data["ships"][0]
+            elif "name" not in data:
+                return jsonify({"error": "Missing 'ships' key in request body"}), 400
+
+        name = data.get("name", "Unnamed Ship")
+
+        systems = data.get("systems", {})
+        for sys_name, value in systems.items():
+            if not (7 <= value <= 12):
+                return jsonify(
+                    {"error": f"System {sys_name} must be between 7-12, got {value}"}
+                ), 400
+
+        departments = data.get("departments", {})
+        for dept_name, value in departments.items():
+            if not (0 <= value <= 5):
+                return jsonify(
+                    {
+                        "error": f"Department {dept_name} must be between 0-5, got {value}"
+                    }
+                ), 400
+
+        scale = data.get("scale", 4)
+        if not (1 <= scale <= 7):
+            return jsonify({"error": f"Scale must be between 1-7, got {scale}"}), 400
+
+        shields_max = data.get("shields_max", 0)
+        shields = data.get("shields", 0)
+        if shields_max > 0 and not (0 <= shields <= shields_max):
+            return jsonify(
+                {"error": f"Shields must be between 0-{shields_max}, got {shields}"}
+            ), 400
+
+        ship = VTTShipRecord(
+            name=name,
+            ship_class=data.get("ship_class"),
+            ship_registry=data.get("ship_registry") or data.get("registry"),
+            scale=scale,
+            systems_json=json.dumps(systems),
+            departments_json=json.dumps(departments),
+            weapons_json=json.dumps(data.get("weapons", [])),
+            talents_json=json.dumps(data.get("talents", [])),
+            traits_json=json.dumps(data.get("traits", [])),
+            breaches_json=json.dumps(data.get("breaches", [])),
+            shields=shields,
+            shields_max=shields_max,
+            resistance=data.get("resistance", 0),
+            has_reserve_power=data.get("has_reserve_power", True),
+            shields_raised=data.get("shields_raised", False),
+            weapons_armed=data.get("weapons_armed", False),
+            crew_quality=data.get("crew_quality"),
+            token_url=data.get("token_url"),
+            token_scale=data.get("token_scale", 1.0),
+            campaign_id=data.get("campaign_id"),
+            scene_id=data.get("scene_id"),
+            is_visible_to_players=data.get("is_visible_to_players", True),
+            vtt_position_json=json.dumps(data.get("vtt_position", {})),
+            vtt_status_effects_json=json.dumps(data.get("vtt_status_effects", [])),
+            vtt_facing_direction=data.get("vtt_facing_direction"),
+        )
+
+        session.add(ship)
+        session.commit()
+
+        return jsonify(_serialize_vtt_ship(ship)), 201
     except Exception as e:
         session.rollback()
         return jsonify({"error": str(e)}), 500

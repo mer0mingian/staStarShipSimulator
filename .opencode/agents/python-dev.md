@@ -29,4 +29,9 @@ permission:
     "databases": allow
     "uv-package-manager": allow
     "docker-expert": allow
+    "debugging-strategies": allow
+    "database-migration": allow
+    "mobile-android-design": allow
+    "openapi-spec-generation": allow
+    "using-git-worktrees": allow
 ---

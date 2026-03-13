@@ -25,6 +25,8 @@ def create_app():
     from .routes.campaigns import campaigns_bp
     from .routes.scenes import scenes_bp
     from .routes.universe import universe_bp
+    from .routes.characters import characters_bp
+    from .routes.ships import ships_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(encounters_bp, url_prefix="/encounters")
@@ -32,5 +34,7 @@ def create_app():
     app.register_blueprint(campaigns_bp, url_prefix="/campaigns")
     app.register_blueprint(scenes_bp, url_prefix="/scenes")
     app.register_blueprint(universe_bp, url_prefix="")
+    app.register_blueprint(characters_bp, url_prefix="")
+    app.register_blueprint(ships_bp, url_prefix="")
 
     return app

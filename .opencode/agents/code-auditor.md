@@ -10,4 +10,6 @@ permission:
     "python-development/python-anti-patterns": allow
     "python-development/python-performance-optimization": allow
     "differential-review": allow
+    "code-review-excellence": allow
+    "dependency-upgrade": allow
 ---
