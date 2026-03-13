@@ -139,6 +139,11 @@ def init_db():
     run_migrations()
 
 
+def get_session():
+    """Get a synchronous database session."""
+    return SessionLocal()
+
+
 async def get_db():
     """Dependency for FastAPI to get an async database session."""
     async with AsyncSessionLocal() as session:

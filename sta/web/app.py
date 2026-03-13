@@ -31,9 +31,6 @@ def create_app():
         title="STA Starship Simulator API", version="1.0.0", lifespan=lifespan
     )
 
-    # Configuration equivalent to Flask app.config
-    app.config["SECRET_KEY"] = SECRET_KEY
-
     # Session middleware
     app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
