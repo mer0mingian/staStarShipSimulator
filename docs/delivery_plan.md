@@ -187,7 +187,7 @@ Full campaign lifecycle management with GM controls and player access.
 ### Status: ✅ COMPLETE (2026-03-06)
 
 ### Detailed Tasks
-See `docs/milestone3_tasks.md` for specific implementation steps.
+See `docs/tasks/milestone2_tasks.md` for specific implementation steps.
 
 ### Current State (as of M2 completion)
 - Campaign resource pools (Momentum/Threat) exist
@@ -256,7 +256,7 @@ See `docs/milestone3_tasks.md` for specific implementation steps.
 ### Status: ✅ COMPLETE
 
 ### Detailed Tasks
-See `docs/milestone2_tasks.md` for implementation details and test results.
+See `docs/tasks/milestone2_tasks.md` for implementation details and test results.
 
 ### Completed Features
 - Campaign resource pools (Momentum/Threat)
@@ -276,7 +276,7 @@ Complete scene lifecycle with narrative and combat support.
 ### Status: ✅ COMPLETE
 
 ### Tasks
-See `docs/milestone3_tasks.md` for complete task breakdown.
+See `docs/tasks/milestone3_tasks.md` for complete task breakdown.
 
 ---
 
