@@ -224,6 +224,21 @@ This document captures key learnings from user feedback and decisions made durin
 - Action system will be adapted to handle VTT records natively.
 - UI integration will focus on updating existing `combat.html` and `combat_gm.html` templates to use new VTT APIs.
 
+## Milestone 5: Combat Integration
+
+### Learnings
+- The legacy combat system used transient `Encounter` objects, which caused synchronization issues in a multi-player VTT context.
+- Flask's synchronous nature makes real-time updates (SSE) more challenging than in FastAPI, but manageable with generators.
+- Native record operations (Option B) are preferred over constant model conversion for performance and transaction integrity.
+
+### Decisions
+1. **Full Persistence**: All combat state (round, turn order, active effects, map data) is stored in `EncounterRecord`.
+2. **Native Record Handlers**: Action logic operates directly on `VTTCharacterRecord` and `VTTShipRecord`.
+3. **Map Authority**: `EncounterRecord` is the source of truth for tactical map coordinates.
+4. **Campaign Pools**: Combat actions directly modify the shared `CampaignRecord` momentum/threat pools.
+5. **SSE Sync**: Implementation of Server-Sent Events (SSE) for real-time state broadcasting.
+6. **NPC Unification**: NPCs are instantiated as full VTT records (`character_type="npc"`) during encounters.
+
 ## Continuous Update Instructions
 
 This document should be continuously updated throughout the project:
