@@ -6,6 +6,7 @@ making it much faster to add new actions without writing custom handlers.
 """
 
 from typing import Literal, TypedDict, Optional
+from sta.models.vtt.models import Scene, Ship
 
 
 class EffectConfig(TypedDict, total=False):
@@ -592,7 +593,9 @@ def get_action_required_system(action_name: str) -> Optional[str]:
     return None
 
 
-def is_action_available(action_name: str, ship) -> tuple[bool, Optional[str]]:
+def is_action_available(
+    action_name: str, scene: Scene, ship_id: str
+) -> tuple[bool, Optional[str]]:
     """
     Check if an action is available given the ship's breach status.
 
@@ -606,6 +609,10 @@ def is_action_available(action_name: str, ship) -> tuple[bool, Optional[str]]:
         - (False, "System DESTROYED") if the required system is destroyed
     """
     required_system = get_action_required_system(action_name)
+
+    ship = next((s for s in scene.ships if s.id == ship_id), None)
+    if not ship:
+        return (False, "Ship not found in scene")
 
     if not required_system:
         return (True, None)
@@ -624,7 +631,7 @@ def is_action_available(action_name: str, ship) -> tuple[bool, Optional[str]]:
     return (True, None)
 
 
-def get_breach_difficulty_modifier(action_name: str, ship) -> int:
+def get_breach_difficulty_modifier(action_name: str, scene: Scene, ship_id: str) -> int:
     """
     Get the difficulty modifier from breaches for an action.
 
@@ -640,6 +647,10 @@ def get_breach_difficulty_modifier(action_name: str, ship) -> int:
     """
     required_system = get_action_required_system(action_name)
 
+    ship = next((s for s in scene.ships if s.id == ship_id), None)
+    if not ship:
+        return 0  # Or raise an error, for now, we'll fail silently.
+
     if not required_system:
         return 0
 
@@ -653,7 +664,9 @@ def get_breach_difficulty_modifier(action_name: str, ship) -> int:
         return 0
 
 
-def get_shields_zero_difficulty_modifier(action_name: str, ship) -> int:
+def get_shields_zero_difficulty_modifier(
+    action_name: str, scene: Scene, ship_id: str
+) -> int:
     """
     Get the difficulty modifier when shields are at 0.
 
@@ -666,12 +679,16 @@ def get_shields_zero_difficulty_modifier(action_name: str, ship) -> int:
     Returns:
         The difficulty modifier (0 or 1)
     """
+    ship = next((s for s in scene.ships if s.id == ship_id), None)
+    if not ship:
+        return 0
+
     if action_name == "Regenerate Shields" and ship.shields == 0:
         return 1  # +1 difficulty when shields at 0
     return 0
 
 
-def get_all_actions_availability(ship) -> dict[str, dict]:
+def get_all_actions_availability(scene: Scene, ship_id: str) -> dict[str, dict]:
     """
     Get availability status for all configured actions.
 
@@ -689,15 +706,21 @@ def get_all_actions_availability(ship) -> dict[str, dict]:
             }
         }
     """
+    ship = next((s for s in scene.ships if s.id == ship_id), None)
+    if not ship:
+        return {}  # Return no actions if ship not found
+
     result = {}
 
     # Check all actions in ACTION_CONFIGS
     for action_name in ACTION_CONFIGS:
-        available, reason = is_action_available(action_name, ship)
+        available, reason = is_action_available(action_name, scene, ship_id)
         result[action_name] = {
             "available": available,
             "reason": reason,
-            "breach_modifier": get_breach_difficulty_modifier(action_name, ship)
+            "breach_modifier": get_breach_difficulty_modifier(
+                action_name, scene, ship_id
+            )
             if available
             else 0,
             "required_system": get_action_required_system(action_name),
@@ -705,11 +728,13 @@ def get_all_actions_availability(ship) -> dict[str, dict]:
 
     # Check special actions
     for action_name in SPECIAL_ACTION_SYSTEMS:
-        available, reason = is_action_available(action_name, ship)
+        available, reason = is_action_available(action_name, scene, ship_id)
         result[action_name] = {
             "available": available,
             "reason": reason,
-            "breach_modifier": get_breach_difficulty_modifier(action_name, ship)
+            "breach_modifier": get_breach_difficulty_modifier(
+                action_name, scene, ship_id
+            )
             if available
             else 0,
             "required_system": get_action_required_system(action_name),

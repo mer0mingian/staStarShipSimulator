@@ -149,6 +149,25 @@ def get_detected_positions_from_effects(active_effects: list) -> list:
     return detected
 
 
+from sta.models.vtt.models import Scene, Ship
+from sta.mechanics.combat import CombatState, HexGrid
+
+# Placeholder for Scene state management
+SCENE_DB: dict[str, Scene] = {}
+
+
+async def get_scene(scene_id: str) -> Scene:
+    """Placeholder function to retrieve scene state."""
+    if scene_id in SCENE_DB:
+        return SCENE_DB[scene_id]
+    raise HTTPException(status_code=404, detail="Scene not found")
+
+
+async def save_scene(scene: Scene):
+    """Placeholder function to save scene state."""
+    SCENE_DB[scene.id] = scene
+
+
 # STUB: State management and logging functions are too complex/synchronous-dependent to safely convert structurally without full implementation.
 def get_enemy_turn_info(session, encounter):
     return {"total_turns": 1, "turns_used": 0, "ships_info": []}
@@ -763,56 +782,61 @@ async def fire_weapon(data: dict = Body(...)):
 
 
 class ExecuteActionRequest(BaseModel):
-    encounter_id: str
+    scene_id: str
+    ship_id: str
     action_name: str
-    role: str = "player"
-    # Additional fields for specific actions can be added here or handled dynamically
-    roll_succeeded: Optional[bool] = None
-    roll_successes: Optional[int] = None
-    roll_momentum: Optional[int] = None
-    attribute: Optional[int] = None
-    discipline: Optional[int] = None
+    target_id: Optional[str] = None
+    # ... other potential fields
 
 
 @api_router.post("/execute-action")
 async def execute_action(
-    request: Request,  # FastAPI Request object to access cookies if needed
     data: ExecuteActionRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    # Find the encounter
-    result = await db.execute(
-        select(EncounterRecord).filter_by(encounter_id=data.encounter_id)
-    )
-    encounter = result.scalar_one_or_none()
-    if not encounter:
-        raise HTTPException(status_code=404, detail="Encounter not found")
+    """
+    Execute a combat action within a scene.
+    This endpoint now orchestrates the VTT state model.
+    """
+    scene = await get_scene(data.scene_id)
 
-    # Minimal implementation for test purposes: Create a log entry
-    # In a real app, this would invoke game logic based on action_name
-    # For "Calibrate Weapons", we'll just log it
+    # 1. Find the acting ship
+    acting_ship = next((s for s in scene.ships if s.id == data.ship_id), None)
+    if not acting_ship:
+        raise HTTPException(status_code=404, detail="Acting ship not found in scene")
 
-    # Determine action type (simplified)
-    action_type = "minor"  # Assuming Calibrate Weapons is minor for this test
+    # 2. Validate the action is available (e.g., system not destroyed)
+    is_available, reason = is_action_available(data.action_name, scene, data.ship_id)
+    if not is_available:
+        raise HTTPException(status_code=400, detail=f"Action not available: {reason}")
 
-    new_log = CombatLogRecord(
-        encounter_id=encounter.id,
-        round=encounter.round,
-        actor_name="Test Player",
-        actor_type="player",
-        ship_name="Test Ship",
-        action_name=data.action_name,
-        action_type=action_type,
-        description=f"Executed {data.action_name}",
-        task_result_json=None,
-        damage_dealt=0,
-        momentum_spent=0,
-        threat_spent=0,
-    )
-    db.add(new_log)
-    await db.commit()
+    # 3. (Stub) Handle range checks if a target is provided
+    if data.target_id:
+        # In a real implementation, we'd calculate hex distance here
+        pass
 
-    return {"success": True, "action_name": data.action_name, "log_id": new_log.id}
+    # 4. (Stub) Execute the action and apply its effects
+    # This is where the logic for task rolls, buffs, etc., would go.
+    # For now, we just create a log entry.
+
+    # 5. Create a log entry
+    log_entry = f"[{datetime.now().isoformat()}] Ship '{acting_ship.name}' performed action: {data.action_name}"
+    scene.logs.append(log_entry)
+
+    # 6. (Stub) Update turn order via CombatState
+    if scene.combat_state:
+        # Logic to advance turn order would go here
+        pass
+
+    # 7. Save the updated scene state
+    await save_scene(scene)
+
+    return {
+        "success": True,
+        "action_name": data.action_name,
+        "log_entry": log_entry,
+        "scene_id": scene.id,
+    }
 
 
 @api_router.get("/encounter/{encounter_id}/combat-log")
