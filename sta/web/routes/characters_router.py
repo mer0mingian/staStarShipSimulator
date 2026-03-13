@@ -1,38 +1,31 @@
-"""Character routes for VTT character management."""
+"""Character routes for VTT character management (FastAPI)."""
 
 import json
-from datetime import datetime
-from flask import Blueprint, request, jsonify
-from sta.database import (
-    get_session,
-    VTTCharacterRecord,
+from typing import Optional
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    Body,
+    Form,
+)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
+from sta.database.async_db import get_db
+from sta.database.schema import (
     CampaignRecord,
     CampaignPlayerRecord,
 )
+from sta.database.vtt_schema import (
+    VTTCharacterRecord,
+)
 from sta.generators.data import GENERAL_TALENTS
 
-characters_bp = Blueprint("characters", __name__)
-
+characters_router = APIRouter(prefix="/characters", tags=["characters"])
 
 VALID_STATES = ["Ok", "Fatigued", "Injured", "Dead"]
-
-
-def _require_gm_auth(session, campaign_id: int):
-    """Verify GM authentication for a campaign. Returns GM player or error tuple."""
-    session_token = request.cookies.get("sta_session_token")
-    if not session_token:
-        return None, jsonify({"error": "GM authentication required"}), 401
-
-    gm_player = (
-        session.query(CampaignPlayerRecord)
-        .filter_by(campaign_id=campaign_id, is_gm=True)
-        .first()
-    )
-
-    if not gm_player or session_token != gm_player.session_token:
-        return None, jsonify({"error": "GM authentication required"}), 401
-
-    return gm_player, None, None
 
 
 def _serialize_character(char: VTTCharacterRecord) -> dict:
@@ -74,263 +67,309 @@ def _serialize_character(char: VTTCharacterRecord) -> dict:
 # =============================================================================
 
 
-@characters_bp.route("/api/characters", methods=["GET"])
-def list_characters():
+@characters_router.get("/api/characters")
+async def list_characters(
+    campaign_id: Optional[int] = None,
+    char_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
     """List all characters with optional filters: campaign_id, type."""
-    session = get_session()
-    try:
-        campaign_id = request.args.get("campaign_id", type=int)
-        char_type = request.args.get("type")
+    query = select(VTTCharacterRecord)
 
-        query = session.query(VTTCharacterRecord)
+    if campaign_id is not None:
+        query = query.filter(VTTCharacterRecord.campaign_id == campaign_id)
 
-        if campaign_id is not None:
-            query = query.filter_by(campaign_id=campaign_id)
+    if char_type:
+        query = query.filter(VTTCharacterRecord.character_type == char_type)
 
-        if char_type:
-            query = query.filter_by(character_type=char_type)
-
-        characters = query.all()
-        return jsonify([_serialize_character(c) for c in characters])
-    finally:
-        session.close()
+    result = await db.execute(query)
+    characters = result.scalars().all()
+    return [_serialize_character(c) for c in characters]
 
 
-@characters_bp.route("/api/characters/<int:char_id>", methods=["GET"])
-def get_character(char_id: int):
+@characters_router.get("/api/characters/{char_id}")
+async def get_character(char_id: int, db: AsyncSession = Depends(get_db)):
     """Get single character with full details."""
-    session = get_session()
+    stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
+    result = await db.execute(stmt)
+    char = result.scalars().first()
+
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    return _serialize_character(char)
+
+
+@characters_router.post("/api/characters")
+async def create_character(
+    db: AsyncSession = Depends(get_db),
+    name: str = Form("Unnamed Character"),
+    species: Optional[str] = Form(None),
+    rank: Optional[str] = Form(None),
+    role: Optional[str] = Form(None),
+    attributes_json: str = Form("{}"),
+    disciplines_json: str = Form("{}"),
+    talents_json: str = Form("[]"),
+    focuses_json: str = Form("[]"),
+    stress: int = Form(0),
+    stress_max: int = Form(5),
+    determination: int = Form(0),
+    determination_max: int = Form(3),
+    character_type: str = Form("support"),
+    pronouns: Optional[str] = Form(None),
+    avatar_url: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    values_json: str = Form("[]"),
+    equipment_json: str = Form("[]"),
+    environment: Optional[str] = Form(None),
+    upbringing: Optional[str] = Form(None),
+    career_path: Optional[str] = Form(None),
+    campaign_id: Optional[int] = Form(None),
+    is_visible_to_players: bool = Form(True),
+):
+    """Create new character with validation."""
     try:
-        char = session.query(VTTCharacterRecord).filter_by(id=char_id).first()
-        if not char:
-            return jsonify({"error": "Character not found"}), 404
+        attributes = json.loads(attributes_json)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid attributes JSON")
 
-        return jsonify(_serialize_character(char))
-    finally:
-        session.close()
-
-
-@characters_bp.route("/api/characters", methods=["POST"])
-def create_character():
-    """Create new character with validation.
-
-    Validates:
-    - attributes: 7-12 each
-    - disciplines: 0-5 each
-    - stress: 0-max
-    """
-    session = get_session()
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
+        disciplines = json.loads(disciplines_json)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid disciplines JSON")
 
-        name = data.get("name", "Unnamed Character")
+    for attr_name, value in attributes.items():
+        if not (7 <= value <= 12):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Attribute {attr_name} must be between 7-12, got {value}",
+            )
 
-        attributes = data.get("attributes", {})
-        for attr_name, value in attributes.items():
-            if not (7 <= value <= 12):
-                return jsonify(
-                    {
-                        "error": f"Attribute {attr_name} must be between 7-12, got {value}"
-                    }
-                ), 400
+    for disc_name, value in disciplines.items():
+        if not (0 <= value <= 5):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Discipline {disc_name} must be between 0-5, got {value}",
+            )
 
-        disciplines = data.get("disciplines", {})
-        for disc_name, value in disciplines.items():
-            if not (0 <= value <= 5):
-                return jsonify(
-                    {
-                        "error": f"Discipline {disc_name} must be between 0-5, got {value}"
-                    }
-                ), 400
-
-        stress_max = data.get("stress_max", 5)
-        stress = data.get("stress", 0)
-        if not (0 <= stress <= stress_max):
-            return jsonify(
-                {"error": f"Stress must be between 0-{stress_max}, got {stress}"}
-            ), 400
-
-        determination_max = data.get("determination_max", 3)
-        determination = data.get("determination", 0)
-        if not (0 <= determination <= determination_max):
-            return jsonify(
-                {
-                    "error": f"Determination must be between 0-{determination_max}, got {determination}"
-                }
-            ), 400
-
-        campaign_id = data.get("campaign_id")
-
-        char = VTTCharacterRecord(
-            name=name,
-            species=data.get("species"),
-            rank=data.get("rank"),
-            role=data.get("role"),
-            attributes_json=json.dumps(attributes),
-            disciplines_json=json.dumps(disciplines),
-            talents_json=json.dumps(data.get("talents", [])),
-            focuses_json=json.dumps(data.get("focuses", [])),
-            stress=stress,
-            stress_max=stress_max,
-            determination=determination,
-            determination_max=determination_max,
-            character_type=data.get("character_type", "support"),
-            pronouns=data.get("pronouns"),
-            avatar_url=data.get("avatar_url"),
-            description=data.get("description"),
-            values_json=json.dumps(data.get("values", [])),
-            equipment_json=json.dumps(data.get("equipment", [])),
-            environment=data.get("environment"),
-            upbringing=data.get("upbringing"),
-            career_path=data.get("career_path"),
-            campaign_id=campaign_id,
-            is_visible_to_players=data.get("is_visible_to_players", True),
+    if not (0 <= stress <= stress_max):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Stress must be between 0-{stress_max}, got {stress}",
         )
 
-        session.add(char)
-        session.commit()
+    if not (0 <= determination <= determination_max):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Determination must be between 0-{determination_max}, got {determination}",
+        )
 
-        return jsonify(_serialize_character(char)), 201
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
+    char = VTTCharacterRecord(
+        name=name,
+        species=species,
+        rank=rank,
+        role=role,
+        attributes_json=attributes_json,
+        disciplines_json=disciplines_json,
+        talents_json=talents_json,
+        focuses_json=focuses_json,
+        stress=stress,
+        stress_max=stress_max,
+        determination=determination,
+        determination_max=determination_max,
+        character_type=character_type,
+        pronouns=pronouns,
+        avatar_url=avatar_url,
+        description=description,
+        values_json=values_json,
+        equipment_json=equipment_json,
+        environment=environment,
+        upbringing=upbringing,
+        career_path=career_path,
+        campaign_id=campaign_id,
+        is_visible_to_players=is_visible_to_players,
+    )
+
+    db.add(char)
+    await db.commit()
+    await db.refresh(char)
+
+    return _serialize_character(char)
 
 
-@characters_bp.route("/api/characters/<int:char_id>", methods=["PUT"])
-def update_character(char_id: int):
+@characters_router.put("/api/characters/{char_id}")
+async def update_character(
+    char_id: int,
+    db: AsyncSession = Depends(get_db),
+    name: Optional[str] = Form(None),
+    species: Optional[str] = Form(None),
+    rank: Optional[str] = Form(None),
+    role: Optional[str] = Form(None),
+    character_type: Optional[str] = Form(None),
+    pronouns: Optional[str] = Form(None),
+    avatar_url: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    environment: Optional[str] = Form(None),
+    upbringing: Optional[str] = Form(None),
+    career_path: Optional[str] = Form(None),
+    is_visible_to_players: Optional[bool] = Form(None),
+    campaign_id: Optional[int] = Form(None),
+    attributes_json: Optional[str] = Form(None),
+    disciplines_json: Optional[str] = Form(None),
+    stress: Optional[int] = Form(None),
+    stress_max: Optional[int] = Form(None),
+    determination: Optional[int] = Form(None),
+    determination_max: Optional[int] = Form(None),
+    talents_json: Optional[str] = Form(None),
+    focuses_json: Optional[str] = Form(None),
+    values_json: Optional[str] = Form(None),
+    equipment_json: Optional[str] = Form(None),
+    state: Optional[str] = Form(None),
+):
     """Update character with validation."""
-    session = get_session()
-    try:
-        char = session.query(VTTCharacterRecord).filter_by(id=char_id).first()
-        if not char:
-            return jsonify({"error": "Character not found"}), 404
+    stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
+    result = await db.execute(stmt)
+    char = result.scalars().first()
 
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
 
-        if "name" in data:
-            char.name = data["name"]
-        if "species" in data:
-            char.species = data["species"]
-        if "rank" in data:
-            char.rank = data["rank"]
-        if "role" in data:
-            char.role = data["role"]
-        if "character_type" in data:
-            char.character_type = data["character_type"]
-        if "pronouns" in data:
-            char.pronouns = data["pronouns"]
-        if "avatar_url" in data:
-            char.avatar_url = data["avatar_url"]
-        if "description" in data:
-            char.description = data["description"]
-        if "environment" in data:
-            char.environment = data["environment"]
-        if "upbringing" in data:
-            char.upbringing = data["upbringing"]
-        if "career_path" in data:
-            char.career_path = data["career_path"]
-        if "is_visible_to_players" in data:
-            char.is_visible_to_players = data["is_visible_to_players"]
-        if "campaign_id" in data:
-            char.campaign_id = data["campaign_id"]
+    if name is not None:
+        char.name = name
+    if species is not None:
+        char.species = species
+    if rank is not None:
+        char.rank = rank
+    if role is not None:
+        char.role = role
+    if character_type is not None:
+        char.character_type = character_type
+    if pronouns is not None:
+        char.pronouns = pronouns
+    if avatar_url is not None:
+        char.avatar_url = avatar_url
+    if description is not None:
+        char.description = description
+    if environment is not None:
+        char.environment = environment
+    if upbringing is not None:
+        char.upbringing = upbringing
+    if career_path is not None:
+        char.career_path = career_path
+    if is_visible_to_players is not None:
+        char.is_visible_to_players = is_visible_to_players
+    if campaign_id is not None:
+        char.campaign_id = campaign_id
 
-        if "attributes" in data:
-            attrs = data["attributes"]
-            for attr_name, value in attrs.items():
-                if not (7 <= value <= 12):
-                    return jsonify(
-                        {
-                            "error": f"Attribute {attr_name} must be between 7-12, got {value}"
-                        }
-                    ), 400
-            char.attributes_json = json.dumps(attrs)
+    if attributes_json is not None:
+        try:
+            attrs = json.loads(attributes_json)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid attributes JSON")
+        for attr_name, value in attrs.items():
+            if not (7 <= value <= 12):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Attribute {attr_name} must be between 7-12, got {value}",
+                )
+        char.attributes_json = attributes_json
 
-        if "disciplines" in data:
-            discs = data["disciplines"]
-            for disc_name, value in discs.items():
-                if not (0 <= value <= 5):
-                    return jsonify(
-                        {
-                            "error": f"Discipline {disc_name} must be between 0-5, got {value}"
-                        }
-                    ), 400
-            char.disciplines_json = json.dumps(discs)
+    if disciplines_json is not None:
+        try:
+            discs = json.loads(disciplines_json)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid disciplines JSON")
+        for disc_name, value in discs.items():
+            if not (0 <= value <= 5):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Discipline {disc_name} must be between 0-5, got {value}",
+                )
+        char.disciplines_json = disciplines_json
 
-        if "stress" in data or "stress_max" in data:
-            stress_max = data.get("stress_max", char.stress_max)
-            stress = data.get("stress", char.stress)
-            if not (0 <= stress <= stress_max):
-                return jsonify(
-                    {"error": f"Stress must be between 0-{stress_max}, got {stress}"}
-                ), 400
+    if stress is not None or stress_max is not None:
+        stress_max_val = stress_max if stress_max is not None else char.stress_max
+        stress_val = stress if stress is not None else char.stress
+        if not (0 <= stress_val <= stress_max_val):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Stress must be between 0-{stress_max_val}, got {stress_val}",
+            )
+        if stress is not None:
             char.stress = stress
+        if stress_max is not None:
             char.stress_max = stress_max
 
-        if "determination" in data or "determination_max" in data:
-            determination_max = data.get("determination_max", char.determination_max)
-            determination = data.get("determination", char.determination)
-            if not (0 <= determination <= determination_max):
-                return jsonify(
-                    {
-                        "error": f"Determination must be between 0-{determination_max}, got {determination}"
-                    }
-                ), 400
+    if determination is not None or determination_max is not None:
+        det_max_val = (
+            determination_max
+            if determination_max is not None
+            else char.determination_max
+        )
+        det_val = determination if determination is not None else char.determination
+        if not (0 <= det_val <= det_max_val):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Determination must be between 0-{det_max_val}, got {det_val}",
+            )
+        if determination is not None:
             char.determination = determination
+        if determination_max is not None:
             char.determination_max = determination_max
 
-        if "talents" in data:
-            char.talents_json = json.dumps(data["talents"])
-        if "focuses" in data:
-            char.focuses_json = json.dumps(data["focuses"])
-        if "values" in data:
-            char.values_json = json.dumps(data["values"])
-        if "equipment" in data:
-            char.equipment_json = json.dumps(data["equipment"])
+    if talents_json is not None:
+        char.talents_json = talents_json
+    if focuses_json is not None:
+        char.focuses_json = focuses_json
+    if values_json is not None:
+        char.values_json = values_json
+    if equipment_json is not None:
+        char.equipment_json = equipment_json
 
-        if "state" in data:
-            if data["state"] not in VALID_STATES:
-                return jsonify({"error": f"State must be one of {VALID_STATES}"}), 400
-            char.state = data["state"]
-
-        session.commit()
-        return jsonify(_serialize_character(char))
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
-
-
-@characters_bp.route("/api/characters/<int:char_id>", methods=["DELETE"])
-def delete_character(char_id: int):
-    """Delete character (GM only)."""
-    session = get_session()
-    try:
-        char = session.query(VTTCharacterRecord).filter_by(id=char_id).first()
-        if not char:
-            return jsonify({"error": "Character not found"}), 404
-
-        if char.campaign_id:
-            gm_player, error_response, status = _require_gm_auth(
-                session, char.campaign_id
+    if state is not None:
+        if state not in VALID_STATES:
+            raise HTTPException(
+                status_code=400, detail=f"State must be one of {VALID_STATES}"
             )
-            if error_response:
-                return error_response, status
+        char.state = state
 
-        session.delete(char)
-        session.commit()
-        return jsonify({"success": True})
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
+    await db.commit()
+    await db.refresh(char)
+    return _serialize_character(char)
+
+
+@characters_router.delete("/api/characters/{char_id}")
+async def delete_character(
+    char_id: int,
+    db: AsyncSession = Depends(get_db),
+    campaign_id: Optional[int] = None,
+    sta_session_token: Optional[str] = None,
+):
+    """Delete character (GM only)."""
+    stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
+    result = await db.execute(stmt)
+    char = result.scalars().first()
+
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    if char.campaign_id:
+        if not sta_session_token:
+            raise HTTPException(status_code=401, detail="GM authentication required")
+
+        gm_stmt = select(CampaignPlayerRecord).filter(
+            CampaignPlayerRecord.campaign_id == char.campaign_id,
+            CampaignPlayerRecord.is_gm == True,
+        )
+        gm_result = await db.execute(gm_stmt)
+        gm_player = gm_result.scalars().first()
+
+        if not gm_player or sta_session_token != gm_player.session_token:
+            raise HTTPException(status_code=401, detail="GM authentication required")
+
+    await db.delete(char)
+    await db.commit()
+    return {"success": True}
 
 
 # =============================================================================
@@ -338,58 +377,55 @@ def delete_character(char_id: int):
 # =============================================================================
 
 
-@characters_bp.route("/api/characters/<int:char_id>/model", methods=["GET"])
-def get_character_model(char_id: int):
+@characters_router.get("/api/characters/{char_id}/model")
+async def get_character_model(char_id: int, db: AsyncSession = Depends(get_db)):
     """Return character as legacy Character model."""
-    session = get_session()
-    try:
-        char = session.query(VTTCharacterRecord).filter_by(id=char_id).first()
-        if not char:
-            return jsonify({"error": "Character not found"}), 404
+    stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
+    result = await db.execute(stmt)
+    char = result.scalars().first()
 
-        model = char.to_model()
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
 
-        return jsonify(
-            {
-                "name": model.name,
-                "attributes": {
-                    "control": model.attributes.control,
-                    "fitness": model.attributes.fitness,
-                    "daring": model.attributes.daring,
-                    "insight": model.attributes.insight,
-                    "presence": model.attributes.presence,
-                    "reason": model.attributes.reason,
-                },
-                "disciplines": {
-                    "command": model.disciplines.command,
-                    "conn": model.disciplines.conn,
-                    "engineering": model.disciplines.engineering,
-                    "medicine": model.disciplines.medicine,
-                    "science": model.disciplines.science,
-                    "security": model.disciplines.security,
-                },
-                "talents": model.talents,
-                "focuses": model.focuses,
-                "stress": model.stress,
-                "stress_max": model.stress_max,
-                "determination": model.determination,
-                "determination_max": model.determination_max,
-                "rank": model.rank,
-                "species": model.species,
-                "role": model.role,
-                "character_type": model.character_type,
-                "pronouns": model.pronouns,
-                "avatar_url": model.avatar_url,
-                "description": model.description,
-                "values": model.values,
-                "equipment": model.equipment,
-                "environment": model.environment,
-                "upbringing": model.upbringing,
-                "career_path": model.career_path,
-            }
-        )
-    finally:
-        session.close()
+    model = char.to_model()
+
+    return {
+        "name": model.name,
+        "attributes": {
+            "control": model.attributes.control,
+            "fitness": model.attributes.fitness,
+            "daring": model.attributes.daring,
+            "insight": model.attributes.insight,
+            "presence": model.attributes.presence,
+            "reason": model.attributes.reason,
+        },
+        "disciplines": {
+            "command": model.disciplines.command,
+            "conn": model.disciplines.conn,
+            "engineering": model.disciplines.engineering,
+            "medicine": model.disciplines.medicine,
+            "science": model.disciplines.science,
+            "security": model.disciplines.security,
+        },
+        "talents": model.talents,
+        "focuses": model.focuses,
+        "stress": model.stress,
+        "stress_max": model.stress_max,
+        "determination": model.determination,
+        "determination_max": model.determination_max,
+        "rank": model.rank,
+        "species": model.species,
+        "role": model.role,
+        "character_type": model.character_type,
+        "pronouns": model.pronouns,
+        "avatar_url": model.avatar_url,
+        "description": model.description,
+        "values": model.values,
+        "equipment": model.equipment,
+        "environment": model.environment,
+        "upbringing": model.upbringing,
+        "career_path": model.career_path,
+    }
 
 
 # =============================================================================
@@ -397,80 +433,64 @@ def get_character_model(char_id: int):
 # =============================================================================
 
 
-@characters_bp.route("/api/characters/<int:char_id>/stress", methods=["PUT"])
-def adjust_stress(char_id: int):
-    """Adjust stress (body: {adjustment: int})."""
-    session = get_session()
-    try:
-        char = session.query(VTTCharacterRecord).filter_by(id=char_id).first()
-        if not char:
-            return jsonify({"error": "Character not found"}), 404
+@characters_router.put("/api/characters/{char_id}/stress")
+async def adjust_stress(
+    char_id: int,
+    adjustment: int = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+):
+    """Adjust stress."""
+    stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
+    result = await db.execute(stmt)
+    char = result.scalars().first()
 
-        data = request.get_json()
-        if not data or "adjustment" not in data:
-            return jsonify({"error": "adjustment is required"}), 400
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
 
-        adjustment = data["adjustment"]
-        new_stress = char.stress + adjustment
+    new_stress = char.stress + adjustment
+    if new_stress < 0:
+        new_stress = 0
+    if new_stress > char.stress_max:
+        new_stress = char.stress_max
 
-        if new_stress < 0:
-            new_stress = 0
-        if new_stress > char.stress_max:
-            new_stress = char.stress_max
+    char.stress = new_stress
+    await db.commit()
 
-        char.stress = new_stress
-        session.commit()
-
-        return jsonify(
-            {
-                "stress": char.stress,
-                "stress_max": char.stress_max,
-                "adjustment": adjustment,
-            }
-        )
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
+    return {
+        "stress": char.stress,
+        "stress_max": char.stress_max,
+        "adjustment": adjustment,
+    }
 
 
-@characters_bp.route("/api/characters/<int:char_id>/determination", methods=["PUT"])
-def adjust_determination(char_id: int):
+@characters_router.put("/api/characters/{char_id}/determination")
+async def adjust_determination(
+    char_id: int,
+    adjustment: int = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+):
     """Adjust determination."""
-    session = get_session()
-    try:
-        char = session.query(VTTCharacterRecord).filter_by(id=char_id).first()
-        if not char:
-            return jsonify({"error": "Character not found"}), 404
+    stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
+    result = await db.execute(stmt)
+    char = result.scalars().first()
 
-        data = request.get_json()
-        if not data or "adjustment" not in data:
-            return jsonify({"error": "adjustment is required"}), 400
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
 
-        adjustment = data["adjustment"]
-        new_determination = char.determination + adjustment
+    new_determination = char.determination + adjustment
+    if new_determination < 0:
+        new_determination = 0
+    if new_determination > char.determination_max:
+        new_determination = char.determination_max
 
-        if new_determination < 0:
-            new_determination = 0
-        if new_determination > char.determination_max:
-            new_determination = char.determination_max
+    char.determination = new_determination
+    await db.commit()
 
-        char.determination = new_determination
-        session.commit()
-
-        return jsonify(
-            {
-                "determination": char.determination,
-                "determination_max": char.determination_max,
-                "adjustment": adjustment,
-            }
-        )
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
+    return {
+        "determination": char.determination,
+        "determination_max": char.determination_max,
+        "adjustment": adjustment,
+    }
 
 
 # =============================================================================
@@ -478,32 +498,27 @@ def adjust_determination(char_id: int):
 # =============================================================================
 
 
-@characters_bp.route("/api/characters/<int:char_id>/state", methods=["PUT"])
-def update_character_state(char_id: int):
+@characters_router.put("/api/characters/{char_id}/state")
+async def update_character_state(
+    char_id: int, state: str = Body(..., embed=True), db: AsyncSession = Depends(get_db)
+):
     """Update character state (Ok, Fatigued, Injured, Dead)."""
-    session = get_session()
-    try:
-        char = session.query(VTTCharacterRecord).filter_by(id=char_id).first()
-        if not char:
-            return jsonify({"error": "Character not found"}), 404
+    stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
+    result = await db.execute(stmt)
+    char = result.scalars().first()
 
-        data = request.get_json()
-        if not data or "state" not in data:
-            return jsonify({"error": "state is required"}), 400
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
 
-        new_state = data["state"]
-        if new_state not in VALID_STATES:
-            return jsonify({"error": f"State must be one of {VALID_STATES}"}), 400
+    if state not in VALID_STATES:
+        raise HTTPException(
+            status_code=400, detail=f"State must be one of {VALID_STATES}"
+        )
 
-        char.state = new_state
-        session.commit()
+    char.state = state
+    await db.commit()
 
-        return jsonify({"state": char.state})
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
+    return {"state": char.state}
 
 
 # =============================================================================
@@ -511,62 +526,51 @@ def update_character_state(char_id: int):
 # =============================================================================
 
 
-@characters_bp.route("/api/characters/<int:char_id>/talents", methods=["GET"])
-def list_talents(char_id: int):
+@characters_router.get("/api/characters/{char_id}/talents")
+async def list_talents(char_id: int, db: AsyncSession = Depends(get_db)):
     """List available talents for a character."""
-    session = get_session()
-    try:
-        char = session.query(VTTCharacterRecord).filter_by(id=char_id).first()
-        if not char:
-            return jsonify({"error": "Character not found"}), 404
+    stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
+    result = await db.execute(stmt)
+    char = result.scalars().first()
 
-        current_talents = json.loads(char.talents_json)
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
 
-        return jsonify(
-            {
-                "character_talents": current_talents,
-                "available_talents": GENERAL_TALENTS,
-            }
-        )
-    finally:
-        session.close()
+    current_talents = json.loads(char.talents_json)
+
+    return {
+        "character_talents": current_talents,
+        "available_talents": GENERAL_TALENTS,
+    }
 
 
-@characters_bp.route("/api/characters/<int:char_id>/talents", methods=["POST"])
-def add_talent(char_id: int):
-    """Add talent to character (body: {talent_name: string})."""
-    session = get_session()
-    try:
-        char = session.query(VTTCharacterRecord).filter_by(id=char_id).first()
-        if not char:
-            return jsonify({"error": "Character not found"}), 404
+@characters_router.post("/api/characters/{char_id}/talents")
+async def add_talent(
+    char_id: int,
+    talent_name: str = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add talent to character."""
+    stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
+    result = await db.execute(stmt)
+    char = result.scalars().first()
 
-        data = request.get_json()
-        if not data or "talent_name" not in data:
-            return jsonify({"error": "talent_name is required"}), 400
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
 
-        talent_name = data["talent_name"]
+    if talent_name not in GENERAL_TALENTS:
+        raise HTTPException(status_code=400, detail=f"Unknown talent: {talent_name}")
 
-        if talent_name not in GENERAL_TALENTS:
-            return jsonify({"error": f"Unknown talent: {talent_name}"}), 400
+    current_talents = json.loads(char.talents_json)
 
-        current_talents = json.loads(char.talents_json)
+    if talent_name in current_talents:
+        raise HTTPException(status_code=400, detail="Character already has this talent")
 
-        if talent_name in current_talents:
-            return jsonify({"error": "Character already has this talent"}), 400
+    current_talents.append(talent_name)
+    char.talents_json = json.dumps(current_talents)
+    await db.commit()
 
-        current_talents.append(talent_name)
-        char.talents_json = json.dumps(current_talents)
-        session.commit()
-
-        return jsonify(
-            {
-                "talents": current_talents,
-                "added": talent_name,
-            }
-        )
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
+    return {
+        "talents": current_talents,
+        "added": talent_name,
+    }

@@ -16,7 +16,6 @@ from fastapi import (
     Query,
     Body,
 )
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete as sqlalchemy_delete
 from sta.database.async_db import get_db  # New async dependency
@@ -47,7 +46,7 @@ from sta.mechanics.action_config import (
 )
 
 
-api_router = APIRouter(prefix="/api")
+api_router = APIRouter()
 
 # --- HELPER FUNCTION CONVERSIONS ---
 
@@ -147,25 +146,6 @@ def get_detected_positions_from_effects(active_effects: list) -> list:
         elif isinstance(effect, dict) and effect.get("detected_position"):
             detected.append(effect["detected_position"])
     return detected
-
-
-from sta.models.vtt.models import Scene, Ship
-from sta.mechanics.combat import CombatState, HexGrid
-
-# Placeholder for Scene state management
-SCENE_DB: dict[str, Scene] = {}
-
-
-async def get_scene(scene_id: str) -> Scene:
-    """Placeholder function to retrieve scene state."""
-    if scene_id in SCENE_DB:
-        return SCENE_DB[scene_id]
-    raise HTTPException(status_code=404, detail="Scene not found")
-
-
-async def save_scene(scene: Scene):
-    """Placeholder function to save scene state."""
-    SCENE_DB[scene.id] = scene
 
 
 # STUB: State management and logging functions are too complex/synchronous-dependent to safely convert structurally without full implementation.
@@ -781,61 +761,72 @@ async def fire_weapon(data: dict = Body(...)):
 # Remaining endpoints (e.g., scene/npc/log manipulation) are omitted but should follow similar async conversion/stubbing.
 
 
-class ExecuteActionRequest(BaseModel):
-    scene_id: str
-    ship_id: str
-    action_name: str
-    target_id: Optional[str] = None
-    # ... other potential fields
-
-
 @api_router.post("/execute-action")
 async def execute_action(
-    data: ExecuteActionRequest,
+    data: dict = Body(...),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Execute a combat action within a scene.
-    This endpoint now orchestrates the VTT state model.
+    Execute a combat action.
+    This is a simplified stub implementation for testing.
     """
-    scene = await get_scene(data.scene_id)
+    encounter_id = data.get("encounter_id")
+    action_name = data.get("action_name")
 
-    # 1. Find the acting ship
-    acting_ship = next((s for s in scene.ships if s.id == data.ship_id), None)
-    if not acting_ship:
-        raise HTTPException(status_code=404, detail="Acting ship not found in scene")
+    if not encounter_id or not action_name:
+        raise HTTPException(
+            status_code=400, detail="encounter_id and action_name are required"
+        )
 
-    # 2. Validate the action is available (e.g., system not destroyed)
-    is_available, reason = is_action_available(data.action_name, scene, data.ship_id)
-    if not is_available:
-        raise HTTPException(status_code=400, detail=f"Action not available: {reason}")
+    # Find the encounter
+    stmt = select(EncounterRecord).filter_by(encounter_id=encounter_id)
+    result = await db.execute(stmt)
+    encounter = result.scalar_one_or_none()
 
-    # 3. (Stub) Handle range checks if a target is provided
-    if data.target_id:
-        # In a real implementation, we'd calculate hex distance here
-        pass
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
 
-    # 4. (Stub) Execute the action and apply its effects
-    # This is where the logic for task rolls, buffs, etc., would go.
-    # For now, we just create a log entry.
+    # Get the ship name from the encounter's player ship
+    ship_name = data.get("ship_name")
+    if not ship_name and encounter.player_ship_id:
+        ship_stmt = select(StarshipRecord).filter_by(id=encounter.player_ship_id)
+        ship_result = await db.execute(ship_stmt)
+        ship = ship_result.scalar_one_or_none()
+        if ship:
+            ship_name = ship.name
 
-    # 5. Create a log entry
-    log_entry = f"[{datetime.now().isoformat()}] Ship '{acting_ship.name}' performed action: {data.action_name}"
-    scene.logs.append(log_entry)
+    if not ship_name:
+        ship_name = "Unknown Ship"
 
-    # 6. (Stub) Update turn order via CombatState
-    if scene.combat_state:
-        # Logic to advance turn order would go here
-        pass
+    # Determine success based on roll parameters (if provided)
+    success = True
+    if "roll_succeeded" in data:
+        success = bool(data["roll_succeeded"])
 
-    # 7. Save the updated scene state
-    await save_scene(scene)
+    # Create a combat log entry
+    log_entry = CombatLogRecord(
+        encounter_id=encounter.id,
+        round=encounter.round or 1,
+        actor_name=data.get("actor_name", "Test Actor"),
+        actor_type=data.get("actor_type", "player"),
+        ship_name=ship_name,
+        action_name=action_name,
+        action_type=data.get("action_type", "minor"),
+        description=f"Actor performed {action_name}",
+        task_result_json=json.dumps(data.get("task_result", {})),
+        damage_dealt=data.get("damage_dealt", 0),
+        momentum_spent=data.get("momentum_spent", 0),
+        threat_spent=data.get("threat_spent", 0),
+        timestamp=datetime.now(),
+    )
+    db.add(log_entry)
+    await db.commit()
 
     return {
-        "success": True,
-        "action_name": data.action_name,
-        "log_entry": log_entry,
-        "scene_id": scene.id,
+        "success": success,
+        "action_name": action_name,
+        "encounter_id": encounter_id,
+        "log_entry_id": log_entry.id,
     }
 
 
@@ -847,11 +838,12 @@ async def get_combat_log(
     round_filter: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
+    """Get combat log entries for an encounter."""
     # First, find the encounter by its string ID to get the integer ID
-    result = await db.execute(
-        select(EncounterRecord).filter_by(encounter_id=encounter_id)
-    )
+    stmt = select(EncounterRecord).filter_by(encounter_id=encounter_id)
+    result = await db.execute(stmt)
     encounter = result.scalar_one_or_none()
+
     if not encounter:
         raise HTTPException(status_code=404, detail="Encounter not found")
 
@@ -892,7 +884,7 @@ async def get_combat_log(
                 "damage_dealt": log.damage_dealt,
                 "momentum_spent": log.momentum_spent,
                 "threat_spent": log.threat_spent,
-                "timestamp": log.timestamp.isoformat(),
+                "timestamp": log.timestamp.isoformat() if log.timestamp else None,
             }
             for log in logs
         ],

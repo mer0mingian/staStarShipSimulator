@@ -1,23 +1,23 @@
-"""Scene routes for scene management."""
+"""Scene routes for scene management (FastAPI)."""
 
 import json
-import os
 import uuid
-from datetime import datetime
-from flask import (
-    Blueprint,
-    render_template,
-    request,
-    redirect,
-    url_for,
-    flash,
-    jsonify,
-    current_app,
-    send_from_directory,
+from typing import Optional
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    Body,
+    Form,
+    Query,
+    Cookie,
 )
-from werkzeug.utils import secure_filename
-from sta.database import (
-    get_session,
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+
+from sta.database.async_db import get_db
+from sta.database.schema import (
     SceneRecord,
     CampaignRecord,
     CampaignPlayerRecord,
@@ -26,673 +26,1026 @@ from sta.database import (
     CampaignNPCRecord,
     StarshipRecord,
     CampaignShipRecord,
-    VTTCharacterRecord,
-    VTTShipRecord,
     EncounterRecord,
     PersonnelEncounterRecord,
+    SceneParticipantRecord,
+    SceneShipRecord,
 )
-from sta.database.schema import SceneParticipantRecord, SceneShipRecord
+from sta.database.vtt_schema import (
+    VTTCharacterRecord,
+    VTTShipRecord,
+)
 from sta.models.enums import Position
 
-
-scenes_bp = Blueprint("scenes", __name__)
-
-
-@scenes_bp.route("/new", methods=["GET", "POST"])
-def new_scene():
-    """Create a new scene (narrative or starship encounter)."""
-    campaign_id = request.args.get("campaign_id")
-    if not campaign_id:
-        flash("Campaign ID required")
-        return redirect(url_for("main.index"))
-
-    session = get_session()
-    try:
-        campaign = (
-            session.query(CampaignRecord).filter_by(campaign_id=campaign_id).first()
-        )
-        if not campaign:
-            flash("Campaign not found")
-            return redirect(url_for("main.index"))
-
-        # Get available ships for the campaign
-        campaign_ships = (
-            session.query(CampaignShipRecord).filter_by(campaign_id=campaign.id).all()
-        )
-        available_ships = []
-        for cs in campaign_ships:
-            ship = session.query(StarshipRecord).filter_by(id=cs.ship_id).first()
-            if ship:
-                available_ships.append(ship)
-
-        if request.method == "POST":
-            name = request.form.get("name", "New Scene")
-            scene_type = request.form.get("scene_type", "narrative")
-            description = request.form.get("description", "")
-            stardate = request.form.get("stardate", "")
-            position = request.form.get("position", "captain")
-            status = request.form.get("status", "draft")
-
-            player_ship_id = request.form.get("player_ship_id")
-            if player_ship_id:
-                player_ship_id = int(player_ship_id)
-            elif campaign.active_ship_id:
-                player_ship_id = campaign.active_ship_id
-
-            enemy_ships_json = request.form.get("enemy_ships_json", "[]")
-            tactical_map_json = request.form.get("tactical_map_json", "{}")
-            ship_positions_json = request.form.get("ship_positions_json", "{}")
-
-            enemy_count = int(request.form.get("enemy_count", "1"))
-            crew_quality = request.form.get("crew_quality", "talented")
-
-            scene = SceneRecord(
-                campaign_id=campaign.id,
-                name=name,
-                description=description,
-                scene_type=scene_type,
-                stardate=stardate or None,
-                status=status,
-                player_ship_id=player_ship_id,
-                scene_position=position,
-                enemy_ships_json=enemy_ships_json,
-                tactical_map_json=tactical_map_json,
-                has_map=bool(tactical_map_json and tactical_map_json != "{}"),
-            )
-            session.add(scene)
-            session.flush()
-
-            enemy_ships = (
-                json.loads(enemy_ships_json) if enemy_ships_json != "[]" else []
-            )
-
-            active_ship = None
-            if campaign.active_ship_id:
-                active_ship = (
-                    session.query(StarshipRecord)
-                    .filter_by(id=campaign.active_ship_id)
-                    .first()
-                )
-            player_scale = active_ship.scale if active_ship else 4
-
-            if scene_type == "starship_encounter" and enemy_count > 0:
-                if not enemy_ships:
-                    ship_positions = (
-                        json.loads(ship_positions_json)
-                        if ship_positions_json and ship_positions_json != "{}"
-                        else {}
-                    )
-                    for i in range(enemy_count):
-                        enemy_ships.append(
-                            {
-                                "id": f"enemy_{i}",
-                                "name": f"Enemy Ship {i + 1}",
-                                "ship_class": "Generic Fighter",
-                                "scale": max(1, player_scale - 1),
-                                "crew_quality": crew_quality,
-                                "systems": {
-                                    "comms": 8,
-                                    "computers": 8,
-                                    "engines": 8,
-                                    "sensors": 8,
-                                    "structure": 8,
-                                    "weapons": 8,
-                                },
-                                "departments": {
-                                    "command": 1,
-                                    "conn": 1,
-                                    "engineering": 1,
-                                    "medicine": 1,
-                                    "science": 1,
-                                    "security": 1,
-                                },
-                                "weapons": [
-                                    {
-                                        "name": "Phaser Array",
-                                        "weapon_type": "phaser",
-                                        "damage": 2,
-                                        "range": "medium",
-                                        "qualities": [],
-                                    }
-                                ],
-                                "shields": 8,
-                                "shields_max": 8,
-                                "position": ship_positions.get(
-                                    f"enemy_{i}", {"q": 2, "r": -1}
-                                )
-                                if ship_positions_json
-                                else {"q": 2, "r": -1},
-                            }
-                        )
-
-                    scene.enemy_ships_json = json.dumps(enemy_ships)
-
-                if tactical_map_json == "{}" and ship_positions_json:
-                    scene.tactical_map_json = json.dumps(
-                        {
-                            "radius": 3,
-                            "tiles": [],
-                            "positions": json.loads(ship_positions_json),
-                        }
-                    )
-
-            session.commit()
-
-            # For starship_encounter, redirect to edit page where combat can be started
-            if scene_type == "starship_encounter":
-                return redirect(url_for("scenes.edit_scene", scene_id=scene.id))
-
-            return redirect(url_for("scenes.edit_scene", scene_id=scene.id))
-
-        positions = [p.value for p in Position]
-
-        # Get scene_type from query param or default to starship_encounter
-        default_scene_type = request.args.get("scene_type", "starship_encounter")
-        if default_scene_type not in (
-            "narrative",
-            "starship_encounter",
-            "personal_encounter",
-            "social_encounter",
-        ):
-            default_scene_type = "starship_encounter"
-
-        return render_template(
-            "new_scene.html",
-            campaign=campaign,
-            available_ships=available_ships,
-            positions=positions,
-            default_scene_type=default_scene_type,
-        )
-    finally:
-        session.close()
+scenes_router = APIRouter(prefix="/scenes", tags=["scenes"])
 
 
-@scenes_bp.route("/<int:scene_id>")
-def view_scene(scene_id: int):
-    """View a scene (GM, player, or viewscreen)."""
-    role = request.args.get("role", "player")
-    if role not in ("player", "gm", "viewscreen"):
-        role = "player"
+async def _require_gm_auth(
+    campaign_id: int,
+    sta_session_token: Optional[str] = Cookie(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify GM authentication for a campaign."""
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
 
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            flash("Scene not found")
-            return redirect(url_for("main.index"))
+    stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.campaign_id == campaign_id,
+        CampaignPlayerRecord.is_gm == True,
+    )
+    result = await db.execute(stmt)
+    gm_player = result.scalars().first()
 
-        campaign = session.query(CampaignRecord).filter_by(id=scene.campaign_id).first()
+    if not gm_player or sta_session_token != gm_player.session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
 
-        if not campaign:
-            flash("Campaign not found")
-            return redirect(url_for("main.index"))
-
-        # For GM role, verify they have a valid GM session
-        if role == "gm":
-            session_token = request.cookies.get("sta_session_token")
-            gm_player = (
-                session.query(CampaignPlayerRecord)
-                .filter_by(campaign_id=scene.campaign_id, is_gm=True)
-                .first()
-            )
-
-            if not gm_player or session_token != gm_player.session_token:
-                return redirect(
-                    url_for("campaigns.gm_login", campaign_id=campaign.campaign_id)
-                )
-
-        # Parse scene data
-        scene_traits = json.loads(scene.scene_traits_json or "[]")
-
-        scene_data = {
-            "id": scene.id,
-            "name": scene.name,
-            "description": scene.description,
-            "scene_type": scene.scene_type,
-            "status": scene.status,
-            "stardate": scene.stardate,
-            "scene_traits": scene_traits,
-            "challenges": json.loads(scene.challenges_json or "[]"),
-            "characters_present": json.loads(scene.characters_present_json or "[]"),
-            "has_map": scene.has_map,
-            "tactical_map": json.loads(scene.tactical_map_json or "{}"),
-        }
-
-        # Load NPCs for this scene
-        scene_npcs = (
-            session.query(SceneNPCRecord)
-            .filter_by(scene_id=scene.id)
-            .order_by(SceneNPCRecord.order_index)
-            .all()
-        )
-        npcs_data = []
-        for sn in scene_npcs:
-            if sn.npc_id:
-                npc = session.query(NPCRecord).filter_by(id=sn.npc_id).first()
-                if npc:
-                    npcs_data.append(
-                        {
-                            "id": sn.id,
-                            "npc_id": npc.id,
-                            "name": npc.name,
-                            "npc_type": npc.npc_type,
-                            "is_visible": sn.is_visible_to_players,
-                        }
-                    )
-            elif sn.quick_name:
-                npcs_data.append(
-                    {
-                        "id": sn.id,
-                        "npc_id": None,
-                        "name": sn.quick_name,
-                        "npc_type": "quick",
-                        "is_visible": sn.is_visible_to_players,
-                    }
-                )
-
-        # For combat scenes with encounter, redirect to combat view
-        if scene.encounter_id:
-            from sta.database import EncounterRecord
-
-            encounter = (
-                session.query(EncounterRecord).filter_by(id=scene.encounter_id).first()
-            )
-            if encounter:
-                return redirect(
-                    url_for(
-                        "encounters.combat",
-                        encounter_id=encounter.encounter_id,
-                        role=role,
-                    )
-                )
-
-        # For personal encounters, redirect to personnel combat view
-        if scene.scene_type == "personal_encounter":
-            from sta.database import PersonnelEncounterRecord
-
-            personnel_encounter = (
-                session.query(PersonnelEncounterRecord)
-                .filter_by(scene_id=scene.id)
-                .first()
-            )
-            if personnel_encounter:
-                return redirect(
-                    url_for(
-                        "encounters.personnel_combat",
-                        scene_id=scene.id,
-                        role=role,
-                    )
-                )
-
-        # Use combat templates for narrative scenes
-        if role == "viewscreen":
-            template = "combat_viewscreen.html"
-        elif role == "gm":
-            template = "combat_gm.html"
-        else:
-            template = "combat.html"
-
-        # Load player ship for the campaign
-        player_ship = None
-        if campaign.active_ship_id:
-            ship_record = (
-                session.query(StarshipRecord)
-                .filter_by(id=campaign.active_ship_id)
-                .first()
-            )
-            if ship_record:
-                player_ship = ship_record.to_model()
-
-        return render_template(
-            template,
-            scene=scene_data,
-            scene_record=scene,
-            campaign=campaign,
-            role=role,
-            is_narrative=True,
-            npcs=npcs_data,
-            player_ship=player_ship,
-            player_char=None,
-            position=None,
-            actions={
-                "position_minor": [],
-                "position_major": [],
-                "standard_minor": [],
-                "standard_major": [],
-            },
-            enemy_ships=[],
-            resistance_bonus=0,
-            encounter=None,
-        )
-    finally:
-        session.close()
+    return gm_player
 
 
-@scenes_bp.route("/<int:scene_id>/edit")
-def edit_scene(scene_id: int):
-    """Edit a scene - show dedicated edit page for narrative scenes."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            flash("Scene not found")
-            return redirect(url_for("main.index"))
-
-        campaign = session.query(CampaignRecord).filter_by(id=scene.campaign_id).first()
-        if not campaign:
-            flash("Campaign not found")
-            return redirect(url_for("main.index"))
-
-        # Parse scene data
-        scene_traits = json.loads(scene.scene_traits_json or "[]")
-        challenges = json.loads(scene.challenges_json or "[]")
-        characters_present = json.loads(scene.characters_present_json or "[]")
-        enemy_ships = json.loads(scene.enemy_ships_json or "[]")
-        tactical_map = json.loads(scene.tactical_map_json or "{}")
-
-        scene_data = {
-            "id": scene.id,
-            "name": scene.name,
-            "description": scene.description,
-            "scene_type": scene.scene_type,
-            "status": scene.status,
-            "stardate": scene.stardate,
-            "scene_traits": scene_traits,
-            "challenges": challenges,
-            "characters_present": characters_present,
-            "player_ship_id": scene.player_ship_id,
-            "scene_position": scene.scene_position,
-            "enemy_ships": enemy_ships,
-            "tactical_map": tactical_map,
-        }
-
-        # Load NPCs for this scene
-        scene_npcs = (
-            session.query(SceneNPCRecord)
-            .filter_by(scene_id=scene.id)
-            .order_by(SceneNPCRecord.order_index)
-            .all()
-        )
-        npcs_data = []
-        for sn in scene_npcs:
-            if sn.npc_id:
-                npc = session.query(NPCRecord).filter_by(id=sn.npc_id).first()
-                if npc:
-                    npcs_data.append(
-                        {
-                            "id": sn.id,
-                            "npc_id": npc.id,
-                            "name": npc.name,
-                            "npc_type": npc.npc_type,
-                            "is_visible": sn.is_visible_to_players,
-                        }
-                    )
-            elif sn.quick_name:
-                npcs_data.append(
-                    {
-                        "id": sn.id,
-                        "npc_id": None,
-                        "name": sn.quick_name,
-                        "npc_type": "quick",
-                        "is_visible": sn.is_visible_to_players,
-                    }
-                )
-
-        # Load available ships for this campaign
-        campaign_ships = (
-            session.query(CampaignShipRecord).filter_by(campaign_id=campaign.id).all()
-        )
-        available_ships = []
-        for cs in campaign_ships:
-            ship = session.query(StarshipRecord).filter_by(id=cs.ship_id).first()
-            if ship:
-                available_ships.append(ship)
-
-        # Get positions list
-        positions = [p.value for p in Position]
-
-        return render_template(
-            "edit_scene.html",
-            scene=scene_data,
-            scene_record=scene,
-            campaign=campaign,
-            npcs=npcs_data,
-            available_ships=available_ships,
-            positions=positions,
-        )
-    finally:
-        session.close()
+# =============================================================================
+# Scene NPCs API
+# =============================================================================
 
 
-@scenes_bp.route("/<int:scene_id>/npcs", methods=["GET"])
-def get_scene_npcs(scene_id: int):
+@scenes_router.get("/{scene_id}/npcs")
+async def get_scene_npcs(scene_id: int, db: AsyncSession = Depends(get_db)):
     """Get NPCs for a scene."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
+    stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    result = await db.execute(stmt)
+    scene = result.scalars().first()
 
-        scene_npcs = (
-            session.query(SceneNPCRecord)
-            .filter_by(scene_id=scene_id)
-            .order_by(SceneNPCRecord.order_index)
-            .all()
-        )
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
 
-        npcs = []
-        for sn in scene_npcs:
-            npc_data = {
-                "id": sn.id,
-                "is_visible": sn.is_visible_to_players,
-            }
-            if sn.npc_id:
-                npc = session.query(NPCRecord).filter_by(id=sn.npc_id).first()
-                if npc:
-                    npc_data["name"] = npc.name
-                    npc_data["npc_type"] = npc.npc_type
-                    npc_data["npc_id"] = npc.id
-            elif sn.quick_name:
-                npc_data["name"] = sn.quick_name
-                npc_data["npc_type"] = "quick"
-            npcs.append(npc_data)
+    scene_npcs_stmt = (
+        select(SceneNPCRecord)
+        .filter(SceneNPCRecord.scene_id == scene_id)
+        .order_by(SceneNPCRecord.order_index)
+    )
+    scene_npcs_result = await db.execute(scene_npcs_stmt)
+    scene_npcs = scene_npcs_result.scalars().all()
 
-        return jsonify({"npcs": npcs})
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/npcs/<int:npc_id>/visibility", methods=["PUT"])
-def toggle_npc_visibility(scene_id: int, npc_id: int):
-    """Toggle NPC visibility."""
-    session = get_session()
-    try:
-        scene_npc = (
-            session.query(SceneNPCRecord)
-            .filter_by(id=npc_id, scene_id=scene_id)
-            .first()
-        )
-        if not scene_npc:
-            return jsonify({"error": "NPC not found in scene"}), 404
-
-        data = request.get_json() or {}
-        scene_npc.is_visible_to_players = data.get("is_visible", False)
-        session.commit()
-
-        return jsonify({"success": True, "is_visible": scene_npc.is_visible_to_players})
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/npcs/available", methods=["GET"])
-def get_available_npcs(scene_id: int):
-    """Get NPCs available to add to scene (from campaign manifest + archive)."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        campaign_id = scene.campaign_id
-
-        available = []
-
-        campaign_npcs = (
-            session.query(CampaignNPCRecord).filter_by(campaign_id=campaign_id).all()
-        )
-        for cn in campaign_npcs:
-            npc = session.query(NPCRecord).filter_by(id=cn.npc_id).first()
+    npcs = []
+    for sn in scene_npcs:
+        npc_data = {
+            "id": sn.id,
+            "is_visible": sn.is_visible_to_players,
+        }
+        if sn.npc_id:
+            npc_stmt = select(NPCRecord).filter(NPCRecord.id == sn.npc_id)
+            npc_result = await db.execute(npc_stmt)
+            npc = npc_result.scalars().first()
             if npc:
-                existing = (
-                    session.query(SceneNPCRecord)
-                    .filter_by(scene_id=scene_id, npc_id=npc.id)
-                    .first()
+                npc_data["name"] = npc.name
+                npc_data["npc_type"] = npc.npc_type
+                npc_data["npc_id"] = npc.id
+        elif sn.quick_name:
+            npc_data["name"] = sn.quick_name
+            npc_data["npc_type"] = "quick"
+        npcs.append(npc_data)
+
+    return {"npcs": npcs}
+
+
+@scenes_router.put("/{scene_id}/npcs/{npc_id}/visibility")
+async def toggle_npc_visibility(
+    scene_id: int,
+    npc_id: int,
+    is_visible: bool = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+):
+    """Toggle NPC visibility."""
+    stmt = select(SceneNPCRecord).filter(
+        SceneNPCRecord.id == npc_id,
+        SceneNPCRecord.scene_id == scene_id,
+    )
+    result = await db.execute(stmt)
+    scene_npc = result.scalars().first()
+
+    if not scene_npc:
+        raise HTTPException(status_code=404, detail="NPC not found in scene")
+
+    scene_npc.is_visible_to_players = is_visible
+    await db.commit()
+
+    return {"success": True, "is_visible": scene_npc.is_visible_to_players}
+
+
+@scenes_router.get("/{scene_id}/npcs/available")
+async def get_available_npcs(scene_id: int, db: AsyncSession = Depends(get_db)):
+    """Get NPCs available to add to scene (from campaign manifest + archive)."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    campaign_id = scene.campaign_id
+
+    available = []
+
+    campaign_npcs_stmt = select(CampaignNPCRecord).filter(
+        CampaignNPCRecord.campaign_id == campaign_id
+    )
+    campaign_npcs_result = await db.execute(campaign_npcs_stmt)
+    campaign_npcs = campaign_npcs_result.scalars().all()
+
+    for cn in campaign_npcs:
+        npc_stmt = select(NPCRecord).filter(NPCRecord.id == cn.npc_id)
+        npc_result = await db.execute(npc_stmt)
+        npc = npc_result.scalars().first()
+        if npc:
+            existing_stmt = select(SceneNPCRecord).filter(
+                SceneNPCRecord.scene_id == scene_id,
+                SceneNPCRecord.npc_id == npc.id,
+            )
+            existing_result = await db.execute(existing_stmt)
+            existing = existing_result.scalars().first()
+            if not existing:
+                available.append(
+                    {
+                        "id": npc.id,
+                        "name": npc.name,
+                        "npc_type": npc.npc_type,
+                        "source": "campaign",
+                    }
                 )
-                if not existing:
-                    available.append(
-                        {
-                            "id": npc.id,
-                            "name": npc.name,
-                            "npc_type": npc.npc_type,
-                            "source": "campaign",
-                        }
-                    )
 
-        return jsonify({"npcs": available})
-    finally:
-        session.close()
+    return {"npcs": available}
 
 
-@scenes_bp.route("/<int:scene_id>/npcs", methods=["POST"])
-def add_npc_to_scene(scene_id: int):
+@scenes_router.post("/{scene_id}/npcs")
+async def add_npc_to_scene(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    npc_id: Optional[int] = Body(None, embed=True),
+    quick_name: Optional[str] = Body(None, embed=True),
+    quick_description: Optional[str] = Body("", embed=True),
+    is_visible: bool = Body(False, embed=True),
+):
     """Add an NPC to a scene."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_stmt.scalars().first()
 
-        data = request.get_json() or {}
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
 
-        max_order = session.query(SceneNPCRecord).filter_by(scene_id=scene_id).count()
+    count_stmt = select(func.count(SceneNPCRecord.id)).filter(
+        SceneNPCRecord.scene_id == scene_id
+    )
+    count_result = await db.execute(count_stmt)
+    max_order = count_result.scalar() or 0
 
-        if data.get("npc_id"):
-            npc_id = data["npc_id"]
-            npc = session.query(NPCRecord).filter_by(id=npc_id).first()
-            if not npc:
-                return jsonify({"error": "NPC not found"}), 404
+    if npc_id:
+        npc_stmt = select(NPCRecord).filter(NPCRecord.id == npc_id)
+        npc_result = await db.execute(npc_stmt)
+        npc = npc_result.scalars().first()
 
-            existing = (
-                session.query(SceneNPCRecord)
-                .filter_by(scene_id=scene_id, npc_id=npc_id)
-                .first()
-            )
-            if existing:
-                return jsonify({"error": "NPC already in scene"}), 400
+        if not npc:
+            raise HTTPException(status_code=404, detail="NPC not found")
 
-            scene_npc = SceneNPCRecord(
-                scene_id=scene_id,
-                npc_id=npc_id,
-                is_visible_to_players=data.get("is_visible", False),
-                order_index=max_order,
-            )
-            session.add(scene_npc)
-            session.commit()
-
-            return jsonify(
-                {
-                    "success": True,
-                    "scene_npc_id": scene_npc.id,
-                    "name": npc.name,
-                    "npc_type": npc.npc_type,
-                    "is_visible": scene_npc.is_visible_to_players,
-                }
-            )
-
-        elif data.get("quick_name"):
-            quick_name = data["quick_name"].strip()
-            if not quick_name:
-                return jsonify({"error": "Name is required"}), 400
-
-            scene_npc = SceneNPCRecord(
-                scene_id=scene_id,
-                quick_name=quick_name,
-                quick_description=data.get("quick_description", ""),
-                is_visible_to_players=data.get("is_visible", False),
-                order_index=max_order,
-            )
-            session.add(scene_npc)
-            session.commit()
-
-            return jsonify(
-                {
-                    "success": True,
-                    "scene_npc_id": scene_npc.id,
-                    "name": quick_name,
-                    "npc_type": "quick",
-                    "is_visible": scene_npc.is_visible_to_players,
-                }
-            )
-
-        else:
-            return jsonify({"error": "npc_id or quick_name required"}), 400
-
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/npcs/<int:scene_npc_id>", methods=["DELETE"])
-def remove_npc_from_scene(scene_id: int, scene_npc_id: int):
-    """Remove an NPC from a scene."""
-    session = get_session()
-    try:
-        scene_npc = (
-            session.query(SceneNPCRecord)
-            .filter_by(id=scene_npc_id, scene_id=scene_id)
-            .first()
+        existing_stmt = select(SceneNPCRecord).filter(
+            SceneNPCRecord.scene_id == scene_id,
+            SceneNPCRecord.npc_id == npc_id,
         )
-        if not scene_npc:
-            return jsonify({"error": "NPC not found in scene"}), 404
+        existing_result = await db.execute(existing_stmt)
+        existing = existing_result.scalars().first()
 
-        session.delete(scene_npc)
-        session.commit()
+        if existing:
+            raise HTTPException(status_code=400, detail="NPC already in scene")
 
-        return jsonify({"success": True})
-    finally:
-        session.close()
+        scene_npc = SceneNPCRecord(
+            scene_id=scene_id,
+            npc_id=npc_id,
+            is_visible_to_players=is_visible,
+            order_index=max_order,
+        )
+        db.add(scene_npc)
+        await db.commit()
+
+        return {
+            "success": True,
+            "scene_npc_id": scene_npc.id,
+            "name": npc.name,
+            "npc_type": npc.npc_type,
+            "is_visible": scene_npc.is_visible_to_players,
+        }
+
+    elif quick_name:
+        quick_name = quick_name.strip()
+        if not quick_name:
+            raise HTTPException(status_code=400, detail="Name is required")
+
+        scene_npc = SceneNPCRecord(
+            scene_id=scene_id,
+            quick_name=quick_name,
+            quick_description=quick_description,
+            is_visible_to_players=is_visible,
+            order_index=max_order,
+        )
+        db.add(scene_npc)
+        await db.commit()
+
+        return {
+            "success": True,
+            "scene_npc_id": scene_npc.id,
+            "name": quick_name,
+            "npc_type": "quick",
+            "is_visible": scene_npc.is_visible_to_players,
+        }
+
+    raise HTTPException(status_code=400, detail="npc_id or quick_name required")
 
 
-# =============================================================================
-# GM Authentication Helper
-# =============================================================================
-
-
-def _require_gm_auth(session, campaign_id: int):
-    """Verify GM authentication for a campaign. Returns GM player or raises 401."""
-    session_token = request.cookies.get("sta_session_token")
-    if not session_token:
-        return None, jsonify({"error": "GM authentication required"}), 401
-
-    gm_player = (
-        session.query(CampaignPlayerRecord)
-        .filter_by(campaign_id=campaign_id, is_gm=True)
-        .first()
+@scenes_router.delete("/{scene_id}/npcs/{scene_npc_id}")
+async def remove_npc_from_scene(
+    scene_id: int, scene_npc_id: int, db: AsyncSession = Depends(get_db)
+):
+    """Remove an NPC from a scene."""
+    stmt = select(SceneNPCRecord).filter(
+        SceneNPCRecord.id == scene_npc_id,
+        SceneNPCRecord.scene_id == scene_id,
     )
+    result = await db.execute(stmt)
+    scene_npc = result.scalars().first()
 
-    if not gm_player or session_token != gm_player.session_token:
-        return None, jsonify({"error": "GM authentication required"}), 401
+    if not scene_npc:
+        raise HTTPException(status_code=404, detail="NPC not found in scene")
 
-    return gm_player, None, None
+    await db.delete(scene_npc)
+    await db.commit()
+
+    return {"success": True}
 
 
-def _build_closing_options(session, scene):
-    """Build closing options payload for a scene."""
+# =============================================================================
+# Scene Connections API
+# =============================================================================
+
+
+@scenes_router.get("/{scene_id}/connections")
+async def get_scene_connections(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Get scene connections (next and previous scene IDs)."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
     next_ids = json.loads(scene.next_scene_ids_json or "[]")
-    draft_next = (
-        session.query(SceneRecord)
-        .filter(SceneRecord.id.in_(next_ids), SceneRecord.status == "draft")
-        .all()
+    previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+    return {"next_scene_ids": next_ids, "previous_scene_ids": previous_ids}
+
+
+@scenes_router.put("/{scene_id}/connections")
+async def update_scene_connections(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+    next_scene_ids: Optional[list] = Body(None, embed=True),
+    previous_scene_ids: Optional[list] = Body(None, embed=True),
+):
+    """Update scene connections (replace with given lists)."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    current_next_ids = json.loads(scene.next_scene_ids_json or "[]")
+    current_previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+
+    if next_scene_ids is not None:
+        try:
+            next_ids_input = [int(i) for i in next_scene_ids]
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=400, detail="next_scene_ids must be integers"
+            )
+
+        valid_next_ids = []
+        for nid in next_ids_input:
+            target_stmt = select(SceneRecord).filter(
+                SceneRecord.id == nid,
+                SceneRecord.campaign_id == scene.campaign_id,
+            )
+            target_result = await db.execute(target_stmt)
+            target = target_result.scalars().first()
+            if target:
+                valid_next_ids.append(nid)
+        next_ids = valid_next_ids
+    else:
+        next_ids = current_next_ids
+
+    if previous_scene_ids is not None:
+        try:
+            prev_ids_input = [int(i) for i in previous_scene_ids]
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=400, detail="previous_scene_ids must be integers"
+            )
+
+        valid_prev_ids = []
+        for pid in prev_ids_input:
+            target_stmt = select(SceneRecord).filter(
+                SceneRecord.id == pid,
+                SceneRecord.campaign_id == scene.campaign_id,
+            )
+            target_result = await db.execute(target_stmt)
+            target = target_result.scalars().first()
+            if target:
+                valid_prev_ids.append(pid)
+        previous_ids = valid_prev_ids
+    else:
+        previous_ids = current_previous_ids
+
+    scene.next_scene_ids_json = json.dumps(next_ids)
+    scene.previous_scene_ids_json = json.dumps(previous_ids)
+    await db.commit()
+
+    return {
+        "success": True,
+        "next_scene_ids": next_ids,
+        "previous_scene_ids": previous_ids,
+    }
+
+
+@scenes_router.post("/{scene_id}/connections/next")
+async def add_next_connection(
+    scene_id: int,
+    target_scene_id: int = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Add a next scene connection (bidirectional)."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    if target_scene_id == scene_id:
+        raise HTTPException(status_code=400, detail="Cannot connect scene to itself")
+
+    next_ids = json.loads(scene.next_scene_ids_json or "[]")
+    if target_scene_id in next_ids:
+        raise HTTPException(status_code=400, detail="Scenes already connected")
+
+    target_stmt = select(SceneRecord).filter(SceneRecord.id == target_scene_id)
+    target_result = await db.execute(target_stmt)
+    target = target_result.scalars().first()
+
+    if not target:
+        raise HTTPException(status_code=400, detail="Target scene not found")
+
+    if target.campaign_id != scene.campaign_id:
+        raise HTTPException(
+            status_code=400, detail="Target scene must be in same campaign"
+        )
+
+    next_ids.append(target_scene_id)
+    scene.next_scene_ids_json = json.dumps(next_ids)
+
+    previous_ids = json.loads(target.previous_scene_ids_json or "[]")
+    if scene_id not in previous_ids:
+        previous_ids.append(scene_id)
+        target.previous_scene_ids_json = json.dumps(previous_ids)
+
+    await db.commit()
+
+    updated_next = json.loads(scene.next_scene_ids_json or "[]")
+    updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
+    return {
+        "success": True,
+        "next_scene_ids": updated_next,
+        "previous_scene_ids": updated_previous,
+    }
+
+
+@scenes_router.post("/{scene_id}/connections/previous")
+async def add_previous_connection(
+    scene_id: int,
+    target_scene_id: int = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Add a previous scene connection."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    if target_scene_id == scene_id:
+        raise HTTPException(status_code=400, detail="Cannot connect scene to itself")
+
+    previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+    if target_scene_id in previous_ids:
+        raise HTTPException(status_code=400, detail="Connection already exists")
+
+    target_stmt = select(SceneRecord).filter(SceneRecord.id == target_scene_id)
+    target_result = await db.execute(target_stmt)
+    target = target_result.scalars().first()
+
+    if not target:
+        raise HTTPException(status_code=400, detail="Target scene not found")
+
+    if target.campaign_id != scene.campaign_id:
+        raise HTTPException(
+            status_code=400, detail="Target scene must be in same campaign"
+        )
+
+    previous_ids.append(target_scene_id)
+    scene.previous_scene_ids_json = json.dumps(previous_ids)
+
+    target_next_ids = json.loads(target.next_scene_ids_json or "[]")
+    if scene_id not in target_next_ids:
+        target_next_ids.append(scene_id)
+        target.next_scene_ids_json = json.dumps(target_next_ids)
+
+    await db.commit()
+
+    updated_next = json.loads(scene.next_scene_ids_json or "[]")
+    updated_previous = previous_ids
+    return {
+        "success": True,
+        "next_scene_ids": updated_next,
+        "previous_scene_ids": updated_previous,
+    }
+
+
+@scenes_router.delete("/{scene_id}/connections/next/{target_id}")
+async def remove_next_connection(
+    scene_id: int,
+    target_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Remove a next scene connection (bidirectional)."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    next_ids = json.loads(scene.next_scene_ids_json or "[]")
+    if target_id not in next_ids:
+        updated_next = next_ids
+        updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
+        return {
+            "success": True,
+            "next_scene_ids": updated_next,
+            "previous_scene_ids": updated_previous,
+        }
+
+    new_next = [i for i in next_ids if i != target_id]
+    scene.next_scene_ids_json = json.dumps(new_next)
+
+    target_stmt = select(SceneRecord).filter(SceneRecord.id == target_id)
+    target_result = await db.execute(target_stmt)
+    target = target_result.scalars().first()
+
+    if target:
+        previous_ids = json.loads(target.previous_scene_ids_json or "[]")
+        new_previous = [i for i in previous_ids if i != scene_id]
+        target.previous_scene_ids_json = json.dumps(new_previous)
+
+    await db.commit()
+
+    updated_next = new_next
+    updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
+    return {
+        "success": True,
+        "next_scene_ids": updated_next,
+        "previous_scene_ids": updated_previous,
+    }
+
+
+@scenes_router.delete("/{scene_id}/connections/previous/{target_id}")
+async def remove_previous_connection(
+    scene_id: int,
+    target_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Remove a previous scene connection."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
+    if target_id not in previous_ids:
+        updated_next = json.loads(scene.next_scene_ids_json or "[]")
+        updated_previous = previous_ids
+        return {
+            "success": True,
+            "next_scene_ids": updated_next,
+            "previous_scene_ids": updated_previous,
+        }
+
+    new_previous = [i for i in previous_ids if i != target_id]
+    scene.previous_scene_ids_json = json.dumps(new_previous)
+
+    target_stmt = select(SceneRecord).filter(SceneRecord.id == target_id)
+    target_result = await db.execute(target_stmt)
+    target = target_result.scalars().first()
+
+    if target:
+        target_next_ids = json.loads(target.next_scene_ids_json or "[]")
+        new_target_next = [i for i in target_next_ids if i != scene_id]
+        target.next_scene_ids_json = json.dumps(new_target_next)
+
+    await db.commit()
+
+    updated_next = json.loads(scene.next_scene_ids_json or "[]")
+    updated_previous = new_previous
+    return {
+        "success": True,
+        "next_scene_ids": updated_next,
+        "previous_scene_ids": updated_previous,
+    }
+
+
+# =============================================================================
+# Scene Participants API
+# =============================================================================
+
+
+@scenes_router.get("/{scene_id}/participants")
+async def get_scene_participants(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Get all participants (characters) for a scene."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    participants_stmt = select(SceneParticipantRecord).filter(
+        SceneParticipantRecord.scene_id == scene_id
     )
+    participants_result = await db.execute(participants_stmt)
+    participants = participants_result.scalars().all()
+
+    result = []
+    for p in participants:
+        char_stmt = select(VTTCharacterRecord).filter(
+            VTTCharacterRecord.id == p.character_id
+        )
+        char_result = await db.execute(char_stmt)
+        char = char_result.scalars().first()
+        if not char:
+            continue
+
+        player_name = None
+        if p.player_id:
+            player_stmt = select(CampaignPlayerRecord).filter(
+                CampaignPlayerRecord.id == p.player_id
+            )
+            player_result = await db.execute(player_stmt)
+            player = player_result.scalars().first()
+            if player:
+                player_name = player.player_name
+
+        result.append(
+            {
+                "id": p.id,
+                "character_id": char.id,
+                "name": char.name,
+                "type": "pc" if p.player_id else "npc",
+                "is_visible_to_players": p.is_visible_to_players,
+                "player_id": p.player_id,
+                "player_name": player_name,
+            }
+        )
+
+    return result
+
+
+@scenes_router.post("/{scene_id}/participants")
+async def add_scene_participant(
+    scene_id: int,
+    character_id: int = Body(..., embed=True),
+    is_visible_to_players: bool = Body(False, embed=True),
+    player_id: Optional[int] = Body(None, embed=True),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Add a participant (character) to a scene."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    char_stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == character_id)
+    char_result = await db.execute(char_stmt)
+    char = char_result.scalars().first()
+
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    if char.campaign_id != scene.campaign_id:
+        raise HTTPException(
+            status_code=400, detail="Character does not belong to this campaign"
+        )
+
+    if player_id is not None:
+        player_stmt = select(CampaignPlayerRecord).filter(
+            CampaignPlayerRecord.id == player_id,
+            CampaignPlayerRecord.campaign_id == scene.campaign_id,
+        )
+        player_result = await db.execute(player_stmt)
+        player = player_result.scalars().first()
+
+        if not player:
+            raise HTTPException(status_code=400, detail="Player not found in campaign")
+
+        existing_player_stmt = select(SceneParticipantRecord).filter(
+            SceneParticipantRecord.scene_id == scene_id,
+            SceneParticipantRecord.player_id == player_id,
+        )
+        existing_player_result = await db.execute(existing_player_stmt)
+        existing_player = existing_player_result.scalars().first()
+
+        if existing_player:
+            raise HTTPException(
+                status_code=400,
+                detail="Player already assigned to a character in this scene",
+            )
+
+        if player.vtt_character_id and player.vtt_character_id != character_id:
+            raise HTTPException(
+                status_code=400, detail="Player is not assigned to this character"
+            )
+
+    existing_char_stmt = select(SceneParticipantRecord).filter(
+        SceneParticipantRecord.scene_id == scene_id,
+        SceneParticipantRecord.character_id == character_id,
+    )
+    existing_char_result = await db.execute(existing_char_stmt)
+    existing_char = existing_char_result.scalars().first()
+
+    if existing_char:
+        raise HTTPException(status_code=400, detail="Character already in scene")
+
+    participant = SceneParticipantRecord(
+        scene_id=scene_id,
+        character_id=character_id,
+        player_id=player_id,
+        is_visible_to_players=is_visible_to_players,
+    )
+    db.add(participant)
+    await db.commit()
+    await db.refresh(participant)
+
+    return {"success": True, "participant_id": participant.id}
+
+
+@scenes_router.put("/{scene_id}/participants/{participant_id}")
+async def update_scene_participant(
+    scene_id: int,
+    participant_id: int,
+    is_visible_to_players: Optional[bool] = Body(None, embed=True),
+    player_id: Optional[int] = Body(None, embed=True),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Update a scene participant."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    participant_stmt = select(SceneParticipantRecord).filter(
+        SceneParticipantRecord.id == participant_id,
+        SceneParticipantRecord.scene_id == scene_id,
+    )
+    participant_result = await db.execute(participant_stmt)
+    participant = participant_result.scalars().first()
+
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    if is_visible_to_players is not None:
+        participant.is_visible_to_players = is_visible_to_players
+
+    if player_id is not None:
+        if player_id is not None:
+            player_stmt = select(CampaignPlayerRecord).filter(
+                CampaignPlayerRecord.id == player_id,
+                CampaignPlayerRecord.campaign_id == scene.campaign_id,
+            )
+            player_result = await db.execute(player_stmt)
+            player = player_result.scalars().first()
+
+            if not player:
+                raise HTTPException(
+                    status_code=400, detail="Player not found in campaign"
+                )
+
+            existing_stmt = (
+                select(SceneParticipantRecord)
+                .filter(
+                    SceneParticipantRecord.scene_id == scene_id,
+                    SceneParticipantRecord.player_id == player_id,
+                )
+                .filter(SceneParticipantRecord.id != participant_id)
+            )
+            existing_result = await db.execute(existing_stmt)
+            existing = existing_result.scalars().first()
+
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Player already assigned to another character in this scene",
+                )
+
+            if (
+                player.vtt_character_id
+                and player.vtt_character_id != participant.character_id
+            ):
+                raise HTTPException(
+                    status_code=400, detail="Player is not assigned to this character"
+                )
+
+        participant.player_id = player_id
+
+    await db.commit()
+
+    return {"success": True}
+
+
+@scenes_router.delete("/{scene_id}/participants/{participant_id}")
+async def remove_scene_participant(
+    scene_id: int,
+    participant_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Remove a participant from a scene."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    participant_stmt = select(SceneParticipantRecord).filter(
+        SceneParticipantRecord.id == participant_id,
+        SceneParticipantRecord.scene_id == scene_id,
+    )
+    participant_result = await db.execute(participant_stmt)
+    participant = participant_result.scalars().first()
+
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    await db.delete(participant)
+    await db.commit()
+
+    return {"success": True}
+
+
+# =============================================================================
+# Scene Ships API
+# =============================================================================
+
+
+@scenes_router.get("/{scene_id}/ships")
+async def get_scene_ships(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Get all ships for a scene."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    scene_ships_stmt = select(SceneShipRecord).filter(
+        SceneShipRecord.scene_id == scene_id
+    )
+    scene_ships_result = await db.execute(scene_ships_stmt)
+    scene_ships = scene_ships_result.scalars().all()
+
+    result = []
+    for ss in scene_ships:
+        ship_stmt = select(VTTShipRecord).filter(VTTShipRecord.id == ss.ship_id)
+        ship_result = await db.execute(ship_stmt)
+        ship = ship_result.scalars().first()
+        if ship:
+            result.append(
+                {
+                    "ship_id": ship.id,
+                    "name": ship.name,
+                    "is_visible_to_players": ss.is_visible_to_players,
+                }
+            )
+
+    return result
+
+
+@scenes_router.post("/{scene_id}/ships")
+async def add_scene_ship(
+    scene_id: int,
+    ship_id: int = Body(..., embed=True),
+    is_visible_to_players: bool = Body(False, embed=True),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Add a ship to a scene."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    ship_stmt = select(VTTShipRecord).filter(VTTShipRecord.id == ship_id)
+    ship_result = await db.execute(ship_stmt)
+    ship = ship_result.scalars().first()
+
+    if not ship:
+        raise HTTPException(status_code=404, detail="Ship not found")
+
+    campaign_ship_stmt = select(CampaignShipRecord).filter(
+        CampaignShipRecord.campaign_id == scene.campaign_id,
+        CampaignShipRecord.ship_id == ship_id,
+    )
+    campaign_ship_result = await db.execute(campaign_ship_stmt)
+    campaign_ship = campaign_ship_result.scalars().first()
+
+    if not campaign_ship:
+        raise HTTPException(status_code=400, detail="Ship not in campaign")
+
+    existing_stmt = select(SceneShipRecord).filter(
+        SceneShipRecord.scene_id == scene_id,
+        SceneShipRecord.ship_id == ship_id,
+    )
+    existing_result = await db.execute(existing_stmt)
+    existing = existing_result.scalars().first()
+
+    if existing:
+        raise HTTPException(status_code=400, detail="Ship already in scene")
+
+    scene_ship = SceneShipRecord(
+        scene_id=scene_id,
+        ship_id=ship_id,
+        is_visible_to_players=is_visible_to_players,
+    )
+    db.add(scene_ship)
+    await db.commit()
+
+    return {"success": True}
+
+
+@scenes_router.put("/{scene_id}/ships/{ship_id}")
+async def update_scene_ship(
+    scene_id: int,
+    ship_id: int,
+    is_visible_to_players: Optional[bool] = Body(None, embed=True),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Update a ship in a scene."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    scene_ship_stmt = select(SceneShipRecord).filter(
+        SceneShipRecord.scene_id == scene_id,
+        SceneShipRecord.ship_id == ship_id,
+    )
+    scene_ship_result = await db.execute(scene_ship_stmt)
+    scene_ship = scene_ship_result.scalars().first()
+
+    if not scene_ship:
+        raise HTTPException(status_code=404, detail="Ship not found in scene")
+
+    if is_visible_to_players is not None:
+        scene_ship.is_visible_to_players = is_visible_to_players
+
+    await db.commit()
+
+    return {"success": True}
+
+
+@scenes_router.delete("/{scene_id}/ships/{ship_id}")
+async def remove_scene_ship(
+    scene_id: int,
+    ship_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Remove a ship from a scene."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    scene_ship_stmt = select(SceneShipRecord).filter(
+        SceneShipRecord.scene_id == scene_id,
+        SceneShipRecord.ship_id == ship_id,
+    )
+    scene_ship_result = await db.execute(scene_ship_stmt)
+    scene_ship = scene_ship_result.scalars().first()
+
+    if not scene_ship:
+        raise HTTPException(status_code=404, detail="Ship not found in scene")
+
+    await db.delete(scene_ship)
+    await db.commit()
+
+    return {"success": True}
+
+
+# =============================================================================
+# Scene Activation & Config
+# =============================================================================
+
+
+@scenes_router.get("/{scene_id}/closing-options")
+async def get_closing_options(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Get closing options for a scene (candidate next scenes, etc.)."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    next_ids = json.loads(scene.next_scene_ids_json or "[]")
+    draft_next_stmt = select(SceneRecord).filter(
+        SceneRecord.id.in_(next_ids),
+        SceneRecord.status == "draft",
+    )
+    draft_next_result = await db.execute(draft_next_stmt)
+    draft_next = draft_next_result.scalars().all()
+
     return {
         "next_scene_candidates": [
             {"id": s.id, "name": s.name, "status": s.status} for s in draft_next
@@ -702,991 +1055,272 @@ def _build_closing_options(session, scene):
     }
 
 
-# =============================================================================
-# Scene Connections API
-# =============================================================================
+@scenes_router.post("/{scene_id}/activate")
+async def activate_scene(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Activate a scene, creating appropriate encounter records."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
 
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
 
-@scenes_bp.route("/<int:scene_id>/connections", methods=["GET"])
-def get_scene_connections(scene_id: int):
-    """Get scene connections (next and previous scene IDs)."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
 
-        # Verify GM auth
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        next_ids = json.loads(scene.next_scene_ids_json or "[]")
-        previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
-        return jsonify({"next_scene_ids": next_ids, "previous_scene_ids": previous_ids})
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/connections", methods=["PUT"])
-def update_scene_connections(scene_id: int):
-    """Update scene connections (replace with given lists)."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        data = request.get_json() or {}
-
-        # Get current values
-        current_next_ids = json.loads(scene.next_scene_ids_json or "[]")
-        current_previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
-
-        # Determine new next_ids
-        if "next_scene_ids" in data:
-            try:
-                next_ids_input = [int(i) for i in data["next_scene_ids"]]
-            except (ValueError, TypeError):
-                return jsonify({"error": "next_scene_ids must be integers"}), 400
-            # Filter to only those that exist in the same campaign
-            valid_next_ids = []
-            for nid in next_ids_input:
-                target = (
-                    session.query(SceneRecord)
-                    .filter_by(id=nid, campaign_id=scene.campaign_id)
-                    .first()
-                )
-                if target:
-                    valid_next_ids.append(nid)
-            next_ids = valid_next_ids
-        else:
-            next_ids = current_next_ids
-
-        # Determine new previous_ids
-        if "previous_scene_ids" in data:
-            try:
-                prev_ids_input = [int(i) for i in data["previous_scene_ids"]]
-            except (ValueError, TypeError):
-                return jsonify({"error": "previous_scene_ids must be integers"}), 400
-            valid_prev_ids = []
-            for pid in prev_ids_input:
-                target = (
-                    session.query(SceneRecord)
-                    .filter_by(id=pid, campaign_id=scene.campaign_id)
-                    .first()
-                )
-                if target:
-                    valid_prev_ids.append(pid)
-            previous_ids = valid_prev_ids
-        else:
-            previous_ids = current_previous_ids
-
-        scene.next_scene_ids_json = json.dumps(next_ids)
-        scene.previous_scene_ids_json = json.dumps(previous_ids)
-        session.commit()
-
-        return jsonify(
-            {
-                "success": True,
-                "next_scene_ids": next_ids,
-                "previous_scene_ids": previous_ids,
-            }
+    if scene.status != "draft":
+        raise HTTPException(
+            status_code=400, detail="Scene must be in draft status to activate"
         )
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
 
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.id == scene.campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
 
-@scenes_bp.route("/<int:scene_id>/connections/next", methods=["POST"])
-def add_next_connection(scene_id: int):
-    """Add a next scene connection (bidirectional)."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
 
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
+    campaign.momentum = max(0, campaign.momentum - 1)
 
-        data = request.get_json() or {}
-        target_scene_id = data.get("target_scene_id")
-        if target_scene_id is None:
-            return jsonify({"error": "target_scene_id required"}), 400
+    response_data = {"success": True, "scene_id": scene.id, "status": scene.status}
 
-        if target_scene_id == scene_id:
-            return jsonify({"error": "Cannot connect scene to itself"}), 400
-
-        # Check if already connected BEFORE checking target existence
-        next_ids = json.loads(scene.next_scene_ids_json or "[]")
-        if target_scene_id in next_ids:
-            return jsonify({"error": "Scenes already connected"}), 400
-
-        target = session.query(SceneRecord).filter_by(id=target_scene_id).first()
-        if not target:
-            return jsonify({"error": "Target scene not found"}), 400
-
-        if target.campaign_id != scene.campaign_id:
-            return jsonify({"error": "Target scene must be in same campaign"}), 400
-
-        # Add to scene's next
-        next_ids.append(target_scene_id)
-        scene.next_scene_ids_json = json.dumps(next_ids)
-
-        # Add to target's previous
-        previous_ids = json.loads(target.previous_scene_ids_json or "[]")
-        if scene_id not in previous_ids:
-            previous_ids.append(scene_id)
-            target.previous_scene_ids_json = json.dumps(previous_ids)
-
-        session.commit()
-
-        # Return updated connections for the scene
-        updated_next = json.loads(scene.next_scene_ids_json or "[]")
-        updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
-        return jsonify(
-            {
-                "success": True,
-                "next_scene_ids": updated_next,
-                "previous_scene_ids": updated_previous,
-            }
-        )
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/connections/previous", methods=["POST"])
-def add_previous_connection(scene_id: int):
-    """Add a previous scene connection (scene_id will be the target's next)."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        data = request.get_json() or {}
-        target_scene_id = data.get("target_scene_id")
-        if target_scene_id is None:
-            return jsonify({"error": "target_scene_id required"}), 400
-
-        if target_scene_id == scene_id:
-            return jsonify({"error": "Cannot connect scene to itself"}), 400
-
-        # Check if already connected (scene's previous includes target) BEFORE existence check
-        previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
-        if target_scene_id in previous_ids:
-            return jsonify({"error": "Connection already exists"}), 400
-
-        target = session.query(SceneRecord).filter_by(id=target_scene_id).first()
-        if not target:
-            return jsonify({"error": "Target scene not found"}), 400
-
-        if target.campaign_id != scene.campaign_id:
-            return jsonify({"error": "Target scene must be in same campaign"}), 400
-
-        # Add to scene's previous
-        previous_ids.append(target_scene_id)
-        scene.previous_scene_ids_json = json.dumps(previous_ids)
-
-        # Add to target's next
-        target_next_ids = json.loads(target.next_scene_ids_json or "[]")
-        if scene_id not in target_next_ids:
-            target_next_ids.append(scene_id)
-            target.next_scene_ids_json = json.dumps(target_next_ids)
-
-        session.commit()
-
-        # Return updated connections for the scene
-        updated_next = json.loads(scene.next_scene_ids_json or "[]")
-        updated_previous = previous_ids
-        return jsonify(
-            {
-                "success": True,
-                "next_scene_ids": updated_next,
-                "previous_scene_ids": updated_previous,
-            }
-        )
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/connections/next/<int:target_id>", methods=["DELETE"])
-def remove_next_connection(scene_id: int, target_id: int):
-    """Remove a next scene connection (bidirectional)."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        # Remove target from scene.next_scene_ids regardless of target existence
-        next_ids = json.loads(scene.next_scene_ids_json or "[]")
-        if target_id not in next_ids:
-            # Nothing to remove, but still return success (idempotent)
-            updated_next = next_ids
-            updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
-            return jsonify(
-                {
-                    "success": True,
-                    "next_scene_ids": updated_next,
-                    "previous_scene_ids": updated_previous,
-                }
+    if scene.scene_type == "starship_encounter":
+        if not campaign.active_ship_id:
+            raise HTTPException(
+                status_code=400, detail="Campaign has no active ship assigned"
             )
-        new_next = [i for i in next_ids if i != target_id]
-        scene.next_scene_ids_json = json.dumps(new_next)
 
-        # Remove scene from target.previous_scene_ids if target exists
-        target = session.query(SceneRecord).filter_by(id=target_id).first()
-        if target:
-            previous_ids = json.loads(target.previous_scene_ids_json or "[]")
-            new_previous = [i for i in previous_ids if i != scene_id]
-            target.previous_scene_ids_json = json.dumps(new_previous)
-
-        session.commit()
-
-        # Return updated connections for the scene
-        updated_next = new_next
-        updated_previous = json.loads(scene.previous_scene_ids_json or "[]")
-        return jsonify(
-            {
-                "success": True,
-                "next_scene_ids": updated_next,
-                "previous_scene_ids": updated_previous,
-            }
+        scene_ships_stmt = select(SceneShipRecord).filter(
+            SceneShipRecord.scene_id == scene.id
         )
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
+        scene_ships_result = await db.execute(scene_ships_stmt)
+        scene_ships = scene_ships_result.scalars().all()
 
-
-@scenes_bp.route(
-    "/<int:scene_id>/connections/previous/<int:target_id>", methods=["DELETE"]
-)
-def remove_previous_connection(scene_id: int, target_id: int):
-    """Remove a previous scene connection (bidirectional)."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        # Remove target from scene.previous_scene_ids regardless of target existence
-        previous_ids = json.loads(scene.previous_scene_ids_json or "[]")
-        if target_id not in previous_ids:
-            # Nothing to remove, but still return success (idempotent)
-            updated_next = json.loads(scene.next_scene_ids_json or "[]")
-            updated_previous = previous_ids
-            return jsonify(
-                {
-                    "success": True,
-                    "next_scene_ids": updated_next,
-                    "previous_scene_ids": updated_previous,
-                }
+        if not scene_ships:
+            raise HTTPException(
+                status_code=400,
+                detail="Starship encounter must have at least one ship in scene",
             )
-        new_previous = [i for i in previous_ids if i != target_id]
-        scene.previous_scene_ids_json = json.dumps(new_previous)
 
-        # Remove scene from target.next_scene_ids if target exists
-        target = session.query(SceneRecord).filter_by(id=target_id).first()
-        if target:
-            target_next_ids = json.loads(target.next_scene_ids_json or "[]")
-            new_target_next = [i for i in target_next_ids if i != scene_id]
-            target.next_scene_ids_json = json.dumps(new_target_next)
+        ship_ids = [ss.ship_id for ss in scene_ships]
+        if campaign.active_ship_id not in ship_ids:
+            raise HTTPException(
+                status_code=400, detail="Player ship must be included in scene ships"
+            )
 
-        session.commit()
+        npc_ship_ids = [sid for sid in ship_ids if sid != campaign.active_ship_id]
 
-        # Return updated connections for the scene
-        updated_next = json.loads(scene.next_scene_ids_json or "[]")
-        updated_previous = new_previous
-        return jsonify(
-            {
-                "success": True,
-                "next_scene_ids": updated_next,
-                "previous_scene_ids": updated_previous,
-            }
+        encounter = EncounterRecord(
+            encounter_id=str(uuid.uuid4()),
+            name=scene.name,
+            campaign_id=campaign.id,
+            player_ship_id=campaign.active_ship_id,
+            player_position=scene.scene_position or "captain",
+            enemy_ship_ids_json=json.dumps(npc_ship_ids),
+            tactical_map_json=scene.tactical_map_json or "{}",
+            is_active=True,
         )
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
+        db.add(encounter)
+        await db.flush()
+        scene.encounter_id = encounter.id
+        response_data["encounter_id"] = encounter.id
 
-
-# =============================================================================
-# Scene Participants API
-# =============================================================================
-
-
-@scenes_bp.route("/<int:scene_id>/participants", methods=["GET"])
-def get_scene_participants(scene_id: int):
-    """Get all participants (characters) for a scene."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        # Verify GM auth
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        participants = (
-            session.query(SceneParticipantRecord).filter_by(scene_id=scene_id).all()
+    elif scene.scene_type == "personal_encounter":
+        participants_stmt = select(SceneParticipantRecord).filter(
+            SceneParticipantRecord.scene_id == scene.id
         )
+        participants_result = await db.execute(participants_stmt)
+        participants = participants_result.scalars().all()
 
-        result = []
+        if not participants:
+            raise HTTPException(
+                status_code=400,
+                detail="Personal encounter must have at least one participant",
+            )
+
+        character_states = []
         for p in participants:
-            char = (
-                session.query(VTTCharacterRecord).filter_by(id=p.character_id).first()
+            char_stmt = select(VTTCharacterRecord).filter(
+                VTTCharacterRecord.id == p.character_id
             )
+            char_result = await db.execute(char_stmt)
+            char = char_result.scalars().first()
             if not char:
                 continue
 
-            player_name = None
-            if p.player_id:
-                player = (
-                    session.query(CampaignPlayerRecord)
-                    .filter_by(id=p.player_id)
-                    .first()
-                )
-                if player:
-                    player_name = player.player_name
-
-            result.append(
-                {
-                    "id": p.id,
-                    "character_id": char.id,
-                    "name": char.name,
-                    "type": "pc" if p.player_id else "npc",
-                    "is_visible_to_players": p.is_visible_to_players,
-                    "player_id": p.player_id,
-                    "player_name": player_name,
-                }
-            )
-
-        return jsonify(result)
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/participants", methods=["POST"])
-def add_scene_participant(scene_id: int):
-    """Add a participant (character) to a scene."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        # Verify GM auth
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        data = request.get_json() or {}
-        character_id = data.get("character_id")
-        is_visible = data.get("is_visible_to_players", False)
-        player_id = data.get("player_id")  # may be None
-
-        if not character_id:
-            return jsonify({"error": "character_id required"}), 400
-
-        # Fetch character
-        char = session.query(VTTCharacterRecord).filter_by(id=character_id).first()
-        if not char:
-            return jsonify({"error": "Character not found"}), 404
-
-        # Verify character belongs to this campaign
-        if char.campaign_id != scene.campaign_id:
-            return jsonify({"error": "Character does not belong to this campaign"}), 400
-
-        # If a player is assigned, validate the player
-        if player_id is not None:
-            player = (
-                session.query(CampaignPlayerRecord)
-                .filter_by(id=player_id, campaign_id=scene.campaign_id)
-                .first()
-            )
-            if not player:
-                return jsonify({"error": "Player not found in campaign"}), 400
-
-            # Check that this player is not already assigned to another character in this scene
-            existing_player = (
-                session.query(SceneParticipantRecord)
-                .filter_by(scene_id=scene_id, player_id=player_id)
-                .first()
-            )
-            if existing_player:
-                return jsonify(
-                    {"error": "Player already assigned to a character in this scene"}
-                ), 400
-
-            # If player has a linked VTT character, ensure it matches this character
-            if player.vtt_character_id and player.vtt_character_id != character_id:
-                return jsonify(
-                    {"error": "Player is not assigned to this character"}
-                ), 400
-
-        # Check that this character is not already in this scene
-        existing_char = (
-            session.query(SceneParticipantRecord)
-            .filter_by(scene_id=scene_id, character_id=character_id)
-            .first()
-        )
-        if existing_char:
-            return jsonify({"error": "Character already in scene"}), 400
-
-        # Create participant
-        participant = SceneParticipantRecord(
-            scene_id=scene_id,
-            character_id=character_id,
-            player_id=player_id,
-            is_visible_to_players=is_visible,
-        )
-        session.add(participant)
-        session.commit()
-
-        return jsonify({"success": True, "participant_id": participant.id})
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/participants/<int:participant_id>", methods=["PUT"])
-def update_scene_participant(scene_id: int, participant_id: int):
-    """Update a scene participant."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        # Verify GM auth
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        participant = (
-            session.query(SceneParticipantRecord)
-            .filter_by(id=participant_id, scene_id=scene_id)
-            .first()
-        )
-        if not participant:
-            return jsonify({"error": "Participant not found"}), 404
-
-        data = request.get_json() or {}
-        if "is_visible_to_players" in data:
-            participant.is_visible_to_players = data["is_visible_to_players"]
-
-        if "player_id" in data:
-            new_player_id = data["player_id"]  # can be None to unassign
-            # If setting a player, verify uniqueness (different from current)
-            if new_player_id is not None:
-                # Verify player belongs to campaign
-                player = (
-                    session.query(CampaignPlayerRecord)
-                    .filter_by(id=new_player_id, campaign_id=scene.campaign_id)
-                    .first()
-                )
-                if not player:
-                    return jsonify({"error": "Player not found in campaign"}), 400
-
-                # Check if this player already assigned to another character in this scene
-                existing = (
-                    session.query(SceneParticipantRecord)
-                    .filter_by(scene_id=scene_id, player_id=new_player_id)
-                    .filter(SceneParticipantRecord.id != participant_id)
-                    .first()
-                )
-                if existing:
-                    return jsonify(
-                        {
-                            "error": "Player already assigned to another character in this scene"
-                        }
-                    ), 400
-
-                # Also verify that the player's vtt_character_id matches the character_id (if they have one)
-                if (
-                    player.vtt_character_id
-                    and player.vtt_character_id != participant.character_id
-                ):
-                    return jsonify(
-                        {"error": "Player is not assigned to this character"}
-                    ), 400
-            # Update player_id
-            participant.player_id = new_player_id
-
-        session.commit()
-
-        return jsonify({"success": True})
-    finally:
-        session.close()
-
-
-@scenes_bp.route(
-    "/<int:scene_id>/participants/<int:participant_id>", methods=["DELETE"]
-)
-def remove_scene_participant(scene_id: int, participant_id: int):
-    """Remove a participant from a scene."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        # Verify GM auth
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        participant = (
-            session.query(SceneParticipantRecord)
-            .filter_by(id=participant_id, scene_id=scene_id)
-            .first()
-        )
-        if not participant:
-            return jsonify({"error": "Participant not found"}), 404
-
-        session.delete(participant)
-        session.commit()
-
-        return jsonify({"success": True})
-    finally:
-        session.close()
-
-
-# =============================================================================
-# Scene Ships API
-# =============================================================================
-
-
-@scenes_bp.route("/<int:scene_id>/ships", methods=["GET"])
-def get_scene_ships(scene_id: int):
-    """Get all ships for a scene."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        # Verify GM auth
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        scene_ships = session.query(SceneShipRecord).filter_by(scene_id=scene_id).all()
-
-        result = []
-        for ss in scene_ships:
-            ship = session.query(VTTShipRecord).filter_by(id=ss.ship_id).first()
-            if ship:
-                result.append(
-                    {
-                        "ship_id": ship.id,
-                        "name": ship.name,
-                        "is_visible_to_players": ss.is_visible_to_players,
-                    }
-                )
-
-        return jsonify(result)
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/ships", methods=["POST"])
-def add_scene_ship(scene_id: int):
-    """Add a ship to a scene."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        # Verify GM auth
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        data = request.get_json() or {}
-        ship_id = data.get("ship_id")
-        is_visible = data.get("is_visible_to_players", False)
-
-        if not ship_id:
-            return jsonify({"error": "ship_id required"}), 400
-
-        # Verify ship exists
-        ship = session.query(VTTShipRecord).filter_by(id=ship_id).first()
-        if not ship:
-            return jsonify({"error": "Ship not found"}), 404
-
-        # Verify ship belongs to campaign via campaign_ships
-        campaign_ship = (
-            session.query(CampaignShipRecord)
-            .filter_by(campaign_id=scene.campaign_id, ship_id=ship_id)
-            .first()
-        )
-        if not campaign_ship:
-            return jsonify({"error": "Ship not in campaign"}), 400
-
-        # Check if already in scene
-        existing = (
-            session.query(SceneShipRecord)
-            .filter_by(scene_id=scene_id, ship_id=ship_id)
-            .first()
-        )
-        if existing:
-            return jsonify({"error": "Ship already in scene"}), 400
-
-        scene_ship = SceneShipRecord(
-            scene_id=scene_id,
-            ship_id=ship_id,
-            is_visible_to_players=is_visible,
-        )
-        session.add(scene_ship)
-        session.commit()
-
-        return jsonify({"success": True})
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/ships/<int:ship_id>", methods=["PUT"])
-def update_scene_ship(scene_id: int, ship_id: int):
-    """Update a ship in a scene."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        # Verify GM auth
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        scene_ship = (
-            session.query(SceneShipRecord)
-            .filter_by(scene_id=scene_id, ship_id=ship_id)
-            .first()
-        )
-        if not scene_ship:
-            return jsonify({"error": "Ship not found in scene"}), 404
-
-        data = request.get_json() or {}
-        if "is_visible_to_players" in data:
-            scene_ship.is_visible_to_players = data["is_visible_to_players"]
-
-        session.commit()
-
-        return jsonify({"success": True})
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/ships/<int:ship_id>", methods=["DELETE"])
-def remove_scene_ship(scene_id: int, ship_id: int):
-    """Remove a ship from a scene."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-
-        # Verify GM auth
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-
-        scene_ship = (
-            session.query(SceneShipRecord)
-            .filter_by(scene_id=scene_id, ship_id=ship_id)
-            .first()
-        )
-        if not scene_ship:
-            return jsonify({"error": "Ship not found in scene"}), 404
-
-        session.delete(scene_ship)
-        session.commit()
-
-        return jsonify({"success": True})
-    finally:
-        session.close()
-
-
-# =============================================================================
-# Scene Activation & Termination & Config (Milestone 3.4)
-# =============================================================================
-
-
-@scenes_bp.route("/<int:scene_id>/closing-options", methods=["GET"])
-def get_closing_options(scene_id: int):
-    """Get closing options for a scene (candidate next scenes, etc.)."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-        return jsonify(_build_closing_options(session, scene))
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/activate", methods=["POST"])
-def activate_scene(scene_id: int):
-    """Activate a scene, creating appropriate encounter records."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-        if scene.status != "draft":
-            return jsonify({"error": "Scene must be in draft status to activate"}), 400
-        campaign = session.query(CampaignRecord).filter_by(id=scene.campaign_id).first()
-        if not campaign:
-            return jsonify({"error": "Campaign not found"}), 404
-
-        # Reduce campaign momentum by 1 (minimum 0)
-        campaign.momentum = max(0, campaign.momentum - 1)
-
-        if scene.scene_type == "starship_encounter":
-            if not campaign.active_ship_id:
-                return jsonify({"error": "Campaign has no active ship assigned"}), 400
-            scene_ships = (
-                session.query(SceneShipRecord).filter_by(scene_id=scene.id).all()
-            )
-            if not scene_ships:
-                return jsonify(
-                    {"error": "Starship encounter must have at least one ship in scene"}
-                ), 400
-            ship_ids = [ss.ship_id for ss in scene_ships]
-            if campaign.active_ship_id not in ship_ids:
-                return jsonify(
-                    {"error": "Player ship must be included in scene ships"}
-                ), 400
-            npc_ship_ids = [sid for sid in ship_ids if sid != campaign.active_ship_id]
-            encounter = EncounterRecord(
-                encounter_id=str(uuid.uuid4()),
-                name=scene.name,
-                campaign_id=campaign.id,
-                player_ship_id=campaign.active_ship_id,
-                player_position=scene.scene_position or "captain",
-                enemy_ship_ids_json=json.dumps(npc_ship_ids),
-                tactical_map_json=scene.tactical_map_json or "{}",
-                is_active=True,
-            )
-            session.add(encounter)
-            session.flush()
-            scene.encounter_id = encounter.id
-
-        elif scene.scene_type == "personal_encounter":
-            participants = (
-                session.query(SceneParticipantRecord).filter_by(scene_id=scene.id).all()
-            )
-            if not participants:
-                return jsonify(
-                    {"error": "Personal encounter must have at least one participant"}
-                ), 400
-            character_states = []
-            for p in participants:
-                char = (
-                    session.query(VTTCharacterRecord)
-                    .filter_by(id=p.character_id)
-                    .first()
-                )
-                if not char:
-                    continue
-                is_player = p.player_id is not None
-                char_state = {
-                    "character_id": char.id,
-                    "name": char.name,
-                    "is_player": is_player,
-                    "stress": char.stress,
-                    "determination": char.determination,
-                    "stress_max": char.stress_max,
-                    "determination_max": char.determination_max,
-                    "is_defeated": char.stress >= char.stress_max,
-                    "injuries": [],
-                    "protection": 0,
-                }
-                character_states.append(char_state)
-            encounter = PersonnelEncounterRecord(
-                scene_id=scene.id,
-                momentum=campaign.momentum,
-                threat=campaign.threat,
-                character_states_json=json.dumps(character_states),
-                tactical_map_json=scene.tactical_map_json or "{}",
-                is_active=True,
-            )
-            session.add(encounter)
-            session.flush()
-        else:
-            # Narrative or other types: activation is just status change
-            pass
-
-        scene.status = "active"
-        session.commit()
-
-        response_data = {"success": True, "scene_id": scene.id, "status": scene.status}
-        if scene.scene_type == "starship_encounter":
-            response_data["encounter_id"] = encounter.id
-        elif scene.scene_type == "personal_encounter":
-            response_data["personnel_encounter_id"] = encounter.id
-        return jsonify(response_data)
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
-
-
-@scenes_bp.route("/<int:scene_id>/end", methods=["POST"])
-def end_scene(scene_id: int):
-    """End an active scene, reducing momentum and deactivating encounter."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-        if scene.status != "active":
-            return jsonify({"error": "Scene must be active to end"}), 400
-        campaign = session.query(CampaignRecord).filter_by(id=scene.campaign_id).first()
-        if not campaign:
-            return jsonify({"error": "Campaign not found"}), 404
-
-        # Cap momentum at 6 before reducing by 1 (minimum 0)
-        campaign.momentum = max(0, min(campaign.momentum, 6) - 1)
-        scene.status = "completed"
-
-        # Deactivate linked encounter
-        if scene.encounter_id:
-            encounter = (
-                session.query(EncounterRecord).filter_by(id=scene.encounter_id).first()
-            )
-            if encounter:
-                encounter.is_active = False
-        else:
-            personnel_encounter = (
-                session.query(PersonnelEncounterRecord)
-                .filter_by(scene_id=scene.id)
-                .first()
-            )
-            if personnel_encounter:
-                personnel_encounter.is_active = False
-
-        session.commit()
-
-        closing_opts = _build_closing_options(session, scene)
-        return jsonify(
-            {
-                "success": True,
-                "momentum_remaining": campaign.momentum,
-                "closing_options": closing_opts,
+            is_player = p.player_id is not None
+            char_state = {
+                "character_id": char.id,
+                "name": char.name,
+                "is_player": is_player,
+                "stress": char.stress,
+                "determination": char.determination,
+                "stress_max": char.stress_max,
+                "determination_max": char.determination_max,
+                "is_defeated": char.stress >= char.stress_max,
+                "injuries": [],
+                "protection": 0,
             }
+            character_states.append(char_state)
+
+        encounter = PersonnelEncounterRecord(
+            scene_id=scene.id,
+            momentum=campaign.momentum,
+            threat=campaign.threat,
+            character_states_json=json.dumps(character_states),
+            tactical_map_json=scene.tactical_map_json or "{}",
+            is_active=True,
         )
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
+        db.add(encounter)
+        await db.flush()
+        response_data["personnel_encounter_id"] = encounter.id
+
+    scene.status = "active"
+    await db.commit()
+
+    return response_data
 
 
-@scenes_bp.route("/<int:scene_id>/config", methods=["GET"])
-def get_scene_config(scene_id: int):
+@scenes_router.post("/{scene_id}/end")
+async def end_scene(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """End an active scene, reducing momentum and deactivating encounter."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    if scene.status != "active":
+        raise HTTPException(status_code=400, detail="Scene must be active to end")
+
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.id == scene.campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    campaign.momentum = max(0, min(campaign.momentum, 6) - 1)
+    scene.status = "completed"
+
+    if scene.encounter_id:
+        encounter_stmt = select(EncounterRecord).filter(
+            EncounterRecord.id == scene.encounter_id
+        )
+        encounter_result = await db.execute(encounter_stmt)
+        encounter = encounter_result.scalars().first()
+        if encounter:
+            encounter.is_active = False
+    else:
+        personnel_enc_stmt = select(PersonnelEncounterRecord).filter(
+            PersonnelEncounterRecord.scene_id == scene.id
+        )
+        personnel_enc_result = await db.execute(personnel_enc_stmt)
+        personnel_encounter = personnel_enc_result.scalars().first()
+        if personnel_encounter:
+            personnel_encounter.is_active = False
+
+    await db.commit()
+
+    next_ids = json.loads(scene.next_scene_ids_json or "[]")
+    draft_next_stmt = select(SceneRecord).filter(
+        SceneRecord.id.in_(next_ids),
+        SceneRecord.status == "draft",
+    )
+    draft_next_result = await db.execute(draft_next_stmt)
+    draft_next = draft_next_result.scalars().all()
+
+    closing_opts = {
+        "next_scene_candidates": [
+            {"id": s.id, "name": s.name, "status": s.status} for s in draft_next
+        ],
+        "allow_create_new": True,
+        "allow_return_overview": True,
+    }
+
+    return {
+        "success": True,
+        "momentum_remaining": campaign.momentum,
+        "closing_options": closing_opts,
+    }
+
+
+@scenes_router.get("/{scene_id}/config")
+async def get_scene_config(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
     """Get scene encounter configuration."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-        if scene.encounter_config_json:
-            try:
-                config = json.loads(scene.encounter_config_json)
-                return jsonify(config)
-            except json.JSONDecodeError:
-                return jsonify({}), 200
-        return jsonify({}), 200
-    finally:
-        session.close()
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    if scene.encounter_config_json:
+        try:
+            config = json.loads(scene.encounter_config_json)
+            return config
+        except json.JSONDecodeError:
+            return {}
+    return {}
 
 
-@scenes_bp.route("/<int:scene_id>/config", methods=["PUT"])
-def update_scene_config(scene_id: int):
+@scenes_router.put("/{scene_id}/config")
+async def update_scene_config(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+    npc_turn_mode: Optional[str] = Body(None, embed=True),
+    gm_spends_threat_to_start: Optional[bool] = Body(None, embed=True),
+):
     """Update scene encounter configuration."""
-    session = get_session()
-    try:
-        scene = session.query(SceneRecord).filter_by(id=scene_id).first()
-        if not scene:
-            return jsonify({"error": "Scene not found"}), 404
-        gm_player, response, status = _require_gm_auth(session, scene.campaign_id)
-        if response:
-            return response, status
-        data = request.get_json()
-        if data is None:
-            return jsonify({"error": "JSON body required"}), 400
-        allowed_keys = {"npc_turn_mode", "gm_spends_threat_to_start"}
-        unknown_keys = set(data.keys()) - allowed_keys
-        if unknown_keys:
-            return jsonify(
-                {"error": f"Invalid config keys: {', '.join(unknown_keys)}"}
-            ), 400
-        if "npc_turn_mode" in data and data["npc_turn_mode"] not in (
-            "all_npcs",
-            "num_pcs",
-        ):
-            return jsonify(
-                {"error": "Invalid npc_turn_mode; must be 'all_npcs' or 'num_pcs'"}
-            ), 400
-        if "gm_spends_threat_to_start" in data and not isinstance(
-            data["gm_spends_threat_to_start"], bool
-        ):
-            return jsonify(
-                {"error": "gm_spends_threat_to_start must be a boolean"}
-            ), 400
-        scene.encounter_config_json = json.dumps(data)
-        session.commit()
-        return jsonify({"success": True})
-    except Exception as e:
-        session.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        session.close()
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    allowed_keys = {"npc_turn_mode", "gm_spends_threat_to_start"}
+    data = {}
+
+    if npc_turn_mode is not None:
+        if npc_turn_mode not in ("all_npcs", "num_pcs"):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid npc_turn_mode; must be 'all_npcs' or 'num_pcs'",
+            )
+        data["npc_turn_mode"] = npc_turn_mode
+
+    if gm_spends_threat_to_start is not None:
+        if not isinstance(gm_spends_threat_to_start, bool):
+            raise HTTPException(
+                status_code=400, detail="gm_spends_threat_to_start must be a boolean"
+            )
+        data["gm_spends_threat_to_start"] = gm_spends_threat_to_start
+
+    scene.encounter_config_json = json.dumps(data)
+    await db.commit()
+
+    return {"success": True}

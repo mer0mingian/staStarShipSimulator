@@ -143,30 +143,30 @@ class Ship(BaseModel):
 
 
 from sta.mechanics.combat import CombatState, HexGrid
- 
- 
- class Scene(BaseModel):
-     id: str
-     campaign_id: str
-     name: str
-     description: str = ""
-     status: SceneStatus = SceneStatus.CONNECTED
- 
-     # Resource Pools
-     momentum: int = Field(default=0, ge=0, le=6)
-     threat: int = 0
- 
-     # Participants
-     player_chars: List[str] = []  # List of PC IDs
-     non_player_chars: List[str] = []  # List of NPC IDs
-     ships: List[Ship] = []  # Embedded ship objects for scene context
- 
-     # Situation Traits
-     situation_traits: List[Trait] = []
- 
-     # Combat State
-     combat_state: Optional[CombatState] = None
-     tactical_map: Optional[HexGrid] = None
- 
-     # Logs
-     logs: List[str] = []
+
+
+class Scene(BaseModel):
+    id: str
+    campaign_id: str
+    name: str
+    description: str = ""
+    status: SceneStatus = SceneStatus.CONNECTED
+
+    # Resource Pools
+    momentum: int = Field(default=0, ge=0, le=6)
+    threat: int = 0
+
+    # Participants
+    player_chars: List[str] = []  # List of PC IDs
+    non_player_chars: List[str] = []  # List of NPC IDs
+    ships: List[Ship] = []  # Embedded ship objects for scene context
+
+    # Situation Traits
+    situation_traits: List[Trait] = []
+
+    # Combat State
+    combat_state: Optional[CombatState] = None
+    tactical_map: Optional[HexGrid] = None
+
+    # Logs
+    logs: List[str] = []

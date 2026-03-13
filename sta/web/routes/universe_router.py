@@ -3,21 +3,24 @@
 import json
 import uuid
 import asyncio
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, Body, Query, status, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete as sqlalchemy_delete
 from sta.database.async_db import get_db
 from sta.database.schema import (
-    UniverseItemRecord,
-    VTTCharacterRecord,
-    VTTShipRecord,
     CampaignRecord,
     CampaignPlayerRecord,
+    CampaignShipRecord,
     CharacterRecord,
     SceneRecord,
     NPCRecord,
+)
+from sta.database.vtt_schema import (
+    UniverseItemRecord,
+    VTTCharacterRecord,
+    VTTShipRecord,
 )
 from sta.models.character import Character  # Used by serialization check
 from sta.models.starship import Starship  # Used by generation stub
@@ -26,6 +29,29 @@ universe_router = APIRouter(prefix="/universe")
 
 VALID_CATEGORIES = ["pcs", "npcs", "creatures", "ships"]
 VALID_ITEM_TYPES = ["character", "ship"]
+
+
+async def _require_gm_auth(
+    campaign_id: int,
+    sta_session_token: Optional[str] = Cookie(None),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Verify GM authentication for a campaign."""
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.campaign_id == campaign_id,
+        CampaignPlayerRecord.is_gm == True,
+    )
+    result = await db.execute(stmt)
+    gm_player = result.scalars().first()
+
+    if not gm_player or sta_session_token != gm_player.session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    if not gm_player or sta_session_token != gm_player.session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
 
 
 # --- STUBS ---
@@ -290,7 +316,7 @@ async def update_universe_item(
     }
 
 
-@universe_router.delete("/item/<int:item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@universe_router.delete("/item/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_universe_item(item_id: int, db: AsyncSession = Depends(get_db)):
     """API: Delete a universe item (Requires reference checks/GM Auth stubbed)."""
 
@@ -311,7 +337,7 @@ async def delete_universe_item(item_id: int, db: AsyncSession = Depends(get_db))
 
 
 @universe_router.post(
-    "/import/character/<int:universe_item_id>", status_code=status.HTTP_201_CREATED
+    "/import/character/{universe_item_id}", status_code=status.HTTP_201_CREATED
 )
 async def import_character_to_campaign(
     universe_item_id: int, data: dict = Body(...), db: AsyncSession = Depends(get_db)
@@ -334,7 +360,7 @@ async def import_character_to_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    await _require_gm_auth(db, campaign.id)  # GM Auth stub
+    await _require_gm_auth(campaign.id, db=db)  # GM Auth stub
 
     universe_item = (
         (
@@ -403,7 +429,7 @@ async def import_character_to_campaign(
 
 
 @universe_router.post(
-    "/import/ship/<int:universe_item_id>", status_code=status.HTTP_201_CREATED
+    "/import/ship/{universe_item_id}", status_code=status.HTTP_201_CREATED
 )
 async def import_ship_to_campaign(
     universe_item_id: int, data: dict = Body(...), db: AsyncSession = Depends(get_db)
@@ -426,7 +452,7 @@ async def import_ship_to_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    await _require_gm_auth(db, campaign.id)
+    await _require_gm_auth(campaign.id, db=db)
 
     universe_item = (
         (
@@ -547,7 +573,7 @@ async def list_available_characters(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    await _require_gm_auth(db, campaign.id)
+    await _require_gm_auth(campaign.id, db=db)
 
     library_items = (
         (
@@ -598,7 +624,7 @@ async def list_available_ships(campaign_id: int, db: AsyncSession = Depends(get_
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    await _require_gm_auth(db, campaign.id)
+    await _require_gm_auth(campaign.id, db=db)
 
     library_items = (
         (

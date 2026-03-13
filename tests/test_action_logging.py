@@ -13,7 +13,9 @@ class TestCombatLogCreation:
     """Tests for combat log entry creation."""
 
     @pytest.mark.asyncio
-    async def test_action_creates_log_entry(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_action_creates_log_entry(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test that executing an action creates a combat log entry."""
         encounter = sample_encounter["encounter"]
 
@@ -30,13 +32,14 @@ class TestCombatLogCreation:
         # Find our action in the log
         log_entries = data["log"]
         calibrate_entry = next(
-            (e for e in log_entries if e["action_name"] == "Calibrate Weapons"),
-            None
+            (e for e in log_entries if e["action_name"] == "Calibrate Weapons"), None
         )
         assert calibrate_entry is not None
 
     @pytest.mark.asyncio
-    async def test_log_contains_actor_info(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_log_contains_actor_info(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test that log entries contain actor information."""
         encounter = sample_encounter["encounter"]
 
@@ -46,8 +49,7 @@ class TestCombatLogCreation:
         data = log_response.json()
 
         entry = next(
-            (e for e in data["log"] if e["action_name"] == "Attack Pattern"),
-            None
+            (e for e in data["log"] if e["action_name"] == "Attack Pattern"), None
         )
         assert entry is not None
         assert "actor_name" in entry
@@ -55,7 +57,9 @@ class TestCombatLogCreation:
         assert entry["actor_type"] == "player"
 
     @pytest.mark.asyncio
-    async def test_log_contains_action_type(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_log_contains_action_type(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test that log entries correctly identify minor vs major actions."""
         encounter = sample_encounter["encounter"]
 
@@ -66,8 +70,7 @@ class TestCombatLogCreation:
         data = log_response.json()
 
         entry = next(
-            (e for e in data["log"] if e["action_name"] == "Calibrate Weapons"),
-            None
+            (e for e in data["log"] if e["action_name"] == "Calibrate Weapons"), None
         )
         assert entry is not None
         assert entry["action_type"] == "minor"
@@ -77,7 +80,9 @@ class TestCombatLogTaskResults:
     """Tests for task roll results in combat log."""
 
     @pytest.mark.asyncio
-    async def test_log_contains_task_result(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_log_contains_task_result(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test that task roll results are logged."""
         encounter = sample_encounter["encounter"]
 
@@ -95,10 +100,7 @@ class TestCombatLogTaskResults:
         log_response = get_combat_log(encounter.encounter_id)
         data = log_response.json()
 
-        entry = next(
-            (e for e in data["log"] if e["action_name"] == "Rally"),
-            None
-        )
+        entry = next((e for e in data["log"] if e["action_name"] == "Rally"), None)
         assert entry is not None
         # Task result may be stored in task_result field
         # (depends on implementation)
@@ -108,7 +110,9 @@ class TestCombatLogRetrieval:
     """Tests for combat log retrieval."""
 
     @pytest.mark.asyncio
-    async def test_get_log_empty(self, client, sample_encounter, get_combat_log, test_session):
+    async def test_get_log_empty(
+        self, client, sample_encounter, get_combat_log, test_session
+    ):
         """Test getting an empty combat log."""
         encounter = sample_encounter["encounter"]
 
@@ -120,7 +124,9 @@ class TestCombatLogRetrieval:
         assert "count" in data
 
     @pytest.mark.asyncio
-    async def test_get_log_with_limit(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_get_log_with_limit(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test getting combat log with a limit."""
         encounter = sample_encounter["encounter"]
 
@@ -137,7 +143,9 @@ class TestCombatLogRetrieval:
         assert data["count"] <= 2
 
     @pytest.mark.asyncio
-    async def test_get_log_since_id(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_get_log_since_id(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test getting combat log entries after a specific ID."""
         encounter = sample_encounter["encounter"]
 
@@ -146,14 +154,14 @@ class TestCombatLogRetrieval:
 
         # Get log to find the ID
         log1 = get_combat_log(encounter.encounter_id)
-        first_id = log1.get_json().get("latest_id")
+        first_id = log1.json()["log"][0]["id"] if log1.json()["log"] else None
 
         # Execute second action
         execute_action(encounter.encounter_id, "Calibrate Sensors")
 
         # Get entries since first ID
         log2 = get_combat_log(encounter.encounter_id, since_id=first_id)
-        data = log2.get_json()
+        data = log2.json()
 
         # Should only have entries after the first one
         for entry in data["log"]:
@@ -161,7 +169,9 @@ class TestCombatLogRetrieval:
                 assert entry["id"] > first_id
 
     @pytest.mark.asyncio
-    async def test_get_log_by_round(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_get_log_by_round(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test filtering combat log by round."""
         encounter = sample_encounter["encounter"]
 
@@ -181,7 +191,9 @@ class TestCombatLogRoundTracking:
     """Tests for round number tracking in combat log."""
 
     @pytest.mark.asyncio
-    async def test_log_tracks_round_number(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_log_tracks_round_number(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test that log entries include the correct round number."""
         encounter = sample_encounter["encounter"]
         assert encounter.round == 1
@@ -201,7 +213,9 @@ class TestCombatLogTimestamp:
     """Tests for timestamp in combat log."""
 
     @pytest.mark.asyncio
-    async def test_log_has_timestamp(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_log_has_timestamp(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test that log entries have a timestamp."""
         encounter = sample_encounter["encounter"]
 
@@ -221,7 +235,9 @@ class TestCombatLogShipInfo:
     """Tests for ship information in combat log."""
 
     @pytest.mark.asyncio
-    async def test_log_contains_ship_name(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_log_contains_ship_name(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test that log entries contain the acting ship's name."""
         encounter = sample_encounter["encounter"]
 
@@ -241,7 +257,9 @@ class TestCombatLogDescription:
     """Tests for action descriptions in combat log."""
 
     @pytest.mark.asyncio
-    async def test_log_has_description(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_log_has_description(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test that log entries have a human-readable description."""
         encounter = sample_encounter["encounter"]
 
@@ -260,7 +278,9 @@ class TestMultipleActionsLogging:
     """Tests for logging multiple actions in sequence."""
 
     @pytest.mark.asyncio
-    async def test_multiple_actions_logged_in_order(self, client, sample_encounter, execute_action, get_combat_log, test_session):
+    async def test_multiple_actions_logged_in_order(
+        self, client, sample_encounter, execute_action, get_combat_log, test_session
+    ):
         """Test that multiple actions are logged in execution order."""
         encounter = sample_encounter["encounter"]
 
@@ -285,4 +305,6 @@ class TestMultipleActionsLogging:
 
         # Indices should be ascending (in order)
         for i in range(len(action_indices) - 1):
-            assert action_indices[i] < action_indices[i + 1], "Actions not in execution order"
+            assert action_indices[i] < action_indices[i + 1], (
+                "Actions not in execution order"
+            )
