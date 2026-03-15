@@ -74,7 +74,7 @@ class TestSceneTerminationAPI:
         campaign.momentum = 3
         await test_session.commit()
 
-        scene, encounter = self._create_active_starship_scene(
+        scene, encounter = await self._create_active_starship_scene(
             test_session, sample_campaign
         )
         scene_id = scene.id
@@ -122,7 +122,9 @@ class TestSceneTerminationAPI:
         campaign.momentum = 2
         await test_session.commit()
 
-        scene, pe = self._create_active_personal_scene(test_session, sample_campaign)
+        scene, pe = await self._create_active_personal_scene(
+            test_session, sample_campaign
+        )
         scene_id = scene.id
         pe_id = pe.id
 
@@ -162,7 +164,7 @@ class TestSceneTerminationAPI:
         campaign.momentum = 8
         await test_session.commit()
 
-        scene, encounter = self._create_active_starship_scene(
+        scene, encounter = await self._create_active_starship_scene(
             test_session, sample_campaign
         )
         scene_id = scene.id

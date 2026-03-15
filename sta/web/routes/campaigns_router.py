@@ -1012,6 +1012,64 @@ async def create_scene_for_campaign(
     }
 
 
+@campaigns_router.get("/api/campaign/{campaign_id}/scenes/transition-options")
+async def get_scene_transition_options(
+    campaign_id: str,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Get scene transition options for a campaign."""
+    from sta.database.schema import SceneRecord
+
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.campaign_id == campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    gm_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.campaign_id == campaign.id,
+        CampaignPlayerRecord.is_gm == True,
+    )
+    gm_result = await db.execute(gm_stmt)
+    gm_player = gm_result.scalars().first()
+
+    if not gm_player or sta_session_token != gm_player.session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    connected_stmt = select(SceneRecord).filter(
+        SceneRecord.campaign_id == campaign.id,
+        SceneRecord.status == "draft",
+    )
+    connected_result = await db.execute(connected_stmt)
+    connected_scenes = [
+        {"id": s.id, "name": s.name, "status": s.status}
+        for s in connected_result.scalars().all()
+    ]
+
+    ready_stmt = select(SceneRecord).filter(
+        SceneRecord.campaign_id == campaign.id,
+        SceneRecord.status == "ready",
+    )
+    ready_result = await db.execute(ready_stmt)
+    ready_scenes = [
+        {"id": s.id, "name": s.name, "gm_short_description": s.gm_short_description}
+        for s in ready_result.scalars().all()
+    ]
+
+    return {
+        "connected_scenes": connected_scenes,
+        "ready_scenes": ready_scenes,
+        "can_create_new": True,
+    }
+
+
 @campaigns_router.delete("/api/scene/{scene_id}")
 async def delete_scene(
     scene_id: int,

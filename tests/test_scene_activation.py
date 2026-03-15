@@ -447,7 +447,7 @@ class TestSceneActivationAPI:
         response = client.post(f"/scenes/{scene_id}/activate")
         assert response.status_code == 400
         data = response.json()
-        assert "must be in draft status" in data["detail"]
+        assert "must be in 'ready' or 'draft' status to activate" in data["detail"]
 
     @pytest.mark.asyncio
     async def test_activate_requires_gm_auth(

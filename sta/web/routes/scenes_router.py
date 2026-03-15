@@ -1055,6 +1055,47 @@ async def get_closing_options(
     }
 
 
+@scenes_router.post("/{scene_id}/transition-to-ready")
+async def transition_scene_to_ready(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Transition scene from draft to ready status."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    if scene.status not in ("draft",):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Scene must be in 'draft' status to transition to ready, currently '{scene.status}'",
+        )
+
+    errors = []
+    if not scene.name or scene.name == "New Scene":
+        errors.append("Scene must have a name (title)")
+    if not scene.gm_short_description:
+        errors.append("Scene must have a GM short description")
+
+    player_chars = json.loads(scene.player_character_list or "[]")
+    if not player_chars:
+        errors.append("Scene must have at least one player character")
+
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+
+    scene.status = "ready"
+    await db.commit()
+
+    return {"success": True, "scene_id": scene.id, "status": scene.status}
+
+
 @scenes_router.post("/{scene_id}/activate")
 async def activate_scene(
     scene_id: int,
@@ -1071,9 +1112,10 @@ async def activate_scene(
 
     await _require_gm_auth(scene.campaign_id, sta_session_token, db)
 
-    if scene.status != "draft":
+    if scene.status not in ("ready", "draft"):
         raise HTTPException(
-            status_code=400, detail="Scene must be in draft status to activate"
+            status_code=400,
+            detail=f"Scene must be in 'ready' or 'draft' status to activate, currently '{scene.status}'",
         )
 
     campaign_stmt = select(CampaignRecord).filter(
@@ -1257,6 +1299,82 @@ async def end_scene(
         "success": True,
         "momentum_remaining": campaign.momentum,
         "closing_options": closing_opts,
+    }
+
+
+@scenes_router.post("/{scene_id}/reactivate")
+async def reactivate_scene(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Reactivate a completed scene (completed → ready → active)."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    if scene.status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only completed scenes can be reactivated, currently '{scene.status}'",
+        )
+
+    scene.status = "ready"
+    await db.commit()
+
+    scene.status = "active"
+    await db.commit()
+
+    return {"success": True, "scene_id": scene.id, "status": scene.status}
+
+
+@scenes_router.post("/{scene_id}/copy")
+async def copy_scene_as_new(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Create a copy of a completed scene as a new ready scene."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    if scene.status != "completed":
+        raise HTTPException(
+            status_code=400, detail="Only completed scenes can be copied"
+        )
+
+    new_scene = SceneRecord(
+        campaign_id=scene.campaign_id,
+        name=scene.name + " (Copy)",
+        description=scene.description,
+        scene_type=scene.scene_type,
+        status="ready",
+        gm_short_description=scene.gm_short_description,
+        player_character_list=scene.player_character_list,
+        scene_traits_json=scene.scene_traits_json,
+        challenges_json=scene.challenges_json,
+        tactical_map_json=scene.tactical_map_json,
+    )
+    db.add(new_scene)
+    await db.commit()
+    await db.refresh(new_scene)
+
+    return {
+        "success": True,
+        "scene_id": new_scene.id,
+        "name": new_scene.name,
+        "status": new_scene.status,
     }
 
 

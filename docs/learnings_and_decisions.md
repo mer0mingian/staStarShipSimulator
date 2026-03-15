@@ -1,5 +1,39 @@
 # Learnings and Decisions
 
+## Milestone 5: 4-State Scene Lifecycle Implementation (March 2026)
+
+### Changes Made
+
+1. **SceneStatus enum** (`sta/models/vtt/types.py`):
+   - Added READY state to the enum
+
+2. **SceneRecord** (`sta/database/schema.py`):
+   - Added `gm_short_description` field (Text, nullable)
+   - Added `player_character_list` field (JSON text)
+   - Added `impersonated_by_id` to SceneParticipantRecord
+
+3. **Scene validation module** (`sta/models/vtt/scene_validation.py`):
+   - Created new module with validation functions
+   - `validate_scene_for_ready()` - Validates required fields for ready status
+   - `validate_scene_for_active()` - Validates scene can be activated
+   - `validate_state_transition()` - Validates state transitions are allowed
+
+4. **New endpoints** (`sta/web/routes/scenes_router.py`):
+   - POST /scenes/{id}/transition-to-ready - Draft → Ready
+   - POST /scenes/{id}/reactivate - Completed → Ready → Active
+   - POST /scenes/{id}/copy - Completed → New Ready scene
+
+5. **New endpoint** (`sta/web/routes/campaigns_router.py`):
+   - GET /api/campaign/{id}/scenes/transition-options - Returns connected and ready scenes
+
+6. **Backward Compatibility**:
+   - Activate endpoint accepts both "ready" AND "draft" status
+   - This maintains backward compatibility with existing tests
+
+### Test Impact
+- Test count unchanged: ~38 failed, ~343 passed
+- One test failure due to error message change (expected behavior)
+
 ## Test Fixes (March 2026)
 
 ### Fixed: Action Requirement Tests (8 tests)
