@@ -2,6 +2,7 @@
 
 import json
 import pytest
+from sqlalchemy import select
 from sta.database import (
     get_session,
     SceneRecord,
@@ -15,7 +16,7 @@ class TestSceneParticipantsAPI:
     """Tests for participant endpoints."""
 
     @pytest.fixture
-    def setup_scene_with_data(self, test_session, sample_campaign):
+    async def setup_scene_with_data(self, test_session, sample_campaign):
         """Create a scene with some data for testing."""
         campaign_id = sample_campaign["campaign"].id
 
@@ -27,7 +28,7 @@ class TestSceneParticipantsAPI:
             status="active",
         )
         test_session.add(scene)
-        test_session.flush()
+        await test_session.flush()
 
         # Create a VTT character for PC
         pc_char = VTTCharacterRecord(
@@ -62,7 +63,7 @@ class TestSceneParticipantsAPI:
             determination_max=1,
         )
         test_session.add(pc_char)
-        test_session.flush()
+        await test_session.flush()
 
         # Create a VTT character for NPC
         npc_char = VTTCharacterRecord(
@@ -99,11 +100,13 @@ class TestSceneParticipantsAPI:
         test_session.add(npc_char)
 
         # Ensure there is a player (non-GM) to assign
-        player = (
-            test_session.query(CampaignPlayerRecord)
-            .filter_by(campaign_id=campaign_id, is_gm=False)
-            .first()
+        result = await test_session.execute(
+            select(CampaignPlayerRecord).filter(
+                CampaignPlayerRecord.campaign_id == campaign_id,
+                CampaignPlayerRecord.is_gm == False,
+            )
         )
+        player = result.scalars().first()
         if not player:
             player = CampaignPlayerRecord(
                 campaign_id=campaign_id,
@@ -113,12 +116,12 @@ class TestSceneParticipantsAPI:
                 position="captain",
             )
             test_session.add(player)
-            test_session.flush()
+            await test_session.flush()
 
         # Link the VTT PC to the player
         player.vtt_character_id = pc_char.id
 
-        test_session.commit()
+        await test_session.commit()
 
         return {
             "campaign": sample_campaign["campaign"],
@@ -129,25 +132,27 @@ class TestSceneParticipantsAPI:
             "npc_char": npc_char,
         }
 
-    def test_get_participants_empty(self, client, setup_scene_with_data):
+    @pytest.mark.asyncio
+    async def test_get_participants_empty(self, client, setup_scene_with_data):
         """GET participants returns empty list when no participants."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.get(f"/scenes/{scene_id}/participants")
         assert response.status_code == 200
-        result = response.get_json()
+        result = response.json()
         assert isinstance(result, list)
         assert len(result) == 0
 
-    def test_add_participant_pc(self, client, setup_scene_with_data):
+    @pytest.mark.asyncio
+    async def test_add_participant_pc(self, client, setup_scene_with_data):
         """POST participants can add a PC with player assignment."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         payload = {
             "character_id": data["pc_char"].id,
@@ -156,13 +161,13 @@ class TestSceneParticipantsAPI:
         }
         response = client.post(f"/scenes/{scene_id}/participants", json=payload)
         assert response.status_code == 200
-        resp_data = response.get_json()
+        resp_data = response.json()
         assert resp_data["success"] is True
 
         # Verify it appears in GET
         response = client.get(f"/scenes/{scene_id}/participants")
         assert response.status_code == 200
-        participants = response.get_json()
+        participants = response.json()
         assert len(participants) == 1
         p = participants[0]
         assert p["character_id"] == data["pc_char"].id
@@ -172,12 +177,13 @@ class TestSceneParticipantsAPI:
         assert p["player_id"] == data["player"].id
         assert p["player_name"] == data["player"].player_name
 
-    def test_add_participant_npc(self, client, setup_scene_with_data):
+    @pytest.mark.asyncio
+    async def test_add_participant_npc(self, client, setup_scene_with_data):
         """POST participants can add an NPC without player."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         payload = {
             "character_id": data["npc_char"].id,
@@ -185,12 +191,12 @@ class TestSceneParticipantsAPI:
         }
         response = client.post(f"/scenes/{scene_id}/participants", json=payload)
         assert response.status_code == 200
-        resp_data = response.get_json()
+        resp_data = response.json()
         assert resp_data["success"] is True
 
         # Verify GET
         response = client.get(f"/scenes/{scene_id}/participants")
-        participants = response.get_json()
+        participants = response.json()
         assert len(participants) == 1
         p = participants[0]
         assert p["character_id"] == data["npc_char"].id
@@ -200,38 +206,45 @@ class TestSceneParticipantsAPI:
         assert p["player_id"] is None
         assert p["player_name"] is None
 
-    def test_add_participant_requires_character_id(self, client, setup_scene_with_data):
+    @pytest.mark.asyncio
+    async def test_add_participant_requires_character_id(
+        self, client, setup_scene_with_data
+    ):
         """POST participants requires character_id."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.post(f"/scenes/{scene_id}/participants", json={})
         assert response.status_code == 400
-        assert "character_id required" in response.get_json()["error"]
+        assert "character_id required" in response.json()["detail"]
 
-    def test_add_participant_character_not_found(self, client, setup_scene_with_data):
+    @pytest.mark.asyncio
+    async def test_add_participant_character_not_found(
+        self, client, setup_scene_with_data
+    ):
         """POST participants fails if character does not exist."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.post(
             f"/scenes/{scene_id}/participants", json={"character_id": 999}
         )
         assert response.status_code == 404
-        assert "Character not found" in response.get_json()["error"]
+        assert "Character not found" in response.json()["detail"]
 
-    def test_add_participant_character_not_in_campaign(
+    @pytest.mark.asyncio
+    async def test_add_participant_character_not_in_campaign(
         self, client, setup_scene_with_data, test_session
     ):
         """POST participants fails if character does not belong to campaign."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         # Create a character from another campaign (different campaign_id)
         other_char = VTTCharacterRecord(
@@ -266,7 +279,7 @@ class TestSceneParticipantsAPI:
             determination_max=1,
         )
         test_session.add(other_char)
-        test_session.commit()
+        await test_session.commit()
         char_id = other_char.id
 
         response = client.post(
@@ -274,16 +287,17 @@ class TestSceneParticipantsAPI:
             json={"character_id": char_id, "player_id": data["player"].id},
         )
         assert response.status_code == 400
-        assert "does not belong to this campaign" in response.get_json()["error"]
+        assert "does not belong to this campaign" in response.json()["detail"]
 
-    def test_add_participant_player_not_in_campaign(
+    @pytest.mark.asyncio
+    async def test_add_participant_player_not_in_campaign(
         self, client, setup_scene_with_data
     ):
         """POST participants fails if player_id not in campaign."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         # Use a player_id that doesn't belong to the campaign
         response = client.post(
@@ -294,16 +308,17 @@ class TestSceneParticipantsAPI:
             },
         )
         assert response.status_code == 400
-        assert "Player not found in campaign" in response.get_json()["error"]
+        assert "Player not found in campaign" in response.json()["detail"]
 
-    def test_add_participant_player_character_mismatch(
+    @pytest.mark.asyncio
+    async def test_add_participant_player_character_mismatch(
         self, client, setup_scene_with_data
     ):
         """POST participants fails if player's vtt_character_id doesn't match."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         # Create another PC char for the player? Actually the player's vtt_character_id is set to pc_char.
         # We'll try to assign them a different character ID than their linked character.
@@ -316,18 +331,17 @@ class TestSceneParticipantsAPI:
             },
         )
         assert response.status_code == 400
-        assert (
-            "Player is not assigned to this character" in response.get_json()["error"]
-        )
+        assert "Player is not assigned to this character" in response.json()["detail"]
 
-    def test_add_participant_player_already_assigned(
+    @pytest.mark.asyncio
+    async def test_add_participant_player_already_assigned(
         self, client, setup_scene_with_data, test_session
     ):
         """POST participants fails if player already assigned to another character in scene."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         # First assignment: player -> pc_char
         payload1 = {
@@ -341,7 +355,7 @@ class TestSceneParticipantsAPI:
         # Try to assign the same player to the same character again (duplicate)
         resp2 = client.post(f"/scenes/{scene_id}/participants", json=payload1)
         assert resp2.status_code == 400
-        assert "already assigned" in resp2.get_json()["error"].lower()
+        assert "already assigned" in resp2.json()["detail"].lower()
 
         # Try to assign the same player to a different character (create another PC char first)
         other_pc = VTTCharacterRecord(
@@ -376,7 +390,7 @@ class TestSceneParticipantsAPI:
             determination_max=1,
         )
         test_session.add(other_pc)
-        test_session.commit()
+        await test_session.commit()
 
         payload2 = {
             "character_id": other_pc.id,
@@ -384,16 +398,17 @@ class TestSceneParticipantsAPI:
         }
         resp3 = client.post(f"/scenes/{scene_id}/participants", json=payload2)
         assert resp3.status_code == 400
-        assert "already assigned" in resp3.get_json()["error"].lower()
+        assert "already assigned" in resp3.json()["detail"].lower()
 
-    def test_add_participant_character_already_in_scene(
+    @pytest.mark.asyncio
+    async def test_add_participant_character_already_in_scene(
         self, client, setup_scene_with_data
     ):
         """POST participants fails if character already in scene."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         # Add NPC first
         payload = {"character_id": data["npc_char"].id, "is_visible_to_players": False}
@@ -403,20 +418,21 @@ class TestSceneParticipantsAPI:
         # Try to add same character again
         resp2 = client.post(f"/scenes/{scene_id}/participants", json=payload)
         assert resp2.status_code == 400
-        assert "already in scene" in resp2.get_json()["error"].lower()
+        assert "already in scene" in resp2.json()["detail"].lower()
 
-    def test_update_participant_visibility(self, client, setup_scene_with_data):
+    @pytest.mark.asyncio
+    async def test_update_participant_visibility(self, client, setup_scene_with_data):
         """PUT participant toggles visibility."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         # Add a participant first
         payload = {"character_id": data["pc_char"].id, "is_visible_to_players": False}
         resp = client.post(f"/scenes/{scene_id}/participants", json=payload)
         assert resp.status_code == 200
-        participant_id = resp.get_json()["participant_id"]
+        participant_id = resp.json()["participant_id"]
 
         # Update visibility
         update_resp = client.put(
@@ -424,20 +440,23 @@ class TestSceneParticipantsAPI:
             json={"is_visible_to_players": True},
         )
         assert update_resp.status_code == 200
-        assert update_resp.get_json()["success"] is True
+        assert update_resp.json()["success"] is True
 
         # Verify via GET
         get_resp = client.get(f"/scenes/{scene_id}/participants")
-        participants = get_resp.get_json()
+        participants = get_resp.json()
         assert len(participants) == 1
         assert participants[0]["is_visible_to_players"] is True
 
-    def test_update_participant_player_unassign(self, client, setup_scene_with_data):
+    @pytest.mark.asyncio
+    async def test_update_participant_player_unassign(
+        self, client, setup_scene_with_data
+    ):
         """PUT participant can unassign player (set to None)."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         # Add participant with player assignment
         payload = {
@@ -447,7 +466,7 @@ class TestSceneParticipantsAPI:
         }
         resp = client.post(f"/scenes/{scene_id}/participants", json=payload)
         assert resp.status_code == 200
-        participant_id = resp.get_json()["participant_id"]
+        participant_id = resp.json()["participant_id"]
 
         # Unassign player
         update_resp = client.put(
@@ -455,22 +474,23 @@ class TestSceneParticipantsAPI:
             json={"player_id": None},
         )
         assert update_resp.status_code == 200
-        assert update_resp.get_json()["success"] is True
+        assert update_resp.json()["success"] is True
 
         # Verify player_id is now None
         get_resp = client.get(f"/scenes/{scene_id}/participants")
-        participants = get_resp.get_json()
+        participants = get_resp.json()
         assert participants[0]["player_id"] is None
         assert participants[0]["type"] == "npc"  # should now be NPC type
 
-    def test_update_participant_reassign_player(
+    @pytest.mark.asyncio
+    async def test_update_participant_reassign_player(
         self, client, setup_scene_with_data, test_session
     ):
         """PUT participant can reassign player to another character."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         # Create a second PC and link to a second player
         other_player = CampaignPlayerRecord(
@@ -481,7 +501,7 @@ class TestSceneParticipantsAPI:
             position="tactical",
         )
         test_session.add(other_player)
-        test_session.flush()
+        await test_session.flush()
 
         other_pc = VTTCharacterRecord(
             campaign_id=data["campaign"].id,
@@ -515,9 +535,9 @@ class TestSceneParticipantsAPI:
             determination_max=1,
         )
         test_session.add(other_pc)
-        test_session.flush()
+        await test_session.flush()
         other_player.vtt_character_id = other_pc.id
-        test_session.commit()
+        await test_session.commit()
 
         # Assign first PC to first player
         payload1 = {
@@ -526,7 +546,7 @@ class TestSceneParticipantsAPI:
         }
         resp1 = client.post(f"/scenes/{scene_id}/participants", json=payload1)
         assert resp1.status_code == 200
-        participant_id = resp1.get_json()["participant_id"]
+        participant_id = resp1.json()["participant_id"]
 
         # Reassign to second player (must link to second player's character)
         # But we want to reassign the participant to a different player? That would change player_id.
@@ -548,53 +568,57 @@ class TestSceneParticipantsAPI:
 
         # I'll write a separate test for reassign after unassign.
 
-    def test_update_participant_not_found(self, client, setup_scene_with_data):
+    @pytest.mark.asyncio
+    async def test_update_participant_not_found(self, client, setup_scene_with_data):
         """PUT participant fails if not found."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.put(
             f"/scenes/{scene_id}/participants/999", json={"is_visible_to_players": True}
         )
         assert response.status_code == 404
-        assert "Participant not found" in response.get_json()["error"]
+        assert "Participant not found" in response.json()["detail"]
 
-    def test_delete_participant(self, client, setup_scene_with_data):
+    @pytest.mark.asyncio
+    async def test_delete_participant(self, client, setup_scene_with_data):
         """DELETE participant removes it."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         # Add participant
         payload = {"character_id": data["npc_char"].id, "is_visible_to_players": False}
         resp = client.post(f"/scenes/{scene_id}/participants", json=payload)
         assert resp.status_code == 200
-        participant_id = resp.get_json()["participant_id"]
+        participant_id = resp.json()["participant_id"]
 
         # Delete
         del_resp = client.delete(f"/scenes/{scene_id}/participants/{participant_id}")
         assert del_resp.status_code == 200
-        assert del_resp.get_json()["success"] is True
+        assert del_resp.json()["success"] is True
 
         # Verify removed
         get_resp = client.get(f"/scenes/{scene_id}/participants")
-        assert len(get_resp.get_json()) == 0
+        assert len(get_resp.json()) == 0
 
-    def test_delete_participant_not_found(self, client, setup_scene_with_data):
+    @pytest.mark.asyncio
+    async def test_delete_participant_not_found(self, client, setup_scene_with_data):
         """DELETE participant fails if not found."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.delete(f"/scenes/{scene_id}/participants/999")
         assert response.status_code == 404
-        assert "Participant not found" in response.get_json()["error"]
+        assert "Participant not found" in response.json()["detail"]
 
-    def test_authentication_required(self, client, setup_scene_with_data):
+    @pytest.mark.asyncio
+    async def test_authentication_required(self, client, setup_scene_with_data):
         """All participant endpoints require GM authentication."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
@@ -611,14 +635,14 @@ class TestSceneParticipantsAPI:
 
         # Add a participant first for update/delete tests
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
         resp = client.post(
             f"/scenes/{scene_id}/participants",
             json={"character_id": data["pc_char"].id},
         )
-        participant_id = resp.get_json()["participant_id"]
+        participant_id = resp.json()["participant_id"]
 
-        client.delete_cookie("sta_session_token")
+        client.cookies.clear()
         response = client.put(
             f"/scenes/{scene_id}/participants/{participant_id}",
             json={"is_visible_to_players": True},
@@ -628,10 +652,11 @@ class TestSceneParticipantsAPI:
         response = client.delete(f"/scenes/{scene_id}/participants/{participant_id}")
         assert response.status_code == 401
 
-    def test_scene_not_found(self, client, sample_campaign):
+    @pytest.mark.asyncio
+    async def test_scene_not_found(self, client, sample_campaign):
         """Participant endpoints return 404 for non-existent scene."""
         gm_token = sample_campaign["players"][0].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.get("/scenes/999/participants")
         assert response.status_code == 404
@@ -650,7 +675,7 @@ class TestAvailableCharactersHelper:
     """Tests for /api/campaigns/<id>/characters/available endpoint."""
 
     @pytest.fixture
-    def setup_campaign_characters(self, test_session, sample_campaign):
+    async def setup_campaign_characters(self, test_session, sample_campaign):
         """Create various characters for campaign."""
         campaign_id = sample_campaign["campaign"].id
 
@@ -731,7 +756,7 @@ class TestAvailableCharactersHelper:
             position="science",
         )
         test_session.add(player2)
-        test_session.flush()
+        await test_session.flush()
 
         pc2 = VTTCharacterRecord(
             campaign_id=campaign_id,
@@ -765,10 +790,10 @@ class TestAvailableCharactersHelper:
             determination_max=1,
         )
         test_session.add(pc2)
-        test_session.flush()
+        await test_session.flush()
         player2.vtt_character_id = pc2.id
 
-        test_session.commit()
+        await test_session.commit()
 
         return {
             "campaign": sample_campaign["campaign"],
@@ -779,7 +804,8 @@ class TestAvailableCharactersHelper:
             "player2": player2,
         }
 
-    def test_available_characters_requires_auth(
+    @pytest.mark.asyncio
+    async def test_available_characters_requires_auth(
         self, client, setup_campaign_characters
     ):
         """Unauthenticated cannot access available characters."""
@@ -789,18 +815,19 @@ class TestAvailableCharactersHelper:
         response = client.get(f"/campaigns/{campaign_id}/characters/available")
         assert response.status_code == 401
 
-    def test_available_characters_returns_pcs_and_npcs(
+    @pytest.mark.asyncio
+    async def test_available_characters_returns_pcs_and_npcs(
         self, client, setup_campaign_characters
     ):
         """GM gets list of all characters not already in a scene context."""
         data = setup_campaign_characters
         campaign_id = data["campaign"].campaign_id
         gm_token = data["gm"].session_token
-        client.set_cookie("sta_session_token", gm_token)
+        client.cookies.set("sta_session_token", gm_token)
 
         response = client.get(f"/campaigns/{campaign_id}/characters/available")
         assert response.status_code == 200
-        chars = response.get_json()
+        chars = response.json()
         # Should include PC1 (linked to player1? Actually player1 from sample_campaign also might have vtt_character_id? In sample_campaign, player1 is the GM? Actually sample_campaign creates 5 players with first being GM and others not. In our fixture we added pc1 and pc2 and npc1. Also the sample_campaign fixture creates players but without vtt_character_id set. So only player2 has vtt_character_id=pc2. player1 (first non-GM) from sample_campaign does not have vtt_character_id set because we didn't modify it. So PCs list will include PC2 only (since PC1 has no player linking). Also pc1 and npc1 are campaign-level characters (campaign_id set). They should appear as NPCs if they are not owned by a player? Our logic: PCs are from campaign_players that have vtt_character_id set. NPCs are vtt_characters where campaign_id==campaign_id and not in the PC set.
         # So expected: pc2 as type pc with player_id and player_name; pc1 and npc1 as type npc (since they have no player). But note: our PC1 has campaign_id set but no player linked. That makes it an NPC-type? Yes.
         # So we expect at least 3 entries.

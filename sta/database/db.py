@@ -1,19 +1,26 @@
 """SQLAlchemy database setup and session management."""
 
 import os
+from .config import settings
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
-from contextlib import contextmanager
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from contextlib import asynccontextmanager
 
 # Default to SQLite in the project directory
-DEFAULT_DB_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "sta_simulator.db"
-)
 
-DATABASE_URL = os.environ.get("STA_DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
+ASYNC_DATABASE_URL = settings.DATABASE_URL
+# The sync engine is kept solely for running DDL migrations which might rely on sync execution
+# We force the sync engine to use the async dialect path for consistency during migrations
+# If this proves problematic, the sync engine setup will need its own path.
+# For now, we assume aiosqlite is acceptable for sync PRAGMA commands, otherwise we use sqlite+pysqlite
+SYNC_DATABASE_URL = ASYNC_DATABASE_URL.replace("aiosqlite", "pysqlite")
 
-engine = create_engine(DATABASE_URL, echo=False)
+engine = create_engine(SYNC_DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(bind=engine)
+
+async_engine = create_async_engine(ASYNC_DATABASE_URL, echo=False)
+AsyncSessionLocal = async_sessionmaker(bind=async_engine, expire_on_commit=False)
 
 
 def run_migrations():
@@ -132,20 +139,29 @@ def init_db():
     run_migrations()
 
 
-def get_session() -> Session:
-    """Get a new database session."""
+def get_session():
+    """Get a synchronous database session."""
     return SessionLocal()
 
 
-@contextmanager
-def session_scope():
-    """Provide a transactional scope around a series of operations."""
-    session = SessionLocal()
-    try:
-        yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+async def get_db():
+    """Dependency for FastAPI to get an async database session."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
+@asynccontextmanager
+async def async_session_scope():
+    """Provide an async transactional scope around a series of operations."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()

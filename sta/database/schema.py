@@ -516,7 +516,13 @@ class SceneRecord(Base):
     )  # narrative, starship_encounter, personal_encounter, social_encounter
     status: Mapped[str] = mapped_column(
         String(20), default="draft"
-    )  # draft, active, completed
+    )  # draft, ready, active, completed
+
+    # Scene lifecycle fields
+    gm_short_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    player_character_list: Mapped[str] = mapped_column(
+        Text, default="[]"
+    )  # JSON list of PC IDs for ready state
 
     stardate: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
@@ -577,6 +583,9 @@ class SceneParticipantRecord(Base):
     player_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("campaign_players.id"), nullable=True
     )
+    impersonated_by_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("campaign_players.id"), nullable=True
+    )  # Which player is currently controlling this character (per-scene)
     is_visible_to_players: Mapped[bool] = mapped_column(default=False)
 
     __table_args__ = (

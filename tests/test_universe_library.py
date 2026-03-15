@@ -12,14 +12,16 @@ from sta.database.vtt_schema import (
 class TestUniverseLibraryAPI:
     """Tests for Universe Library API endpoints."""
 
-    def test_list_empty_library(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_list_empty_library(self, client, test_session):
         """GET /api/universe should return empty list when no items."""
         response = client.get("/api/universe")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data == []
 
-    def test_list_library_with_items(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_list_library_with_items(self, client, test_session):
         """GET /api/universe should return all library items."""
         item1 = UniverseItemRecord(
             name="Test Character",
@@ -37,16 +39,17 @@ class TestUniverseLibraryAPI:
         )
         test_session.add(item1)
         test_session.add(item2)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.get("/api/universe")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert len(data) == 2
         assert data[0]["name"] == "Test Character"
         assert data[1]["name"] == "Test Ship"
 
-    def test_add_character_to_library(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_add_character_to_library(self, client, test_session):
         """POST /api/universe/characters should add character to library."""
         char = VTTCharacterRecord(
             name="Captain Picard",
@@ -76,24 +79,26 @@ class TestUniverseLibraryAPI:
             focuses_json="[]",
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.post(
             "/api/universe/characters",
             json={"character_id": char.id, "category": "pcs"},
         )
         assert response.status_code == 201
-        data = response.get_json()
+        data = response.json()
         assert data["name"] == "Captain Picard"
         assert data["category"] == "pcs"
         assert data["item_type"] == "character"
 
-    def test_add_character_missing_id(self, client):
+    @pytest.mark.asyncio
+    async def test_add_character_missing_id(self, client):
         """POST /api/universe/characters should return 400 when no character_id."""
         response = client.post("/api/universe/characters", json={})
         assert response.status_code == 400
 
-    def test_add_character_not_found(self, client):
+    @pytest.mark.asyncio
+    async def test_add_character_not_found(self, client):
         """POST /api/universe/characters should return 404 for nonexistent character."""
         response = client.post(
             "/api/universe/characters",
@@ -101,7 +106,8 @@ class TestUniverseLibraryAPI:
         )
         assert response.status_code == 404
 
-    def test_add_character_invalid_category(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_add_character_invalid_category(self, client, test_session):
         """POST /api/universe/characters should return 400 for invalid category."""
         char = VTTCharacterRecord(
             name="Test Char",
@@ -112,7 +118,7 @@ class TestUniverseLibraryAPI:
             focuses_json="[]",
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.post(
             "/api/universe/characters",
@@ -120,7 +126,8 @@ class TestUniverseLibraryAPI:
         )
         assert response.status_code == 400
 
-    def test_add_ship_to_library(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_add_ship_to_library(self, client, test_session):
         """POST /api/universe/ships should add ship to library."""
         ship = VTTShipRecord(
             name="USS Enterprise",
@@ -153,26 +160,29 @@ class TestUniverseLibraryAPI:
             breaches_json="[]",
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
 
         response = client.post("/api/universe/ships", json={"ship_id": ship.id})
         assert response.status_code == 201
-        data = response.get_json()
+        data = response.json()
         assert data["name"] == "USS Enterprise"
         assert data["category"] == "ships"
         assert data["item_type"] == "ship"
 
-    def test_add_ship_missing_id(self, client):
+    @pytest.mark.asyncio
+    async def test_add_ship_missing_id(self, client):
         """POST /api/universe/ships should return 400 when no ship_id."""
         response = client.post("/api/universe/ships", json={})
         assert response.status_code == 400
 
-    def test_add_ship_not_found(self, client):
+    @pytest.mark.asyncio
+    async def test_add_ship_not_found(self, client):
         """POST /api/universe/ships should return 404 for nonexistent ship."""
         response = client.post("/api/universe/ships", json={"ship_id": 99999})
         assert response.status_code == 404
 
-    def test_get_items_by_category(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_get_items_by_category(self, client, test_session):
         """GET /api/universe/<category> should filter by category."""
         item1 = UniverseItemRecord(
             name="PC Character",
@@ -193,32 +203,34 @@ class TestUniverseLibraryAPI:
             data_json="{}",
         )
         test_session.add_all([item1, item2, item3])
-        test_session.commit()
+        await test_session.commit()
 
         response = client.get("/api/universe/pcs")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert len(data) == 1
         assert data[0]["name"] == "PC Character"
 
         response = client.get("/api/universe/npcs")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert len(data) == 1
         assert data[0]["name"] == "NPC Character"
 
         response = client.get("/api/universe/ships")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert len(data) == 1
         assert data[0]["name"] == "Ship"
 
-    def test_get_items_by_invalid_category(self, client):
+    @pytest.mark.asyncio
+    async def test_get_items_by_invalid_category(self, client):
         """GET /api/universe/<category> should return 400 for invalid category."""
         response = client.get("/api/universe/invalid")
         assert response.status_code == 400
 
-    def test_get_specific_item(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_get_specific_item(self, client, test_session):
         """GET /api/universe/item/<id> should return specific item."""
         item = UniverseItemRecord(
             name="Specific Item",
@@ -229,22 +241,24 @@ class TestUniverseLibraryAPI:
             image_url="http://example.com/image.png",
         )
         test_session.add(item)
-        test_session.commit()
+        await test_session.commit()
         item_id = item.id
 
         response = client.get(f"/api/universe/item/{item_id}")
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data["name"] == "Specific Item"
         assert data["description"] == "A specific item"
         assert data["image_url"] == "http://example.com/image.png"
 
-    def test_get_specific_item_not_found(self, client):
+    @pytest.mark.asyncio
+    async def test_get_specific_item_not_found(self, client):
         """GET /api/universe/item/<id> should return 404 for nonexistent item."""
         response = client.get("/api/universe/item/99999")
         assert response.status_code == 404
 
-    def test_update_item(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_update_item(self, client, test_session):
         """PUT /api/universe/item/<id> should update item."""
         item = UniverseItemRecord(
             name="Original Name",
@@ -254,7 +268,7 @@ class TestUniverseLibraryAPI:
             description="Original description",
         )
         test_session.add(item)
-        test_session.commit()
+        await test_session.commit()
         item_id = item.id
 
         response = client.put(
@@ -266,16 +280,18 @@ class TestUniverseLibraryAPI:
             },
         )
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data["name"] == "New Name"
         assert data["description"] == "New description"
 
-    def test_update_item_not_found(self, client):
+    @pytest.mark.asyncio
+    async def test_update_item_not_found(self, client):
         """PUT /api/universe/item/<id> should return 404 for nonexistent item."""
         response = client.put("/api/universe/item/99999", json={"name": "Test"})
         assert response.status_code == 404
 
-    def test_update_item_invalid_category(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_update_item_invalid_category(self, client, test_session):
         """PUT /api/universe/item/<id> should return 400 for invalid category."""
         item = UniverseItemRecord(
             name="Test",
@@ -284,7 +300,7 @@ class TestUniverseLibraryAPI:
             data_json="{}",
         )
         test_session.add(item)
-        test_session.commit()
+        await test_session.commit()
         item_id = item.id
 
         response = client.put(
@@ -293,7 +309,8 @@ class TestUniverseLibraryAPI:
         )
         assert response.status_code == 400
 
-    def test_delete_item(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_delete_item(self, client, test_session):
         """DELETE /api/universe/item/<id> should delete item."""
         item = UniverseItemRecord(
             name="To Delete",
@@ -302,7 +319,7 @@ class TestUniverseLibraryAPI:
             data_json="{}",
         )
         test_session.add(item)
-        test_session.commit()
+        await test_session.commit()
         item_id = item.id
 
         response = client.delete(f"/api/universe/item/{item_id}")
@@ -311,12 +328,14 @@ class TestUniverseLibraryAPI:
         response = client.get(f"/api/universe/item/{item_id}")
         assert response.status_code == 404
 
-    def test_delete_item_not_found(self, client):
+    @pytest.mark.asyncio
+    async def test_delete_item_not_found(self, client):
         """DELETE /api/universe/item/<id> should return 404 for nonexistent item."""
         response = client.delete("/api/universe/item/99999")
         assert response.status_code == 404
 
-    def test_duplicate_character_prevented(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_duplicate_character_prevented(self, client, test_session):
         """Adding same character twice should return 409."""
         char = VTTCharacterRecord(
             name="Duplicate",
@@ -327,7 +346,7 @@ class TestUniverseLibraryAPI:
             focuses_json="[]",
         )
         test_session.add(char)
-        test_session.commit()
+        await test_session.commit()
 
         client.post(
             "/api/universe/characters",
@@ -340,7 +359,8 @@ class TestUniverseLibraryAPI:
         )
         assert response.status_code == 409
 
-    def test_duplicate_ship_prevented(self, client, test_session):
+    @pytest.mark.asyncio
+    async def test_duplicate_ship_prevented(self, client, test_session):
         """Adding same ship twice should return 409."""
         ship = VTTShipRecord(
             name="Duplicate Ship",
@@ -354,7 +374,7 @@ class TestUniverseLibraryAPI:
             breaches_json="[]",
         )
         test_session.add(ship)
-        test_session.commit()
+        await test_session.commit()
 
         client.post("/api/universe/ships", json={"ship_id": ship.id})
 

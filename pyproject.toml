@@ -5,9 +5,12 @@ description = "Star Trek Adventures Starship Simulator"
 requires-python = ">=3.13"
 
 dependencies = [
-    "flask",
-    "sqlalchemy",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "sqlalchemy>=2.0",
+    "aiosqlite",
     "werkzeug",
+    "jinja2",
 ]
 
 [build-system]
@@ -21,7 +24,10 @@ dev = [
 ]
 
 [tool.uv]
-python = "3.13"
+managed = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["sta"]
 
 [tool.ruff]
 line-length = 88
@@ -30,3 +36,4 @@ target-version = "py313"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+asyncio_mode = "auto"

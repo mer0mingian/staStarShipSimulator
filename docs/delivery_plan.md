@@ -15,6 +15,7 @@ This document outlines the comprehensive plan for transitioning the Star Trek Ad
 - [Milestone 4: Character/Ship CRUD](#milestone-4-charactership-crud)
 - [Milestone 5: Combat Integration](#milestone-5-combat-integration)
 - [Milestone 6: UI/UX Overhaul](#milestone-6-uiux-overhaul)
+- [Milestone 7: Import/Export & Final Integration](#milestone-7-importexport--final-integration)
 - [Parallel Work Strategy](#parallel-work-strategy)
 - [Testing Strategy](#testing-strategy)
 - [Code Review Process](#code-review-process)
@@ -275,8 +276,152 @@ Complete scene lifecycle with narrative and combat support.
 
 ### Status: ✅ COMPLETE
 
-### Tasks
+### Testing Strategy
 See `docs/tasks/milestone3_tasks.md` for complete task breakdown.
+
+---
+
+## Milestone 5: VTT Scene Lifecycle & Combat Integration
+
+### Overview
+Complete migration from Flask to FastAPI and implement new 4-state scene lifecycle with multi-scene support.
+
+### Status: 🚧 IN PROGRESS
+
+### Scene Lifecycle (NEW - 2026-03-15)
+
+The VTT now supports a 4-state scene lifecycle:
+
+| State | Description | Visibility |
+|-------|-------------|------------|
+| **draft** | No title or player character list | GM only, never visible to players |
+| **ready** | Has title + GM-short-description | Available in scene-transition dialogue |
+| **active** | Currently in progress | All participants, can have multiple |
+| **completed** | Archived | Can be re-activated or copied |
+
+#### State Transitions
+
+```
+draft ──(GM adds title+PCs)──► ready ──(GM activates)──► active ──(GM ends)──► completed
+                                            ▲                      │
+                                            │                      ▼
+                                            └────(re-activate)─────┘
+                                            └────(copy)──────────► ready (new)
+```
+
+#### Scene Transition Dialogue
+
+When completing a scene, GM sees:
+1. **Connected scenes** (first) - scenes linked to current
+2. **Ready scenes** (dropdown last) - available to activate
+3. **Create new scene** - on-the-fly creation
+
+#### Split-Party Support (NEW)
+
+- Multiple scenes can be **active** simultaneously
+- GM can **switch focus** between parallel active scenes
+- **All party members visible** even when not in active scene
+
+#### Connection Termination
+
+- Completing a scene **terminates its connections**
+- Connected scenes must be re-linked after re-activation
+
+### Tasks
+
+#### Task 5.1: FastAPI App Factory
+**Agent**: python-dev
+**Model**: `opencode/minimax-m2.5-free`
+
+- [x] Create FastAPI application factory in `sta/web/app.py`
+- [x] Implement router registration for all endpoints
+- [x] Add async database session handling
+- [x] Configure CORS and middleware
+
+**Files**: `sta/web/app.py`
+
+#### Task 5.2: Route Migration
+**Agent**: python-dev
+**Model**: `opencode/minimax-m2.5-free`
+
+- [x] Migrate campaigns_router.py to FastAPI
+- [x] Migrate universe_router.py to FastAPI
+- [x] Migrate api_router.py to FastAPI
+- [x] Migrate scenes_router.py to FastAPI
+- [x] Migrate characters_router.py to FastAPI
+- [x] Migrate ships_router.py to FastAPI
+- [x] Migrate encounters_router.py to FastAPI
+
+**Files**: `sta/web/routes/*.py`
+
+#### Task 5.3: Test Infrastructure Update
+**Agent**: python-dev
+**Model**: `opencode/minimax-m2.5-free`
+
+- [x] Update conftest.py for FastAPI TestClient
+- [x] Fix async database fixtures
+- [x] Add session token cookie handling
+
+**Files**: `tests/conftest.py`
+
+### Test Progress
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Failed Tests | N/A | 130 |
+| Passed Tests | N/A | 284 |
+| Total Tests | 414 | 414 |
+
+### Key Accomplishments
+
+1. **Router infrastructure** - All major routes now registered in FastAPI
+2. **Action endpoints** - claim-turn, release-turn, next-turn, fire, ram
+3. **Import/Export** - characters, ships, NPCs, backup endpoints
+4. **Scene endpoints** - participants, ships, activation
+5. **Minor action enforcement** - prevents 2nd minor action (403)
+6. **Model fixes** - sensors attribute access
+
+### Remaining Issues (130 failures)
+
+| Category | Count | Issue |
+|----------|-------|-------|
+| Scene tests | 41 | Validation/logic |
+| Import/Export | 30 | Specific fields |
+| Personnel | 10 | Validation |
+| Session Tokens | 8 | Flask redirects |
+| Other | 41 | Various |
+
+### Current Test State (2026-03-15)
+
+| Metric | Value |
+|--------|-------|
+| Failed Tests | 122 → 110 → 102 → 93 → 86 → 47 → 39 → 37 |
+| Passed Tests | 292 → 304 → 312 → 321 → 328 → 334 → 342 → 344 |
+| Total Tests | 414 → 370 (export/import tests moved to M7) |
+
+### Key Issues Identified
+
+| Category | Count | Examples |
+|----------|-------|----------|
+| **404 Route Errors** | ~30 | Scene API endpoints returning 404 (FastAPI routing issues) |
+| **Flask 3.x API Changes** | ~15 | `get_data()` removed, `delete_cookie` missing |
+| **Async/SQLAlchemy Issues** | ~10 | MissingGreenlet, AsyncEngine inspection errors |
+| **Status Code Mismatches** | ~15 | 422 vs 400, 200 vs 400, 404 vs 302 |
+| **Logic Errors** | ~5 | Scene activation returns 'draft' instead of 'active' |
+
+### Proposed Fix Order
+
+1. **Fix FastAPI Routing** - Routes not properly registered (likely `/api/` prefix issues)
+2. **Fix/Remove Flask Remainders** - Update tests for Flask 3.x TestClient API changes
+3. **Fix Async Issues** - Use `run_sync` for SQLAlchemy inspection in async context
+4. **Fix Scene Activation** - Clarify logic bug returning wrong status
+
+### Acceptance Criteria
+
+- [ ] Core routing migration complete
+- [ ] All endpoints return non-404 responses
+- [ ] Turn order logic working
+- [ ] All tests passing (target: 0 failed)
 
 ---
 
@@ -469,6 +614,35 @@ Complete UI/UX redesign for mobile-responsive VTT experience.
 - ✅ All tests passing
 
 ### Timeline: 10-14 days
+
+## Milestone 7: Import/Export & Final Integration
+
+### Overview
+Implement import/export functionality and complete VTT integration.
+
+### Status: 📋 Planned
+
+### Tasks
+
+#### Task 7.1: VTT Character Export/Import
+- Export characters to JSON
+- Import characters from JSON
+- Handle updates to existing characters
+
+#### Task 7.2: VTT Ship Export/Import
+- Export ships to JSON
+- Import ships from JSON
+- Handle updates to existing ships
+
+#### Task 7.3: Full Campaign Backup
+- Export entire campaign to JSON
+- Import full campaign backup
+- Validate backup structure
+
+### Reference
+See `docs/tasks/milestone7_tasks.md` for detailed specification.
+
+### Timeline: 3-5 days
 
 ## Parallel Work Strategy
 

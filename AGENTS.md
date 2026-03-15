@@ -68,6 +68,32 @@ brainstorming → writing-plans → (subagent-driven-development OR executing-pl
 
 ## AI Assistant Rules & Project Constraints (CRITICAL)
 
+### Subagent Model Enforcement
+
+**CRITICAL**: The agent framework may default to inheriting the parent agent's model, ignoring the `model` specified in the subagent's definition file. This can lead to incorrect model usage and violate project budget constraints.
+
+To prevent this, you **MUST** explicitly provide the `model` parameter when calling the `Task` tool to specify which model the subagent should use.
+
+**Good Example (Correct):**
+```python
+task(
+    subagent_type="python-dev",
+    prompt="Implement the feature.",
+    description="...",
+    model="opencode/minimax-m2.5-free" # Explicitly sets the model
+)
+```
+
+**Bad Example (Incorrect):**
+```python
+task(
+    subagent_type="python-dev",
+    prompt="Implement the feature.",
+    description="..."
+    # Missing the model parameter, will likely inherit the wrong model
+)
+```
+
 - **Model Choice**: ALWAYS use `opencode/minimax-m2.5-free` for all tasks (development, review, debugging) until further notice.
 - **Minimal Changes**: Keep changes to existing files absolutely minimal! This is a private extension to an open-source project, and compatibility with the upstream branch is paramount.
 - **Dependency Management & Testing**:

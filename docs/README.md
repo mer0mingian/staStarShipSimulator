@@ -7,7 +7,7 @@ This project uses **progressive disclosure** - showing essential information fir
 | Level | Files | Description |
 |-------|-------|-------------|
 | **Start Here** | `delivery_plan.md` | VTT transition overview and milestone roadmap |
-| **Current Work** | `tasks/milestone4_tasks.md` | Specific tasks for current milestone (M4 complete) |
+| **Current Work** | `tasks/milestone5_tasks.md` | Specific tasks for current milestone (M5 in progress) |
 | **Reference** | See `references/` folder | Game rules, data models, technical details |
 
 ## Folder Structure
@@ -17,7 +17,8 @@ This project uses **progressive disclosure** - showing essential information fir
 
 ### Tasks (`tasks/`)
 Active and completed milestone task lists:
-- `milestone4_tasks.md` - Character/Ship CRUD (current)
+- `milestone5_tasks.md` - Combat Integration + Scene Lifecycle (current)
+- `milestone4_tasks.md` - Character/Ship CRUD (complete)
 - `milestone3_tasks.md` - Scene Management (complete)
 - `milestone2_tasks.md` - Campaign Management (complete)
 
@@ -45,6 +46,6 @@ Historical context and decisions:
 
 **Reading Order (Progressive Disclosure):**
 1. Start with `delivery_plan.md` to understand the project
-2. Check `tasks/milestone4_tasks.md` for current work
+2. Check `tasks/milestone5_tasks.md` for current work
 3. Dive into `references/` for specific technical details
 4. Check `archive/` for historical context if needed
