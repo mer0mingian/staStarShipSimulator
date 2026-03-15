@@ -78,7 +78,7 @@ class TestSceneConfigAPI:
         response = client.put(f"/scenes/{scene_id}/config", json=config_data)
         assert response.status_code == 400
         data = response.json()
-        assert "error" in data
+        assert "detail" in data
         assert "Invalid config keys" in data["detail"]
 
     @pytest.mark.asyncio

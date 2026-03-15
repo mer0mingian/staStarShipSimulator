@@ -1290,8 +1290,7 @@ async def update_scene_config(
     scene_id: int,
     db: AsyncSession = Depends(get_db),
     sta_session_token: Optional[str] = Cookie(None),
-    npc_turn_mode: Optional[str] = Body(None, embed=True),
-    gm_spends_threat_to_start: Optional[bool] = Body(None, embed=True),
+    body: dict = Body(...),
 ):
     """Update scene encounter configuration."""
     scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
@@ -1304,7 +1303,16 @@ async def update_scene_config(
     await _require_gm_auth(scene.campaign_id, sta_session_token, db)
 
     allowed_keys = {"npc_turn_mode", "gm_spends_threat_to_start"}
+    unknown_keys = set(body.keys()) - allowed_keys
+    if unknown_keys:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid config keys: " + ", ".join(sorted(unknown_keys)),
+        )
+
     data = {}
+    npc_turn_mode = body.get("npc_turn_mode")
+    gm_spends_threat_to_start = body.get("gm_spends_threat_to_start")
 
     if npc_turn_mode is not None:
         if npc_turn_mode not in ("all_npcs", "num_pcs"):

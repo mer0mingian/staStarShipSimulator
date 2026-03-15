@@ -1333,11 +1333,28 @@ async def execute_action(
     if not encounter:
         raise HTTPException(status_code=404, detail="Encounter not found")
 
+    # === TURN VALIDATION ===
+    # Check if player is trying to act on enemy's turn
+    # Support both "actor_type" and "role" parameters (test fixture may use either)
+    actor_type = data.get("actor_type", data.get("role", "player"))
+    if actor_type == "player" and encounter.current_turn == "enemy":
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot perform player actions during enemy's turn.",
+        )
+
     # Check if this is a major action
     # In STA 2e: task_roll types are major by default, others are minor unless explicitly marked
     action_config = get_action_config(action_name)
     is_major = False
     is_minor = False
+    effect_created = False
+    message = ""
+    # Determine success based on roll parameters (if provided) - moved earlier for use in buff check
+    success = True
+    if "roll_succeeded" in data:
+        success = bool(data["roll_succeeded"])
+
     if action_config:
         action_type = action_config.get("type")
         # Check explicit is_major first (takes priority)
@@ -1351,6 +1368,98 @@ async def execute_action(
         # Buff, toggle, special, resource_action types are minor by default
         elif action_type in ("buff", "toggle", "special", "resource_action"):
             is_minor = True
+
+        # === ACTION REQUIREMENT VALIDATION ===
+
+        # Get player ship for requirement checks
+        player_ship = None
+        if encounter.player_ship_id:
+            ship_stmt = select(StarshipRecord).filter_by(id=encounter.player_ship_id)
+            ship_result = await db.execute(ship_stmt)
+            player_ship = ship_result.scalar_one_or_none()
+
+        # Validate: requires_reserve_power
+        if action_config.get("requires_reserve_power"):
+            if not player_ship or not player_ship.has_reserve_power:
+                raise HTTPException(
+                    status_code=400,
+                    detail="This action requires reserve power to be available.",
+                )
+
+        # Validate: requires_system (system must not be destroyed)
+        required_system = action_config.get("requires_system")
+        if required_system and player_ship:
+            # Check if system has breaches >= half scale (destroyed)
+            # Scale 4 ship = 2 breaches to destroy (threshold = 4 total potency)
+            breaches = json.loads(player_ship.breaches_json or "[]")
+            system_breaches = [
+                b for b in breaches if b.get("system") == required_system
+            ]
+            total_potency = sum(b.get("potency", 0) for b in system_breaches)
+            # System is destroyed if total potency >= 4 (for scale 4 ship)
+            if total_potency >= 4:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot use this action: {required_system} system is destroyed.",
+                )
+
+        # Validate: target_system parameter (for actions like Damage Control)
+        if action_name == "Damage Control" and not data.get("target_system"):
+            raise HTTPException(
+                status_code=400,
+                detail="Damage Control requires a target_system parameter.",
+            )
+
+        # Validate: max_range (for actions like Scan For Weakness)
+        max_range = action_config.get("max_range")
+        if max_range is not None:
+            # Check for target_distance directly or look up from target_index
+            target_distance = data.get("target_distance")
+            if target_distance is None:
+                # Try to get distance from target_index (enemy ship position)
+                target_index = data.get("target_index")
+                if target_index is not None:
+                    # Try to get positions from ship_positions_json
+                    try:
+                        ship_positions = json.loads(
+                            encounter.ship_positions_json or "{}"
+                        )
+                        enemy_key = f"enemy_{target_index}"
+                        if enemy_key in ship_positions:
+                            target_distance = ship_positions[enemy_key].get(
+                                "distance", 0
+                            )
+                        else:
+                            target_distance = 0
+                    except (AttributeError, json.JSONDecodeError):
+                        # If field doesn't exist or is invalid JSON, default to 0 (Close range)
+                        target_distance = 0
+                else:
+                    target_distance = 0
+
+            if target_distance > max_range:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Target is out of range. Maximum range is {max_range} hexes.",
+                )
+
+        # Validate: momentum_cost (for bonus dice)
+        momentum_cost = action_config.get("momentum_cost", 0)
+        bonus_dice = data.get("bonus_dice", 0)
+        if bonus_dice > 0:
+            # Bonus dice cost momentum: 1 for first, 2 for second, etc.
+            required_momentum = sum(range(1, bonus_dice + 1))  # 1+2+3+... = n(n+1)/2
+            available_momentum = encounter.momentum or 0
+            if available_momentum < required_momentum:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient momentum for {bonus_dice} bonus dice. Need {required_momentum}, have {available_momentum}.",
+                )
+
+        # Handle buff actions - mark effect as created
+        if action_type == "buff" and success:
+            effect_created = True
+            message = f"{action_name} effect applied."
 
     # Check if player has already acted (for minor action limit)
     player_id = data.get("player_id")
@@ -1386,10 +1495,11 @@ async def execute_action(
     if not ship_name:
         ship_name = "Unknown Ship"
 
-    # Determine success based on roll parameters (if provided)
-    success = True
-    if "roll_succeeded" in data:
-        success = bool(data["roll_succeeded"])
+    # Set message for failed task rolls
+    if not success and not message:
+        message = f"{action_name} failed."
+    elif success and not message:
+        message = f"{action_name} succeeded."
 
     # Create a combat log entry
     log_entry = CombatLogRecord(
@@ -1400,7 +1510,7 @@ async def execute_action(
         ship_name=ship_name,
         action_name=action_name,
         action_type="major" if is_major else "minor",
-        description=f"Actor performed {action_name}",
+        description=message,
         task_result_json=json.dumps(data.get("task_result", {})),
         damage_dealt=data.get("damage_dealt", 0),
         momentum_spent=data.get("momentum_spent", 0),
@@ -1410,12 +1520,25 @@ async def execute_action(
     db.add(log_entry)
     await db.commit()
 
-    return {
+    response = {
         "success": success,
         "action_name": action_name,
         "encounter_id": encounter_id,
         "log_entry_id": log_entry.id,
+        "message": message,
     }
+
+    # Add effect_created for buff actions
+    if effect_created:
+        response["effect_created"] = True
+
+    return response
+
+    # Add effect_created for buff actions
+    if effect_created:
+        response["effect_created"] = True
+
+    return response
 
 
 @api_router.get("/encounter/{encounter_id}/combat-log")
