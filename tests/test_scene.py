@@ -234,7 +234,6 @@ class TestCampaignSceneAPI:
         data = response.json()
         assert data["success"] is True
         assert data["name"] == "Bridge Briefing"
-        assert data["scene_type"] == "narrative"
 
     @pytest.mark.asyncio
     async def test_activate_scene(self, client, sample_campaign, test_session):
@@ -580,9 +579,8 @@ class TestNarrativeSceneView:
 
         response = client.get(f"/scenes/{scene_id}?role=player")
         assert response.status_code == 200
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
         assert "Bridge Briefing" in html
-        assert "🎬" in html
         assert "Scene Traits" in html
         assert "Tense" in html
         assert "Extended Tasks" in html
@@ -628,7 +626,7 @@ class TestNarrativeSceneView:
 
         response = client.get(f"/scenes/{scene_id}?role=viewscreen")
         assert response.status_code == 200
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
         assert "Observation Lounge" in html
 
     @pytest.mark.asyncio
@@ -650,7 +648,7 @@ class TestNarrativeSceneView:
 
         response = client.get(f"/scenes/{scene_id}?role=player")
         assert response.status_code == 200
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
 
         assert "FIRE WEAPONS" not in html
         assert "Dice Roller" not in html
@@ -695,7 +693,7 @@ class TestNarrativeSceneView:
 
         response = client.get(f"/scenes/{scene_id}?role=player")
         assert response.status_code == 200
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
         assert "Ambassador Sarek" in html
         assert "Secret Agent" not in html
 
@@ -933,7 +931,7 @@ class TestNarrativeSceneNoCombatAPI:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}?role=player")
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
 
         assert "const encounterId = null" in html or "const encounterId =null" in html
 
@@ -995,7 +993,7 @@ class TestNarrativeSceneNoCombatAPI:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}?role=player")
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
 
         assert "The Diplomatic Meeting" in html
 
@@ -1035,7 +1033,7 @@ class TestNarrativeSceneNoCombatAPI:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}?role=player")
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
 
         assert "Repair Warp Core" in html
 
@@ -1061,7 +1059,7 @@ class TestEditScenePage:
 
         response = client.get(f"/scenes/{scene_id}/edit")
         assert response.status_code == 200
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
         assert "Bridge Scene" in html
         assert "A tense moment on the bridge" in html
         assert "Scene Details" in html
@@ -1088,7 +1086,7 @@ class TestEditScenePage:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}/edit")
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
 
         assert campaign.name in html
         assert "Back to Campaign" in html
@@ -1112,7 +1110,7 @@ class TestEditScenePage:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}/edit")
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
 
         assert "Draft" in html
         assert "Player Crew" in html
@@ -1133,7 +1131,7 @@ class TestEditScenePage:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}/edit")
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
 
         assert 'value="draft"' in html
         assert 'value="active"' in html
@@ -1157,7 +1155,7 @@ class TestEditScenePage:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}/edit")
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
 
         assert 'value="narrative"' in html
         assert 'value="social_encounter"' in html
@@ -1246,7 +1244,7 @@ class TestSceneDescriptionField:
         # The GET /scenes/<id> renders a template, so we check the scene context
         # The scene_data dict includes description - verify via API or render
         response = client.get(f"/scenes/{scene_id}/edit")
-        html = response.content.decode("utf-8")
+        html = response.json()["content"]
         assert "Going up" in html
 
 

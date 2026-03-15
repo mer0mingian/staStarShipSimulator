@@ -125,7 +125,10 @@ class TestScanForWeakness:
         encounter = sample_encounter["encounter"]
 
         # Move enemy to Extreme range (3+ hexes)
-        ship_positions = {"player": {"q": 0, "r": 0}, "enemy_0": {"q": 3, "r": 0}}
+        ship_positions = {
+            "player": {"q": 0, "r": 0, "distance": 0},
+            "enemy_0": {"q": 3, "r": 0, "distance": 3},
+        }
         encounter.ship_positions_json = json.dumps(ship_positions)
         await test_session.commit()
 
@@ -142,7 +145,7 @@ class TestScanForWeakness:
         # Should fail due to range
         assert response.status_code == 400
         data = response.json()
-        assert "range" in data.get("error", "").lower()
+        assert "range" in data.get("detail", "").lower()
 
 
 class TestSensorSweep:

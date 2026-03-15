@@ -118,7 +118,7 @@ class TestDamageControl:
         # Should fail without target_system
         assert response.status_code == 400
         data = response.json()
-        assert "target_system" in data.get("error", "").lower()
+        assert "target_system" in data.get("detail", "").lower()
 
 
 class TestRegainPower:
@@ -288,7 +288,7 @@ class TestRegenerateShields:
         # Should fail due to no reserve power
         assert response.status_code == 400
         data = response.json()
-        assert "power" in data.get("error", "").lower()
+        assert "power" in data.get("detail", "").lower()
 
     @pytest.mark.asyncio
     async def test_regenerate_shields_is_major(
