@@ -56,9 +56,7 @@ def create_app():
         encounters_router, prefix="/encounters"
     )  # internal prefix="/encounters"
     app.include_router(api_router, prefix="/api")
-    app.include_router(
-        campaigns_router, prefix="/campaigns"
-    )  # internal prefix="/campaigns"
+    app.include_router(campaigns_router)  # internal prefix="/campaigns"
     # scenes_router has internal prefix="/scenes", so include_router should add no additional prefix
     app.include_router(scenes_router, prefix="")  # Results in /scenes
     app.include_router(
@@ -68,8 +66,14 @@ def create_app():
         characters_router, prefix="/api"
     )  # internal prefix="/characters" -> /api/characters
     app.include_router(
+        characters_router, prefix="/api/vtt"
+    )  # VTT character routes -> /api/vtt/characters
+    app.include_router(
         ships_router, prefix="/api"
     )  # internal prefix="/ships" -> /api/ships
+    app.include_router(
+        ships_router, prefix="/api/vtt"
+    )  # VTT ship routes -> /api/vtt/ships
 
     return app
 

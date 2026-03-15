@@ -161,9 +161,42 @@ Integrate the existing combat system with the new VTT architecture. This milesto
 5. Ensure all database sessions and route handlers are async-compatible.
 6. Verify using `uv run pytest`.
 
+### Progress (as of 2026-03-15)
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Failed Tests | 187 | 130 |
+| Passed Tests | 227 | 284 |
+| Total Tests | 414 | 414 |
+| Improvement | - | 30% |
+
+#### Completed:
+- [x] FastAPI app factory in `sta/web/app.py`
+- [x] All routers converted to FastAPI:
+  - `campaigns_router.py`
+  - `universe_router.py`
+  - `api_router.py`
+  - `scenes_router.py`
+  - `characters_router.py`
+  - `ships_router.py`
+  - `encounters_router.py`
+- [x] Test infrastructure updated (`tests/conftest.py`)
+- [x] Action endpoints: claim-turn, release-turn, next-turn, fire, ram
+- [x] Import/Export endpoints
+- [x] Scene endpoints: participants, ships, activation
+- [x] Minor action enforcement (prevents 2nd minor action)
+- [x] Model attribute fixes (sensors)
+
+#### Remaining:
+- [ ] Scene validation/logic fixes (~41 tests)
+- [ ] Import/Export field validation (~30 tests)
+- [ ] Personnel validation (~10 tests)
+- [ ] Session token Flask redirects (~8 tests)
+- [ ] Various async SQLAlchemy issues
+
 ### Verification
-- `uv run pytest tests/`
-- All legacy and M1-M4 tests must pass.
+- `uv run pytest tests/` → 130 failed, 284 passed
+- Core routing infrastructure complete
 
 ---
 

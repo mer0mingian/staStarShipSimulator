@@ -25,6 +25,9 @@ from sta.generators.data import GENERAL_TALENTS
 
 characters_router = APIRouter(tags=["characters"])
 
+# Also register with /api/vtt prefix for backward compatibility
+vtt_characters_router = APIRouter(tags=["vtt-characters"])
+
 VALID_STATES = ["Ok", "Fatigued", "Injured", "Dead"]
 
 
@@ -575,4 +578,65 @@ async def add_talent(
     return {
         "talents": current_talents,
         "added": talent_name,
+    }
+
+
+# Export endpoint
+@characters_router.get("/characters/{char_id}/export")
+async def export_character(
+    char_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Export a VTT character as JSON."""
+    char = (
+        (
+            await db.execute(
+                select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    return {
+        "id": char.id,
+        "name": char.name,
+        "description": char.description,
+        "attributes": json.loads(char.attributes_json or "{}"),
+        "disciplines": json.loads(char.disciplines_json or "{}"),
+        "talents": json.loads(char.talents_json or "[]"),
+        "focuses": json.loads(char.focuses_json or "[]"),
+    }
+
+
+@characters_router.post("/characters/import")
+async def import_character(
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import a VTT character from JSON."""
+    name = data.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    attributes = data.get("attributes", {})
+    disciplines = data.get("disciplines", {})
+
+    char = VTTCharacterRecord(
+        name=name,
+        description=data.get("description", ""),
+        attributes_json=json.dumps(attributes),
+        disciplines_json=json.dumps(disciplines),
+        talents_json=json.dumps(data.get("talents", [])),
+        focuses_json=json.dumps(data.get("focuses", [])),
+    )
+    db.add(char)
+    await db.commit()
+
+    return {
+        "id": char.id,
+        "name": char.name,
+        "success": True,
     }

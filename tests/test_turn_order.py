@@ -18,7 +18,9 @@ class TestTurnClaiming:
     """Tests for claiming turns in multiplayer mode."""
 
     @pytest.mark.asyncio
-    async def test_claim_turn_success(self, client, multiplayer_encounter, claim_turn, test_session):
+    async def test_claim_turn_success(
+        self, client, multiplayer_encounter, claim_turn, test_session
+    ):
         """Test that a player can successfully claim a turn."""
         encounter = multiplayer_encounter["encounter"]
         player = multiplayer_encounter["players"][1]  # Non-GM player
@@ -32,13 +34,17 @@ class TestTurnClaiming:
         assert data["player_id"] == player.id
 
     @pytest.mark.asyncio
-    async def test_claim_turn_already_acted(self, client, multiplayer_encounter, claim_turn, test_session):
+    async def test_claim_turn_already_acted(
+        self, client, multiplayer_encounter, claim_turn, test_session
+    ):
         """Test that a player who already acted cannot claim a turn."""
         encounter = multiplayer_encounter["encounter"]
         player = multiplayer_encounter["players"][1]
 
         # Mark player as already acted
-        players_turns_used = {str(player.id): {"acted": True, "acted_at": "2025-01-01T00:00:00"}}
+        players_turns_used = {
+            str(player.id): {"acted": True, "acted_at": "2025-01-01T00:00:00"}
+        }
         encounter.players_turns_used_json = json.dumps(players_turns_used)
         await test_session.commit()
 
@@ -50,7 +56,9 @@ class TestTurnClaiming:
         assert "already acted" in data["detail"]
 
     @pytest.mark.asyncio
-    async def test_claim_turn_already_claimed(self, client, multiplayer_encounter, claim_turn, test_session):
+    async def test_claim_turn_already_claimed(
+        self, client, multiplayer_encounter, claim_turn, test_session
+    ):
         """Test that a player cannot claim when turn is already claimed."""
         encounter = multiplayer_encounter["encounter"]
         player1 = multiplayer_encounter["players"][1]
@@ -59,19 +67,21 @@ class TestTurnClaiming:
         # First player claims
         response1 = claim_turn(encounter.encounter_id, player1.id)
         assert response1.status_code == 200
-        assert response1.get_json()["success"] is True
+        assert response1.json()["success"] is True
 
         # Second player tries to claim - should see first player has it
         response2 = claim_turn(encounter.encounter_id, player2.id)
         assert response2.status_code == 200  # Not an error, just not confirmed
 
-        data = response2.get_json()
+        data = response2.json()
         assert data["success"] is False
         assert data["confirmed"] is False
         assert "claimed_by" in data
 
     @pytest.mark.asyncio
-    async def test_claim_turn_enemy_turn(self, client, multiplayer_encounter, claim_turn, test_session):
+    async def test_claim_turn_enemy_turn(
+        self, client, multiplayer_encounter, claim_turn, test_session
+    ):
         """Test that players cannot claim during enemy turn."""
         encounter = multiplayer_encounter["encounter"]
         player = multiplayer_encounter["players"][1]
@@ -88,7 +98,9 @@ class TestTurnClaiming:
         assert "not the player side's turn" in data["detail"]
 
     @pytest.mark.asyncio
-    async def test_release_turn(self, client, multiplayer_encounter, claim_turn, release_turn, test_session):
+    async def test_release_turn(
+        self, client, multiplayer_encounter, claim_turn, release_turn, test_session
+    ):
         """Test that a claimed turn can be released."""
         encounter = multiplayer_encounter["encounter"]
         player = multiplayer_encounter["players"][1]
@@ -110,14 +122,21 @@ class TestMinorActions:
     """Tests for minor actions (should not end turn)."""
 
     @pytest.mark.asyncio
-    async def test_minor_action_does_not_end_turn(self, client, sample_encounter, execute_action, get_encounter_status, test_session):
+    async def test_minor_action_does_not_end_turn(
+        self,
+        client,
+        sample_encounter,
+        execute_action,
+        get_encounter_status,
+        test_session,
+    ):
         """Test that a minor action does not end the turn."""
         encounter = sample_encounter["encounter"]
 
         # Get initial status
         initial_status = get_encounter_status(encounter.encounter_id)
         assert initial_status.status_code == 200
-        assert initial_status.get_json()["current_turn"] == "player"
+        assert initial_status.json()["current_turn"] == "player"
 
         # Execute a minor action (Calibrate Weapons is a buff/minor action)
         response = execute_action(encounter.encounter_id, "Calibrate Weapons")
@@ -126,10 +145,17 @@ class TestMinorActions:
         # Check turn hasn't changed
         status = get_encounter_status(encounter.encounter_id)
         assert status.status_code == 200
-        assert status.get_json()["current_turn"] == "player"
+        assert status.json()["current_turn"] == "player"
 
     @pytest.mark.asyncio
-    async def test_toggle_action_does_not_end_turn(self, client, sample_encounter, execute_action, get_encounter_status, test_session):
+    async def test_toggle_action_does_not_end_turn(
+        self,
+        client,
+        sample_encounter,
+        execute_action,
+        get_encounter_status,
+        test_session,
+    ):
         """Test that toggle actions (shields, weapons) don't end turn."""
         encounter = sample_encounter["encounter"]
 
@@ -140,14 +166,22 @@ class TestMinorActions:
         # Check turn hasn't changed
         status = get_encounter_status(encounter.encounter_id)
         assert status.status_code == 200
-        assert status.get_json()["current_turn"] == "player"
+        assert status.json()["current_turn"] == "player"
 
 
 class TestMajorActions:
     """Tests for major actions (should end turn and alternate)."""
 
     @pytest.mark.asyncio
-    async def test_major_action_ends_turn(self, client, sample_encounter, execute_action, get_encounter_status, mock_dice_success, test_session):
+    async def test_major_action_ends_turn(
+        self,
+        client,
+        sample_encounter,
+        execute_action,
+        get_encounter_status,
+        mock_dice_success,
+        test_session,
+    ):
         """Test that a major action ends the turn."""
         encounter = sample_encounter["encounter"]
 
@@ -158,10 +192,17 @@ class TestMajorActions:
         # Turn should switch to enemy
         status = get_encounter_status(encounter.encounter_id)
         assert status.status_code == 200
-        assert status.get_json()["current_turn"] == "enemy"
+        assert status.json()["current_turn"] == "enemy"
 
     @pytest.mark.asyncio
-    async def test_task_roll_major_action(self, client, sample_encounter, execute_action, get_encounter_status, test_session):
+    async def test_task_roll_major_action(
+        self,
+        client,
+        sample_encounter,
+        execute_action,
+        get_encounter_status,
+        test_session,
+    ):
         """Test that a task roll action (major) ends the turn."""
         encounter = sample_encounter["encounter"]
 
@@ -181,14 +222,16 @@ class TestMajorActions:
         # Turn should switch to enemy
         status = get_encounter_status(encounter.encounter_id)
         assert status.status_code == 200
-        assert status.get_json()["current_turn"] == "enemy"
+        assert status.json()["current_turn"] == "enemy"
 
 
 class TestPassAction:
     """Tests for the Pass action (ends remaining turns)."""
 
     @pytest.mark.asyncio
-    async def test_pass_action_switches_turn(self, client, sample_encounter, next_turn, get_encounter_status, test_session):
+    async def test_pass_action_switches_turn(
+        self, client, sample_encounter, next_turn, get_encounter_status, test_session
+    ):
         """Test that passing ends remaining player turns and switches to enemy."""
         encounter = sample_encounter["encounter"]
 
@@ -199,7 +242,9 @@ class TestPassAction:
         assert data["current_turn"] == "enemy"
 
     @pytest.mark.asyncio
-    async def test_pass_when_enemy_has_no_turns(self, client, sample_encounter, next_turn, get_encounter_status, test_session):
+    async def test_pass_when_enemy_has_no_turns(
+        self, client, sample_encounter, next_turn, get_encounter_status, test_session
+    ):
         """Test passing when enemy has no turns advances the round."""
         encounter = sample_encounter["encounter"]
         enemy_ship = sample_encounter["enemy_ship"]
@@ -222,7 +267,9 @@ class TestRoundAdvancement:
     """Tests for round advancement when both sides exhaust turns."""
 
     @pytest.mark.asyncio
-    async def test_round_advances_when_both_exhausted(self, client, sample_encounter, next_turn, test_session):
+    async def test_round_advances_when_both_exhausted(
+        self, client, sample_encounter, next_turn, test_session
+    ):
         """Test that round advances when both sides have no remaining turns."""
         encounter = sample_encounter["encounter"]
         enemy_ship = sample_encounter["enemy_ship"]
@@ -248,7 +295,9 @@ class TestRoundAdvancement:
         assert data["current_turn"] == "player"
 
     @pytest.mark.asyncio
-    async def test_turn_counters_reset_on_round_advance(self, client, sample_encounter, next_turn, test_session):
+    async def test_turn_counters_reset_on_round_advance(
+        self, client, sample_encounter, next_turn, test_session
+    ):
         """Test that turn counters reset when round advances."""
         encounter = sample_encounter["encounter"]
         enemy_ship = sample_encounter["enemy_ship"]
@@ -274,13 +323,15 @@ class TestMultiplayerTurnTracking:
     """Tests for multiplayer turn tracking."""
 
     @pytest.mark.asyncio
-    async def test_each_player_gets_one_turn(self, client, multiplayer_encounter, get_encounter_status, test_session):
+    async def test_each_player_gets_one_turn(
+        self, client, multiplayer_encounter, get_encounter_status, test_session
+    ):
         """Test that each player gets one turn per round."""
         encounter = multiplayer_encounter["encounter"]
         players = [p for p in multiplayer_encounter["players"] if not p.is_gm]
 
         status = get_encounter_status(encounter.encounter_id)
-        data = status.get_json()
+        data = status.json()
 
         # In multiplayer, total turns = number of non-GM players
         assert data["is_multiplayer"] is True
@@ -289,7 +340,15 @@ class TestMultiplayerTurnTracking:
         assert len(data["players_info"]) == player_count
 
     @pytest.mark.asyncio
-    async def test_player_marked_acted_after_major_action(self, client, multiplayer_encounter, claim_turn, execute_action, get_encounter_status, test_session):
+    async def test_player_marked_acted_after_major_action(
+        self,
+        client,
+        multiplayer_encounter,
+        claim_turn,
+        execute_action,
+        get_encounter_status,
+        test_session,
+    ):
         """Test that a player is marked as acted after completing a major action."""
         encounter = multiplayer_encounter["encounter"]
         player = multiplayer_encounter["players"][1]  # Non-GM player
@@ -307,7 +366,7 @@ class TestMultiplayerTurnTracking:
 
         # After a major action, the turn should switch to enemy
         status = get_encounter_status(encounter.encounter_id)
-        data = status.get_json()
+        data = status.json()
 
         # Turn should have switched to enemy (confirming major action completed)
         assert data["current_turn"] == "enemy"
@@ -316,7 +375,15 @@ class TestMultiplayerTurnTracking:
         assert data["current_player_id"] is None
 
     @pytest.mark.asyncio
-    async def test_unclaimed_players_can_still_claim(self, client, multiplayer_encounter, claim_turn, execute_action, get_encounter_status, test_session):
+    async def test_unclaimed_players_can_still_claim(
+        self,
+        client,
+        multiplayer_encounter,
+        claim_turn,
+        execute_action,
+        get_encounter_status,
+        test_session,
+    ):
         """Test that players who haven't acted can still claim the turn."""
         encounter = multiplayer_encounter["encounter"]
         player1 = multiplayer_encounter["players"][1]
@@ -334,11 +401,10 @@ class TestMultiplayerTurnTracking:
 
         # Player 2 should be able to claim
         status = get_encounter_status(encounter.encounter_id)
-        data = status.get_json()
+        data = status.json()
 
         player2_info = next(
-            (p for p in data["players_info"] if p["player_id"] == player2.id),
-            None
+            (p for p in data["players_info"] if p["player_id"] == player2.id), None
         )
         assert player2_info is not None
         assert player2_info["has_acted"] is False
@@ -349,7 +415,14 @@ class TestTurnAlternation:
     """Tests for turn alternation between player and enemy sides."""
 
     @pytest.mark.asyncio
-    async def test_turn_alternates_to_enemy_after_player_action(self, client, sample_encounter, execute_action, get_encounter_status, test_session):
+    async def test_turn_alternates_to_enemy_after_player_action(
+        self,
+        client,
+        sample_encounter,
+        execute_action,
+        get_encounter_status,
+        test_session,
+    ):
         """Test that turn alternates to enemy after player major action."""
         encounter = sample_encounter["encounter"]
         assert encounter.current_turn == "player"
@@ -358,10 +431,17 @@ class TestTurnAlternation:
         execute_action(encounter.encounter_id, "Attack Pattern")
 
         status = get_encounter_status(encounter.encounter_id)
-        assert status.get_json()["current_turn"] == "enemy"
+        assert status.json()["current_turn"] == "enemy"
 
     @pytest.mark.asyncio
-    async def test_turn_stays_on_player_if_enemy_exhausted(self, client, sample_encounter, execute_action, get_encounter_status, test_session):
+    async def test_turn_stays_on_player_if_enemy_exhausted(
+        self,
+        client,
+        sample_encounter,
+        execute_action,
+        get_encounter_status,
+        test_session,
+    ):
         """Test that turn stays on player if enemy has no remaining turns."""
         encounter = sample_encounter["encounter"]
         enemy_ship = sample_encounter["enemy_ship"]
@@ -376,7 +456,7 @@ class TestTurnAlternation:
 
         # Since enemy is exhausted, should either stay on player or advance round
         status = get_encounter_status(encounter.encounter_id)
-        data = status.get_json()
+        data = status.json()
 
         # Either stays on player (if player has turns) or round advances
         # Since player still has turns (scale 4), it should stay player
@@ -388,7 +468,9 @@ class TestEncounterStatus:
     """Tests for encounter status endpoint."""
 
     @pytest.mark.asyncio
-    async def test_status_returns_turn_info(self, client, sample_encounter, get_encounter_status, test_session):
+    async def test_status_returns_turn_info(
+        self, client, sample_encounter, get_encounter_status, test_session
+    ):
         """Test that status endpoint returns comprehensive turn information."""
         encounter = sample_encounter["encounter"]
 
@@ -406,7 +488,9 @@ class TestEncounterStatus:
         assert "enemy_turns_total" in data
 
     @pytest.mark.asyncio
-    async def test_status_returns_multiplayer_info(self, client, multiplayer_encounter, get_encounter_status, test_session):
+    async def test_status_returns_multiplayer_info(
+        self, client, multiplayer_encounter, get_encounter_status, test_session
+    ):
         """Test that status endpoint returns multiplayer-specific info."""
         encounter = multiplayer_encounter["encounter"]
 

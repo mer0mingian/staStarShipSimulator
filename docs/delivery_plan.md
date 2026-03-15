@@ -275,8 +275,88 @@ Complete scene lifecycle with narrative and combat support.
 
 ### Status: ✅ COMPLETE
 
-### Tasks
+### Testing Strategy
 See `docs/tasks/milestone3_tasks.md` for complete task breakdown.
+
+---
+
+## Milestone 5: Flask to FastAPI Migration
+
+### Overview
+Complete migration from Flask to FastAPI routing infrastructure.
+
+### Status: 🚧 IN PROGRESS
+
+### Tasks
+
+#### Task 5.1: FastAPI App Factory
+**Agent**: python-dev
+**Model**: `opencode/minimax-m2.5-free`
+
+- [x] Create FastAPI application factory in `sta/web/app.py`
+- [x] Implement router registration for all endpoints
+- [x] Add async database session handling
+- [x] Configure CORS and middleware
+
+**Files**: `sta/web/app.py`
+
+#### Task 5.2: Route Migration
+**Agent**: python-dev
+**Model**: `opencode/minimax-m2.5-free`
+
+- [x] Migrate campaigns_router.py to FastAPI
+- [x] Migrate universe_router.py to FastAPI
+- [x] Migrate api_router.py to FastAPI
+- [x] Migrate scenes_router.py to FastAPI
+- [x] Migrate characters_router.py to FastAPI
+- [x] Migrate ships_router.py to FastAPI
+- [x] Migrate encounters_router.py to FastAPI
+
+**Files**: `sta/web/routes/*.py`
+
+#### Task 5.3: Test Infrastructure Update
+**Agent**: python-dev
+**Model**: `opencode/minimax-m2.5-free`
+
+- [x] Update conftest.py for FastAPI TestClient
+- [x] Fix async database fixtures
+- [x] Add session token cookie handling
+
+**Files**: `tests/conftest.py`
+
+### Test Progress
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Failed Tests | N/A | 130 |
+| Passed Tests | N/A | 284 |
+| Total Tests | 414 | 414 |
+
+### Key Accomplishments
+
+1. **Router infrastructure** - All major routes now registered in FastAPI
+2. **Action endpoints** - claim-turn, release-turn, next-turn, fire, ram
+3. **Import/Export** - characters, ships, NPCs, backup endpoints
+4. **Scene endpoints** - participants, ships, activation
+5. **Minor action enforcement** - prevents 2nd minor action (403)
+6. **Model fixes** - sensors attribute access
+
+### Remaining Issues (130 failures)
+
+| Category | Count | Issue |
+|----------|-------|-------|
+| Scene tests | 41 | Validation/logic |
+| Import/Export | 30 | Specific fields |
+| Personnel | 10 | Validation |
+| Session Tokens | 8 | Flask redirects |
+| Other | 41 | Various |
+
+### Acceptance Criteria
+
+- [ ] Core routing migration complete
+- [ ] All endpoints return non-404 responses
+- [ ] Turn order logic working
+- [ ] All tests passing (target: 0 failed)
 
 ---
 

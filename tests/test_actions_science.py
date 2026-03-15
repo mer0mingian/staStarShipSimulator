@@ -15,7 +15,9 @@ class TestCalibrateSensors:
     """Tests for Calibrate Sensors action."""
 
     @pytest.mark.asyncio
-    async def test_calibrate_sensors_creates_effect(self, client, sample_encounter, execute_action, test_session):
+    async def test_calibrate_sensors_creates_effect(
+        self, client, sample_encounter, execute_action, test_session
+    ):
         """Test that Calibrate Sensors creates a sensor bonus effect."""
         encounter = sample_encounter["encounter"]
 
@@ -26,21 +28,30 @@ class TestCalibrateSensors:
         assert data["success"] is True
 
     @pytest.mark.asyncio
-    async def test_calibrate_sensors_is_minor(self, client, sample_encounter, execute_action, get_encounter_status, test_session):
+    async def test_calibrate_sensors_is_minor(
+        self,
+        client,
+        sample_encounter,
+        execute_action,
+        get_encounter_status,
+        test_session,
+    ):
         """Test that Calibrate Sensors is a minor action."""
         encounter = sample_encounter["encounter"]
 
         execute_action(encounter.encounter_id, "Calibrate Sensors")
 
         status = get_encounter_status(encounter.encounter_id)
-        assert status.get_json()["current_turn"] == "player"
+        assert status.json()["current_turn"] == "player"
 
 
 class TestScanForWeakness:
     """Tests for Scan For Weakness action."""
 
     @pytest.mark.asyncio
-    async def test_scan_for_weakness_success(self, client, sample_encounter, execute_action, test_session):
+    async def test_scan_for_weakness_success(
+        self, client, sample_encounter, execute_action, test_session
+    ):
         """Test Scan For Weakness with successful roll."""
         encounter = sample_encounter["encounter"]
 
@@ -60,7 +71,9 @@ class TestScanForWeakness:
         assert data["success"] is True
 
     @pytest.mark.asyncio
-    async def test_scan_for_weakness_failure(self, client, sample_encounter, execute_action, test_session):
+    async def test_scan_for_weakness_failure(
+        self, client, sample_encounter, execute_action, test_session
+    ):
         """Test Scan For Weakness with failed roll."""
         encounter = sample_encounter["encounter"]
 
@@ -80,7 +93,14 @@ class TestScanForWeakness:
         assert data["success"] is False
 
     @pytest.mark.asyncio
-    async def test_scan_for_weakness_is_major(self, client, sample_encounter, execute_action, get_encounter_status, test_session):
+    async def test_scan_for_weakness_is_major(
+        self,
+        client,
+        sample_encounter,
+        execute_action,
+        get_encounter_status,
+        test_session,
+    ):
         """Test that Scan For Weakness is a major action."""
         encounter = sample_encounter["encounter"]
 
@@ -95,10 +115,12 @@ class TestScanForWeakness:
         )
 
         status = get_encounter_status(encounter.encounter_id)
-        assert status.get_json()["current_turn"] == "enemy"
+        assert status.json()["current_turn"] == "enemy"
 
     @pytest.mark.asyncio
-    async def test_scan_for_weakness_range_limit(self, client, sample_encounter, execute_action, test_session):
+    async def test_scan_for_weakness_range_limit(
+        self, client, sample_encounter, execute_action, test_session
+    ):
         """Test that Scan For Weakness has a maximum range (Long = 2 hexes)."""
         encounter = sample_encounter["encounter"]
 
@@ -127,7 +149,9 @@ class TestSensorSweep:
     """Tests for Sensor Sweep action."""
 
     @pytest.mark.asyncio
-    async def test_sensor_sweep_success(self, client, sample_encounter, execute_action, test_session):
+    async def test_sensor_sweep_success(
+        self, client, sample_encounter, execute_action, test_session
+    ):
         """Test Sensor Sweep with successful roll."""
         encounter = sample_encounter["encounter"]
 
@@ -147,7 +171,9 @@ class TestSensorSweep:
         assert data["success"] is True
 
     @pytest.mark.asyncio
-    async def test_sensor_sweep_failure(self, client, sample_encounter, execute_action, test_session):
+    async def test_sensor_sweep_failure(
+        self, client, sample_encounter, execute_action, test_session
+    ):
         """Test Sensor Sweep with failed roll."""
         encounter = sample_encounter["encounter"]
 
@@ -167,7 +193,14 @@ class TestSensorSweep:
         assert data["success"] is False
 
     @pytest.mark.asyncio
-    async def test_sensor_sweep_is_major(self, client, sample_encounter, execute_action, get_encounter_status, test_session):
+    async def test_sensor_sweep_is_major(
+        self,
+        client,
+        sample_encounter,
+        execute_action,
+        get_encounter_status,
+        test_session,
+    ):
         """Test that Sensor Sweep is a major action."""
         encounter = sample_encounter["encounter"]
 
@@ -182,10 +215,12 @@ class TestSensorSweep:
         )
 
         status = get_encounter_status(encounter.encounter_id)
-        assert status.get_json()["current_turn"] == "enemy"
+        assert status.json()["current_turn"] == "enemy"
 
     @pytest.mark.asyncio
-    async def test_sensor_sweep_difficulty_increases_with_range(self, client, sample_encounter, execute_action, test_session):
+    async def test_sensor_sweep_difficulty_increases_with_range(
+        self, client, sample_encounter, execute_action, test_session
+    ):
         """Test that Sensor Sweep difficulty increases with distance."""
         encounter = sample_encounter["encounter"]
 

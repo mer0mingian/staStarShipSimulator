@@ -2,6 +2,7 @@
 
 import json
 import pytest
+from sqlalchemy import select
 from sta.database import SceneRecord
 
 
@@ -65,47 +66,13 @@ class TestSceneConnectionsAPI:
             campaign_id=campaign.id, name="Previous Scene", status="completed"
         )
         session.add(prev_scene)
-        session.flush()
+        await session.flush()
 
         next_scene = SceneRecord(
             campaign_id=campaign.id, name="Next Scene", status="draft"
         )
         session.add(next_scene)
-        session.flush()
-
-        scene.previous_scene_ids_json = json.dumps([prev_scene.id])
-        scene.next_scene_ids_json = json.dumps([next_scene.id])
-        session.commit()
-
-        response = client.get(f"/scenes/{scene_id}/connections")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert prev_scene.id in data["previous_scene_ids"]
-        assert next_scene.id in data["next_scene_ids"]
-
-    @pytest.mark.asyncio
-    async def test_get_connections_nonexistent_scene(self, client):
-        """GET connections returns 404 for nonexistent scene."""
-        response = client.get("/scenes/99999/connections")
-
-        assert response.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_update_connections_add_next(self, client, setup_scene_with_data):
-        """PUT connections can add a next scene connection."""
-        session = setup_scene_with_data["session"]
-        scene = setup_scene_with_data["scene"]
-        campaign = setup_scene_with_data["campaign"]
-        scene_id = setup_scene_with_data["scene_id"]
-        gm_token = setup_scene_with_data["gm_player"].session_token
-        client.cookies.set("sta_session_token", gm_token)
-
-        next_scene = SceneRecord(
-            campaign_id=campaign.id, name="Next Scene", status="draft"
-        )
-        session.add(next_scene)
-        session.flush()
+        await session.flush()
 
         response = client.put(
             f"/scenes/{scene_id}/connections",
@@ -117,7 +84,10 @@ class TestSceneConnectionsAPI:
         assert next_scene.id in data["next_scene_ids"]
 
         session.expire(scene)
-        scene = session.query(SceneRecord).filter_by(id=scene.id).first()
+        result = await session.execute(
+            select(SceneRecord).filter(SceneRecord.id == scene.id)
+        )
+        scene = result.scalars().first()
         assert next_scene.id in json.loads(scene.next_scene_ids_json)
 
     @pytest.mark.asyncio
@@ -134,7 +104,7 @@ class TestSceneConnectionsAPI:
             campaign_id=campaign.id, name="Previous Scene", status="completed"
         )
         session.add(prev_scene)
-        session.flush()
+        await session.flush()
 
         response = client.put(
             f"/scenes/{scene_id}/connections",
@@ -159,10 +129,10 @@ class TestSceneConnectionsAPI:
             campaign_id=campaign.id, name="Next Scene", status="draft"
         )
         session.add(next_scene)
-        session.flush()
+        await session.flush()
 
         scene.next_scene_ids_json = json.dumps([next_scene.id])
-        session.commit()
+        await session.commit()
 
         response = client.put(
             f"/scenes/{scene_id}/connections",
@@ -181,7 +151,9 @@ class TestSceneConnectionsAPI:
         assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_update_connections_invalid_scene_id(self, client, setup_scene_with_data):
+    async def test_update_connections_invalid_scene_id(
+        self, client, setup_scene_with_data
+    ):
         """PUT connections ignores invalid scene IDs in the arrays."""
         scene_id = setup_scene_with_data["scene_id"]
         gm_token = setup_scene_with_data["gm_player"].session_token

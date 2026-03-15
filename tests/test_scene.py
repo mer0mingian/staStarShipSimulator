@@ -2,6 +2,7 @@
 
 import json
 import pytest
+from sqlalchemy import select
 from sta.database.schema import SceneRecord, CampaignRecord, CampaignPlayerRecord
 
 
@@ -65,7 +66,9 @@ class TestSceneRecord:
         assert loaded[0]["resistance"] == 5
 
     @pytest.mark.asyncio
-    async def test_extended_task_with_breakthroughs(self, test_session, sample_campaign):
+    async def test_extended_task_with_breakthroughs(
+        self, test_session, sample_campaign
+    ):
         """Extended tasks should support breakthrough descriptions."""
         campaign_id = sample_campaign["campaign"].id
         task = {
@@ -125,7 +128,9 @@ class TestSceneAPI:
     """Tests for scene API endpoints."""
 
     @pytest.mark.asyncio
-    async def test_get_scene_returns_empty_when_not_found(self, client, sample_encounter):
+    async def test_get_scene_returns_empty_when_not_found(
+        self, client, sample_encounter
+    ):
         """GET /scene should return empty data when no scene exists."""
         encounter_id = sample_encounter["encounter"].encounter_id
         response = client.get(f"/api/encounter/{encounter_id}/scene")
@@ -320,7 +325,10 @@ class TestCampaignSceneAPI:
         # Create scene without active ship
         from sta.database.schema import CampaignRecord
 
-        campaign = test_session.query(CampaignRecord).filter_by(id=campaign_id).first()
+        result = await test_session.execute(
+            select(CampaignRecord).filter(CampaignRecord.id == campaign_id)
+        )
+        campaign = result.scalars().first()
         campaign.active_ship_id = None
         await test_session.commit()
 
@@ -369,7 +377,9 @@ class TestCampaignSceneAPI:
         assert "npc" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_convert_to_social_removes_map(self, client, sample_campaign, test_session):
+    async def test_convert_to_social_removes_map(
+        self, client, sample_campaign, test_session
+    ):
         """Converting to social_encounter should set has_map=False."""
         campaign_id = sample_campaign["campaign"].id
         gm_token = sample_campaign["players"][0].session_token
@@ -392,7 +402,10 @@ class TestCampaignSceneAPI:
         )
 
         test_session.expire_all()
-        updated = test_session.query(SceneRecord).filter_by(id=scene_id).first()
+        result = await test_session.execute(
+            select(SceneRecord).filter(SceneRecord.id == scene_id)
+        )
+        updated = result.scalars().first()
         assert updated.has_map is False
 
     @pytest.mark.asyncio
@@ -418,7 +431,9 @@ class TestCampaignSceneAPI:
         assert response.json()["success"] is True
 
     @pytest.mark.asyncio
-    async def test_cannot_delete_active_scene(self, client, sample_campaign, test_session):
+    async def test_cannot_delete_active_scene(
+        self, client, sample_campaign, test_session
+    ):
         """DELETE should fail for active scenes."""
         campaign_id = sample_campaign["campaign"].id
         gm_token = sample_campaign["players"][0].session_token
@@ -574,7 +589,9 @@ class TestNarrativeSceneView:
         assert "Repair Warp Core" in html
 
     @pytest.mark.asyncio
-    async def test_view_narrative_scene_as_gm(self, client, sample_campaign, test_session):
+    async def test_view_narrative_scene_as_gm(
+        self, client, sample_campaign, test_session
+    ):
         """Narrative scene GM view requires authentication."""
         campaign_id = sample_campaign["campaign"].id
 
@@ -687,7 +704,9 @@ class TestSceneNPCManagement:
     """Tests for NPC management in scenes."""
 
     @pytest.mark.asyncio
-    async def test_add_npc_from_archive_to_scene(self, client, sample_campaign, test_session):
+    async def test_add_npc_from_archive_to_scene(
+        self, client, sample_campaign, test_session
+    ):
         """POST /scenes/<id>/npcs should add an NPC from archive to scene."""
         from sta.database.schema import NPCRecord
 
@@ -1076,7 +1095,9 @@ class TestEditScenePage:
         assert "Scene Details" in html
 
     @pytest.mark.asyncio
-    async def test_edit_scene_shows_draft_status(self, client, sample_campaign, test_session):
+    async def test_edit_scene_shows_draft_status(
+        self, client, sample_campaign, test_session
+    ):
         """Edit scene page should show draft status."""
         campaign_id = sample_campaign["campaign"].id
 
@@ -1119,7 +1140,9 @@ class TestEditScenePage:
         assert 'value="completed"' in html
 
     @pytest.mark.asyncio
-    async def test_edit_scene_scene_type_field(self, client, sample_campaign, test_session):
+    async def test_edit_scene_scene_type_field(
+        self, client, sample_campaign, test_session
+    ):
         """Edit scene page should have scene type dropdown."""
         campaign_id = sample_campaign["campaign"].id
 
@@ -1145,7 +1168,9 @@ class TestSceneDescriptionField:
     """Tests for scene description field."""
 
     @pytest.mark.asyncio
-    async def test_scene_record_has_description_field(self, test_session, sample_campaign):
+    async def test_scene_record_has_description_field(
+        self, test_session, sample_campaign
+    ):
         """SceneRecord should have description field."""
         campaign_id = sample_campaign["campaign"].id
         scene = SceneRecord(
@@ -1201,7 +1226,9 @@ class TestSceneDescriptionField:
         assert data["description"] == "The doctor is in"
 
     @pytest.mark.asyncio
-    async def test_scene_api_returns_description(self, client, sample_campaign, test_session):
+    async def test_scene_api_returns_description(
+        self, client, sample_campaign, test_session
+    ):
         """GET scene should include description in context."""
         campaign_id = sample_campaign["campaign"].id
 
@@ -1227,7 +1254,9 @@ class TestSceneCharactersPresent:
     """Tests for characters_present field."""
 
     @pytest.mark.asyncio
-    async def test_scene_characters_present_api(self, client, sample_campaign, test_session):
+    async def test_scene_characters_present_api(
+        self, client, sample_campaign, test_session
+    ):
         """PUT /api/scene/<id> should update characters_present."""
         campaign_id = sample_campaign["campaign"].id
 
@@ -1390,7 +1419,9 @@ class TestCampaignNPCAPI:
         assert data["npc_id"] is not None
 
     @pytest.mark.asyncio
-    async def test_remove_npc_from_campaign(self, client, sample_campaign, test_session):
+    async def test_remove_npc_from_campaign(
+        self, client, sample_campaign, test_session
+    ):
         """DELETE /api/campaign/<id>/npcs/<id> should remove NPC."""
         from sta.database.schema import NPCRecord, CampaignNPCRecord
 

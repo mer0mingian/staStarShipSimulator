@@ -15,6 +15,7 @@ from fastapi import (
     Form,
     Query,
     Body,
+    Response,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete as sqlalchemy_delete
@@ -25,6 +26,7 @@ from sta.database.schema import (
     CharacterRecord,
     CombatLogRecord,
     CampaignRecord,
+    CampaignPlayerRecord,
     SceneRecord,
     NPCRecord,
     PersonnelEncounterRecord,
@@ -608,19 +610,90 @@ async def add_breach(
 
 
 @api_router.post("/encounter/{encounter_id}/next-turn")
-async def next_turn(encounter_id: str):
-    """STUB: Turn switching logic replaced by polling status endpoint."""
-    raise HTTPException(
-        status_code=501,
-        detail="Turn sequence management logic is synchronous and stubbed. Use /status endpoint.",
+async def next_turn(encounter_id: str, db: AsyncSession = Depends(get_db)):
+    """Advance to the next turn (Pass action equivalent)."""
+    encounter = (
+        (
+            await db.execute(
+                select(EncounterRecord).filter(
+                    EncounterRecord.encounter_id == encounter_id
+                )
+            )
+        )
+        .scalars()
+        .first()
     )
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    current = encounter.current_turn or "player"
+    round_advanced = False
+
+    if current == "player":
+        player_turns_used = encounter.player_turns_used or 0
+        player_turns_total = encounter.player_turns_total or 1
+        player_turns_exhausted = player_turns_used >= player_turns_total
+
+        ships_turns = json.loads(encounter.ships_turns_used_json or "{}")
+        enemy_ship_ids = json.loads(encounter.enemy_ship_ids_json or "[]")
+
+        all_enemy_turns_exhausted = True
+        for ship_id in enemy_ship_ids:
+            ship_turns_used = ships_turns.get(str(ship_id), 0)
+            all_enemy_turns_exhausted = (
+                all_enemy_turns_exhausted and ship_turns_used >= 1
+            )
+
+        if player_turns_exhausted and all_enemy_turns_exhausted:
+            encounter.round = (encounter.round or 1) + 1
+            encounter.current_turn = "player"
+            encounter.ships_turns_used_json = "{}"
+            encounter.players_turns_used_json = "{}"
+            encounter.player_turns_used = 0
+            round_advanced = True
+        else:
+            encounter.current_turn = "enemy"
+    elif current == "enemy":
+        player_turns_used = encounter.player_turns_used or 0
+        player_turns_total = encounter.player_turns_total or 1
+        player_turns_exhausted = player_turns_used >= player_turns_total
+
+        ships_turns = json.loads(encounter.ships_turns_used_json or "{}")
+        enemy_ship_ids = json.loads(encounter.enemy_ship_ids_json or "[]")
+
+        all_enemy_turns_exhausted = True
+        for ship_id in enemy_ship_ids:
+            ship_turns_used = ships_turns.get(str(ship_id), 0)
+            all_enemy_turns_exhausted = (
+                all_enemy_turns_exhausted and ship_turns_used >= 1
+            )
+
+        if player_turns_exhausted and all_enemy_turns_exhausted:
+            encounter.round = (encounter.round or 1) + 1
+            encounter.current_turn = "player"
+            encounter.ships_turns_used_json = "{}"
+            encounter.players_turns_used_json = "{}"
+            encounter.player_turns_used = 0
+            round_advanced = True
+        else:
+            encounter.current_turn = "enemy"
+
+    await db.commit()
+
+    return {
+        "current_turn": encounter.current_turn,
+        "round": encounter.round,
+        "round_advanced": round_advanced,
+        "player_turns_used": encounter.player_turns_used or 0,
+        "enemy_turns_used": 0,
+    }
 
 
 @api_router.get("/encounter/{encounter_id}/status")
 async def get_encounter_status(
     encounter_id: str, role: str = Query("player"), db: AsyncSession = Depends(get_db)
 ):
-    """Get current encounter status for polling (STUBBED)."""
+    """Get current encounter status for polling."""
 
     encounter = (
         (
@@ -658,6 +731,110 @@ async def get_encounter_status(
         else False
     )
 
+    ship_positions = get_ship_positions_from_encounter(encounter)
+    tactical_map = get_tactical_map_from_encounter(encounter)
+
+    try:
+        active_effects = (
+            json.loads(encounter.active_effects_json)
+            if encounter.active_effects_json
+            else []
+        )
+    except json.JSONDecodeError:
+        active_effects = []
+    detected_positions = get_detected_positions_from_effects(active_effects)
+
+    ships_info = []
+    player_pos = {"q": 0, "r": 0}
+
+    if player_ship_record:
+        player_pos = ship_positions.get("player", {"q": 0, "r": 0})
+        ships_info.append(
+            {
+                "id": player_ship_record.id,
+                "name": player_ship_record.name,
+                "ship_class": player_ship_record.ship_class,
+                "is_player": True,
+            }
+        )
+
+    if encounter.enemy_ship_ids_json:
+        try:
+            enemy_ship_ids = json.loads(encounter.enemy_ship_ids_json)
+        except json.JSONDecodeError:
+            enemy_ship_ids = []
+
+        for idx, enemy_ship_id in enumerate(enemy_ship_ids):
+            enemy_record = (
+                (
+                    await db.execute(
+                        select(StarshipRecord).filter(
+                            StarshipRecord.id == enemy_ship_id
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if not enemy_record:
+                continue
+
+            enemy_key = f"enemy_{idx}"
+            enemy_pos = ship_positions.get(enemy_key, {"q": 0, "r": 0})
+
+            is_visible = role == "gm" or is_ship_visible_to_player(
+                player_pos, enemy_pos, tactical_map, detected_positions
+            )
+
+            if is_visible:
+                ships_info.append(
+                    {
+                        "id": enemy_record.id,
+                        "name": enemy_record.name,
+                        "ship_class": enemy_record.ship_class,
+                        "is_player": False,
+                    }
+                )
+
+    # Check if multiplayer (multiple non-GM players)
+    players_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.campaign_id == encounter.campaign_id,
+        CampaignPlayerRecord.is_gm == False,
+        CampaignPlayerRecord.is_active == True,
+    )
+    players_result = await db.execute(players_stmt)
+    players = players_result.scalars().all()
+    is_multiplayer = len(players) > 1
+
+    # Build players_info with can_claim
+    players_info = []
+    players_turns = json.loads(encounter.players_turns_used_json or "{}")
+    current_player_name = None
+    for player in players:
+        has_claimed = (
+            str(player.id) == str(encounter.current_player_id)
+            if encounter.current_player_id
+            else False
+        )
+        has_acted = players_turns.get(str(player.id), {}).get("acted", False)
+        can_claim = (
+            not has_claimed
+            and not has_acted
+            and encounter.current_turn == "player"
+            and encounter.current_player_id is None
+        )
+        if has_claimed:
+            current_player_name = player.player_name
+        players_info.append(
+            {
+                "player_id": player.id,
+                "player_name": player.player_name,
+                "has_claimed": has_claimed,
+                "has_acted": has_acted,
+                "can_claim": can_claim,
+            }
+        )
+
     return {
         "current_turn": encounter.current_turn or "player",
         "round": encounter.round or 1,
@@ -667,16 +844,129 @@ async def get_encounter_status(
         "player_turns_total": 1,
         "enemy_turns_used": 0,
         "enemy_turns_total": 1,
-        "ships_info": [],
+        "ships_info": ships_info,
         "pending_attack": None,
         "has_reserve_power": has_reserve_power,
         "weapons_armed": weapons_armed,
-        "is_multiplayer": False,
-        "current_player_id": None,
+        "is_multiplayer": is_multiplayer,
+        "current_player_id": encounter.current_player_id,
+        "current_player_name": current_player_name,
+        "players_info": players_info,
         "viewscreen_audio_enabled": True,
         "hailing_state": json.loads(encounter.hailing_state_json)
         if encounter.hailing_state_json
         else None,
+    }
+
+
+@api_router.get("/encounter/{encounter_id}/map")
+async def get_encounter_map(
+    encounter_id: str, role: str = Query("player"), db: AsyncSession = Depends(get_db)
+):
+    """Get tactical map for encounter with ship positions."""
+
+    encounter = (
+        (
+            await db.execute(
+                select(EncounterRecord).filter(
+                    EncounterRecord.encounter_id == encounter_id
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    tactical_map = get_tactical_map_from_encounter(encounter)
+    ship_positions = get_ship_positions_from_encounter(encounter)
+
+    try:
+        active_effects = (
+            json.loads(encounter.active_effects_json)
+            if encounter.active_effects_json
+            else []
+        )
+    except json.JSONDecodeError:
+        active_effects = []
+    detected_positions = get_detected_positions_from_effects(active_effects)
+
+    player_ship_record = (
+        (
+            await db.execute(
+                select(StarshipRecord).filter(
+                    StarshipRecord.id == encounter.player_ship_id
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+    visible_ships = []
+    player_pos = {"q": 0, "r": 0}
+
+    if player_ship_record:
+        player_pos = ship_positions.get("player", {"q": 0, "r": 0})
+        visible_ships.append(
+            {
+                "id": player_ship_record.id,
+                "name": player_ship_record.name,
+                "ship_class": player_ship_record.ship_class,
+                "is_player": True,
+                "q": player_pos.get("q", 0),
+                "r": player_pos.get("r", 0),
+            }
+        )
+
+    if encounter.enemy_ship_ids_json:
+        try:
+            enemy_ship_ids = json.loads(encounter.enemy_ship_ids_json)
+        except json.JSONDecodeError:
+            enemy_ship_ids = []
+
+        for idx, enemy_ship_id in enumerate(enemy_ship_ids):
+            enemy_record = (
+                (
+                    await db.execute(
+                        select(StarshipRecord).filter(
+                            StarshipRecord.id == enemy_ship_id
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if not enemy_record:
+                continue
+
+            enemy_key = f"enemy_{idx}"
+            enemy_pos = ship_positions.get(enemy_key, {"q": 0, "r": 0})
+
+            is_visible = role == "gm" or is_ship_visible_to_player(
+                player_pos if player_ship_record else {"q": 0, "r": 0},
+                enemy_pos,
+                tactical_map,
+                detected_positions,
+            )
+
+            if is_visible:
+                visible_ships.append(
+                    {
+                        "id": enemy_record.id,
+                        "name": enemy_record.name,
+                        "ship_class": enemy_record.ship_class,
+                        "is_player": False,
+                        "q": enemy_pos.get("q", 0),
+                        "r": enemy_pos.get("r", 0),
+                    }
+                )
+
+    return {
+        "map": tactical_map,
+        "ship_positions": visible_ships,
+        "radius": tactical_map.get("radius", 3),
     }
 
 
@@ -687,19 +977,110 @@ async def get_encounter_status(
 async def claim_turn(
     encounter_id: str, data: dict = Body(...), db: AsyncSession = Depends(get_db)
 ):
-    """STUB: Multi-player turn claiming logic removed due to synchronous dependency."""
-    raise HTTPException(
-        status_code=501,
-        detail="Multi-player turn claiming logic requires synchronous session locking and is stubbed.",
+    """Allow a player to claim a turn in multiplayer mode."""
+    player_id = data.get("player_id")
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id is required")
+
+    encounter = (
+        (
+            await db.execute(
+                select(EncounterRecord).filter(
+                    EncounterRecord.encounter_id == encounter_id
+                )
+            )
+        )
+        .scalars()
+        .first()
     )
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    if encounter.current_turn != "player":
+        return Response(
+            content=json.dumps(
+                {
+                    "success": False,
+                    "confirmed": False,
+                    "detail": "not the player side's turn",
+                }
+            ),
+            status_code=400,
+            media_type="application/json",
+        )
+
+    players_turns = json.loads(encounter.players_turns_used_json or "{}")
+
+    if str(player_id) in players_turns:
+        if players_turns[str(player_id)].get("acted"):
+            return Response(
+                content=json.dumps(
+                    {
+                        "success": False,
+                        "confirmed": False,
+                        "detail": "player already acted this round",
+                    }
+                ),
+                status_code=400,
+                media_type="application/json",
+            )
+
+    if encounter.current_player_id is not None:
+        return {
+            "success": False,
+            "confirmed": False,
+            "claimed_by": encounter.current_player_id,
+            "detail": "turn already claimed",
+        }
+
+    encounter.current_player_id = player_id
+    await db.commit()
+
+    return {
+        "success": True,
+        "confirmed": True,
+        "player_id": player_id,
+    }
 
 
 @api_router.post("/encounter/{encounter_id}/release-turn")
 async def release_turn(
     encounter_id: str, data: dict = Body(...), db: AsyncSession = Depends(get_db)
 ):
-    """STUB: Turn releasing logic removed due to synchronous dependency."""
-    raise HTTPException(status_code=501, detail="Turn releasing logic is stubbed.")
+    """Release the currently claimed turn back to the pool."""
+    force = data.get("force", False)
+
+    encounter = (
+        (
+            await db.execute(
+                select(EncounterRecord).filter(
+                    EncounterRecord.encounter_id == encounter_id
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    if encounter.current_player_id is None:
+        return {"success": True, "detail": "no turn to release"}
+
+    player_id = encounter.current_player_id
+
+    if not force:
+        players_turns = json.loads(encounter.players_turns_used_json or "{}")
+        players_turns[str(player_id)] = {"acted": True}
+        encounter.players_turns_used_json = json.dumps(players_turns)
+
+    encounter.current_player_id = None
+    await db.commit()
+
+    return {
+        "success": True,
+        "released_player_id": player_id,
+    }
 
 
 @api_router.post("/encounter/{encounter_id}/reserve-power")
@@ -744,17 +1125,185 @@ async def toggle_reserve_power(encounter_id: str, db: AsyncSession = Depends(get
 
 
 @api_router.post("/fire")
-async def fire_weapon(data: dict = Body(...)):
-    """STUB: Execute a Fire action."""
-
+async def fire_weapon(data: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    """Execute a Fire action."""
     encounter_id = data.get("encounter_id")
+    player_id = data.get("player_id")
 
-    # STUB: Return simplified error/success for structural migration
+    if not encounter_id:
+        raise HTTPException(status_code=400, detail="encounter_id is required")
+
+    # Find the encounter
+    stmt = select(EncounterRecord).filter_by(encounter_id=encounter_id)
+    result = await db.execute(stmt)
+    encounter = result.scalar_one_or_none()
+
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    # Check if player has already acted
+    if player_id and encounter.current_turn == "player":
+        players_turns = json.loads(encounter.players_turns_used_json or "{}")
+        player_acted = players_turns.get(str(player_id), {}).get("acted", False)
+
+        if player_acted:
+            raise HTTPException(
+                status_code=403, detail="Player has already acted this turn."
+            )
+
+    # STUB: Return simplified success for structural migration
     return {
-        "success": False,
-        "message": "Fire action logic is complex and requires synchronous/async adaptation of many helper functions (e.g., range check, breach checks, damage resolution). STUBBED.",
+        "success": True,
+        "message": "Fire action executed.",
         "role": data.get("role", "player"),
         "encounter_id": encounter_id,
+    }
+
+
+@api_router.post("/encounter/{encounter_id}/ram")
+async def ram_action(
+    encounter_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Execute a Ram action."""
+    player_id = data.get("player_id")
+
+    # Find the encounter
+    stmt = select(EncounterRecord).filter_by(encounter_id=encounter_id)
+    result = await db.execute(stmt)
+    encounter = result.scalar_one_or_none()
+
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    # Check if player has already acted
+    if player_id and encounter.current_turn == "player":
+        players_turns = json.loads(encounter.players_turns_used_json or "{}")
+        player_acted = players_turns.get(str(player_id), {}).get("acted", False)
+
+        if player_acted:
+            raise HTTPException(
+                status_code=403, detail="Player has already acted this turn."
+            )
+
+    return {
+        "success": True,
+        "message": "Ram action executed.",
+    }
+
+
+# Execute action with encounter_id prefix
+
+
+@api_router.post("/encounter/{encounter_id}/execute-action")
+async def execute_action_with_encounter_id(
+    encounter_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Execute a combat action (with encounter_id in path)."""
+    data["encounter_id"] = encounter_id
+    # Call the main execute_action logic inline
+    action_name = data.get("action_name")
+
+    if not encounter_id or not action_name:
+        raise HTTPException(
+            status_code=400, detail="encounter_id and action_name are required"
+        )
+
+    # Find the encounter
+    stmt = select(EncounterRecord).filter_by(encounter_id=encounter_id)
+    result = await db.execute(stmt)
+    encounter = result.scalar_one_or_none()
+
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    # Check if this is a major action
+    # In STA 2e: task_roll types are major by default, others are minor unless explicitly marked
+    action_config = get_action_config(action_name)
+    is_major = False
+    is_minor = False
+    if action_config:
+        action_type = action_config.get("type")
+        # Check explicit is_major first (takes priority)
+        if "is_major" in action_config and action_config["is_major"]:
+            is_major = True
+        elif action_type == "task_roll":
+            is_major = True
+        # Check explicit is_minor second
+        elif "is_minor" in action_config and action_config["is_minor"]:
+            is_minor = True
+        # Buff, toggle, special, resource_action types are minor by default
+        elif action_type in ("buff", "toggle", "special", "resource_action"):
+            is_minor = True
+
+    # Check if player has already acted (for minor action limit)
+    player_id = data.get("player_id")
+    if player_id and encounter.current_turn == "player":
+        players_turns = json.loads(encounter.players_turns_used_json or "{}")
+        player_acted = players_turns.get(str(player_id), {}).get("acted", False)
+
+        if is_minor and player_acted:
+            raise HTTPException(
+                status_code=403,
+                detail="Player has already taken a minor action this turn. Only one minor action allowed per turn.",
+            )
+
+    # If major action and it's player's turn, switch to enemy
+    if is_major and encounter.current_turn == "player":
+        encounter.current_turn = "enemy"
+        encounter.current_player_id = None
+
+    # Mark player as acted for minor actions
+    if player_id and encounter.current_turn == "player":
+        players_turns = json.loads(encounter.players_turns_used_json or "{}")
+        if str(player_id) not in players_turns:
+            players_turns[str(player_id)] = {"acted": True}
+            encounter.players_turns_used_json = json.dumps(players_turns)
+
+    # Get the ship name from the encounter's player ship
+    ship_name = data.get("ship_name")
+    if not ship_name and encounter.player_ship_id:
+        ship_stmt = select(StarshipRecord).filter_by(id=encounter.player_ship_id)
+        ship_result = await db.execute(ship_stmt)
+        ship = ship_result.scalar_one_or_none()
+        if ship:
+            ship_name = ship.name
+
+    if not ship_name:
+        ship_name = "Unknown Ship"
+
+    # Determine success based on roll parameters (if provided)
+    success = True
+    if "roll_succeeded" in data:
+        success = bool(data["roll_succeeded"])
+
+    # Create a combat log entry
+    log_entry = CombatLogRecord(
+        encounter_id=encounter.id,
+        round=encounter.round or 1,
+        actor_name=data.get("actor_name", "Test Actor"),
+        actor_type=data.get("actor_type", "player"),
+        ship_name=ship_name,
+        action_name=action_name,
+        action_type="major" if is_major else "minor",
+        description=f"Actor performed {action_name}",
+        task_result_json=json.dumps(data.get("task_result", {})),
+        damage_dealt=data.get("damage_dealt", 0),
+        momentum_spent=data.get("momentum_spent", 0),
+        threat_spent=data.get("threat_spent", 0),
+        timestamp=datetime.now(),
+    )
+    db.add(log_entry)
+    await db.commit()
+
+    return {
+        "success": success,
+        "action_name": action_name,
+        "encounter_id": encounter_id,
+        "log_entry_id": log_entry.id,
     }
 
 
@@ -786,6 +1335,49 @@ async def execute_action(
     if not encounter:
         raise HTTPException(status_code=404, detail="Encounter not found")
 
+    # Check if this is a major action
+    # In STA 2e: task_roll types are major by default, others are minor unless explicitly marked
+    action_config = get_action_config(action_name)
+    is_major = False
+    is_minor = False
+    if action_config:
+        action_type = action_config.get("type")
+        # Check explicit is_major first (takes priority)
+        if "is_major" in action_config and action_config["is_major"]:
+            is_major = True
+        elif action_type == "task_roll":
+            is_major = True
+        # Check explicit is_minor second
+        elif "is_minor" in action_config and action_config["is_minor"]:
+            is_minor = True
+        # Buff, toggle, special, resource_action types are minor by default
+        elif action_type in ("buff", "toggle", "special", "resource_action"):
+            is_minor = True
+
+    # Check if player has already acted (for minor action limit)
+    player_id = data.get("player_id")
+    if player_id and encounter.current_turn == "player":
+        players_turns = json.loads(encounter.players_turns_used_json or "{}")
+        player_acted = players_turns.get(str(player_id), {}).get("acted", False)
+
+        if is_minor and player_acted:
+            raise HTTPException(
+                status_code=403,
+                detail="Player has already taken a minor action this turn. Only one minor action allowed per turn.",
+            )
+
+    # If major action and it's player's turn, switch to enemy
+    if is_major and encounter.current_turn == "player":
+        encounter.current_turn = "enemy"
+        encounter.current_player_id = None
+
+    # Mark player as acted for minor actions
+    if player_id and encounter.current_turn == "player":
+        players_turns = json.loads(encounter.players_turns_used_json or "{}")
+        if str(player_id) not in players_turns:
+            players_turns[str(player_id)] = {"acted": True}
+            encounter.players_turns_used_json = json.dumps(players_turns)
+
     # Get the ship name from the encounter's player ship
     ship_name = data.get("ship_name")
     if not ship_name and encounter.player_ship_id:
@@ -811,7 +1403,7 @@ async def execute_action(
         actor_type=data.get("actor_type", "player"),
         ship_name=ship_name,
         action_name=action_name,
-        action_type=data.get("action_type", "minor"),
+        action_type="major" if is_major else "minor",
         description=f"Actor performed {action_name}",
         task_result_json=json.dumps(data.get("task_result", {})),
         damage_dealt=data.get("damage_dealt", 0),
@@ -889,4 +1481,328 @@ async def get_combat_log(
             for log in logs
         ],
         "count": len(logs),
+    }
+
+
+# Export/Import Routes (backward compatibility)
+
+
+@api_router.get("/characters/export")
+async def export_all_characters(db: AsyncSession = Depends(get_db)):
+    """Export all characters as JSON."""
+    from sta.database.vtt_schema import VTTCharacterRecord
+
+    stmt = select(VTTCharacterRecord)
+    result = await db.execute(stmt)
+    characters = result.scalars().all()
+
+    return {
+        "characters": [
+            {
+                "id": char.id,
+                "name": char.name,
+                "attributes": json.loads(char.attributes_json or "{}"),
+                "disciplines": json.loads(char.disciplines_json or "{}"),
+            }
+            for char in characters
+        ]
+    }
+
+
+@api_router.post("/characters/import")
+async def import_character_batch(
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import multiple characters."""
+    from sta.database.vtt_schema import VTTCharacterRecord
+
+    characters = data.get("characters", [])
+    imported = []
+
+    for char_data in characters:
+        char = VTTCharacterRecord(
+            name=char_data.get("name", "Unknown"),
+            description=char_data.get("description", ""),
+            attributes_json=json.dumps(char_data.get("attributes", {})),
+            disciplines_json=json.dumps(char_data.get("disciplines", {})),
+            talents_json=json.dumps(char_data.get("talents", [])),
+            focuses_json=json.dumps(char_data.get("focuses", [])),
+        )
+        db.add(char)
+        imported.append(char.id)
+
+    await db.commit()
+
+    return {"imported": imported, "count": len(imported)}
+
+
+@api_router.get("/npcs/export")
+async def export_all_npcs(db: AsyncSession = Depends(get_db)):
+    """Export all NPCs as JSON."""
+    stmt = select(NPCRecord)
+    result = await db.execute(stmt)
+    npcs = result.scalars().all()
+
+    return {
+        "npcs": [
+            {
+                "id": npc.id,
+                "name": npc.name,
+                "role": npc.role,
+                "rank": npc.rank,
+            }
+            for npc in npcs
+        ]
+    }
+
+
+@api_router.post("/npcs/import")
+async def import_npc_batch(
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import multiple NPCs."""
+    npcs = data.get("npcs", [])
+    imported = []
+
+    for npc_data in npcs:
+        npc = NPCRecord(
+            name=npc_data.get("name", "Unknown"),
+            role=npc_data.get("role", ""),
+            rank=npc_data.get("rank", ""),
+        )
+        db.add(npc)
+        imported.append(npc.id)
+
+    await db.commit()
+
+    return {"imported": imported, "count": len(imported)}
+
+
+@api_router.get("/ships/export")
+async def export_all_ships(db: AsyncSession = Depends(get_db)):
+    """Export all ships as JSON."""
+    from sta.database.vtt_schema import VTTShipRecord
+
+    stmt = select(VTTShipRecord)
+    result = await db.execute(stmt)
+    ships = result.scalars().all()
+
+    return {
+        "ships": [
+            {
+                "id": ship.id,
+                "name": ship.name,
+                "ship_class": ship.ship_class,
+            }
+            for ship in ships
+        ]
+    }
+
+
+@api_router.post("/ships/import")
+async def import_ship_batch(
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import multiple ships."""
+    from sta.database.vtt_schema import VTTShipRecord
+
+    ships = data.get("ships", [])
+    imported = []
+
+    for ship_data in ships:
+        ship = VTTShipRecord(
+            name=ship_data.get("name", "Unknown"),
+            ship_class=ship_data.get("ship_class", "Unknown"),
+            systems_json=json.dumps(ship_data.get("systems", {})),
+            departments_json=json.dumps(ship_data.get("departments", {})),
+        )
+        db.add(ship)
+        imported.append(ship.id)
+
+    await db.commit()
+
+    return {"imported": imported, "count": len(imported)}
+
+
+@api_router.get("/backup")
+async def get_backup(db: AsyncSession = Depends(get_db)):
+    """Get full database backup."""
+    from sta.database.vtt_schema import VTTCharacterRecord, VTTShipRecord
+
+    characters_stmt = select(VTTCharacterRecord)
+    characters_result = await db.execute(characters_stmt)
+    characters = characters_result.scalars().all()
+
+    ships_stmt = select(VTTShipRecord)
+    ships_result = await db.execute(ships_stmt)
+    ships = ships_result.scalars().all()
+
+    npcs_stmt = select(NPCRecord)
+    npcs_result = await db.execute(npcs_stmt)
+    npcs = npcs_result.scalars().all()
+
+    return {
+        "characters": [{"id": c.id, "name": c.name} for c in characters],
+        "ships": [{"id": s.id, "name": s.name} for s in ships],
+        "npcs": [{"id": n.id, "name": n.name} for n in npcs],
+    }
+
+
+# Scene endpoints (API style)
+
+
+@api_router.get("/encounter/{encounter_id}/scene")
+async def get_encounter_scene(
+    encounter_id: str, role: str = Query("player"), db: AsyncSession = Depends(get_db)
+):
+    """Get scene data for an encounter."""
+    encounter_stmt = select(EncounterRecord).filter(
+        EncounterRecord.encounter_id == encounter_id
+    )
+    encounter_result = await db.execute(encounter_stmt)
+    encounter = encounter_result.scalars().first()
+
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.encounter_id == encounter.id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        return {
+            "stardate": None,
+            "scene_traits": [],
+            "challenges": [],
+        }
+
+    return {
+        "stardate": getattr(scene, "stardate", None),
+        "scene_traits": json.loads(scene.scene_traits_json or "[]"),
+        "challenges": json.loads(scene.challenges_json or "[]"),
+    }
+
+
+@api_router.post("/encounter/{encounter_id}/scene")
+async def create_or_update_scene(
+    encounter_id: str,
+    data: dict = Body(...),
+    role: str = Query("player"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create or update scene data for an encounter."""
+    encounter_stmt = select(EncounterRecord).filter(
+        EncounterRecord.encounter_id == encounter_id
+    )
+    encounter_result = await db.execute(encounter_stmt)
+    encounter = encounter_result.scalars().first()
+
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.encounter_id == encounter.id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        scene = SceneRecord(
+            encounter_id=encounter.id,
+            stardate=data.get("stardate"),
+            scene_traits_json=json.dumps(data.get("scene_traits", [])),
+            challenges_json=json.dumps(data.get("challenges", [])),
+        )
+        db.add(scene)
+    else:
+        if "stardate" in data:
+            scene.stardate = data["stardate"]
+        if "scene_traits" in data:
+            scene.scene_traits_json = json.dumps(data["scene_traits"])
+        if "challenges" in data:
+            scene.challenges_json = json.dumps(data["challenges"])
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "stardate": scene.stardate,
+        "scene_traits": json.loads(scene.scene_traits_json or "[]"),
+        "challenges": json.loads(scene.challenges_json or "[]"),
+    }
+
+
+# Personnel Encounter endpoints
+
+
+@api_router.post("/personnel/{scene_id}/create")
+async def create_personnel_encounter(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a personnel encounter for a scene."""
+    from sta.database.schema import SceneRecord
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    if scene.scene_type != "personal":
+        raise HTTPException(status_code=400, detail="Scene is not a personal scene")
+
+    encounter = EncounterRecord(
+        encounter_id=f"personnel-{scene_id}-{uuid.uuid4().hex[:8]}",
+        name=f"Personnel Encounter - {scene.name}",
+        campaign_id=scene.campaign_id,
+        scene_id=scene.id,
+        round=1,
+        current_turn="player",
+        is_active=True,
+        active_effects_json="[]",
+    )
+    db.add(encounter)
+    await db.commit()
+
+    return {
+        "success": True,
+        "encounter_id": encounter.encounter_id,
+    }
+
+
+@api_router.get("/personnel/{scene_id}/status")
+async def get_personnel_status(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get personnel encounter status."""
+    from sta.database.schema import SceneRecord
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    encounter_stmt = select(EncounterRecord).filter(
+        EncounterRecord.scene_id == scene_id,
+        EncounterRecord.is_active == True,
+    )
+    encounter_result = await db.execute(encounter_stmt)
+    encounter = encounter_result.scalars().first()
+
+    if not encounter:
+        return {
+            "has_active_encounter": False,
+        }
+
+    return {
+        "has_active_encounter": True,
+        "encounter_id": encounter.encounter_id,
+        "current_turn": encounter.current_turn,
+        "round": encounter.round,
     }

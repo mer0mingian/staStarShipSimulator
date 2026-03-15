@@ -1,4 +1,5 @@
 import pytest
+
 """
 Tests for session token system including expiration and refresh.
 
@@ -10,6 +11,7 @@ These tests verify that:
 
 import json
 from datetime import datetime, timedelta
+from sqlalchemy import select
 from sta.database.schema import CampaignRecord, CampaignPlayerRecord, CharacterRecord
 
 
@@ -34,18 +36,21 @@ class TestTokenCreation:
         # Get the GM player record from the database
         # The response should have set a cookie with the GM token
         # But to query DB, we need to get campaign by name
-        campaign = (
-            test_session.query(CampaignRecord)
-            .filter_by(name="Expiration Test Campaign")
-            .first()
+        result = await test_session.execute(
+            select(CampaignRecord).filter(
+                CampaignRecord.name == "Expiration Test Campaign"
+            )
         )
+        campaign = result.scalars().first()
         assert campaign is not None
 
-        gm = (
-            test_session.query(CampaignPlayerRecord)
-            .filter_by(campaign_id=campaign.id, is_gm=True)
-            .first()
+        result = await test_session.execute(
+            select(CampaignPlayerRecord).filter(
+                CampaignPlayerRecord.campaign_id == campaign.id,
+                CampaignPlayerRecord.is_gm == True,
+            )
         )
+        gm = result.scalars().first()
         assert gm is not None
         assert gm.session_token is not None
         # Token should have expiration set to about 30 days in future
@@ -67,14 +72,16 @@ class TestTokenCreation:
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/players",
             json={"action": "create", "name": "Claim Exp Test Char"},
-            
         )
         assert response.status_code == 200
         data = response.json()
         player_id = data["player"]["id"]
 
         # Verify the new player has an unclaimed token (no expiration)
-        new_player = test_session.query(CampaignPlayerRecord).get(player_id)
+        result = await test_session.execute(
+            select(CampaignPlayerRecord).filter(CampaignPlayerRecord.id == player_id)
+        )
+        new_player = result.scalars().first()
         await test_session.refresh(new_player)
         assert new_player.session_token.startswith("unclaimed_")
         assert new_player.token_expires_at is None
@@ -138,7 +145,9 @@ class TestTokenRefresh:
         assert new_token in set_cookie
 
     @pytest.mark.asyncio
-    async def test_refresh_with_no_token_fails(self, client, test_session, sample_campaign):
+    async def test_refresh_with_no_token_fails(
+        self, client, test_session, sample_campaign
+    ):
         """Test that refresh without a session token returns 401."""
         campaign = sample_campaign["campaign"]
         # Ensure no cookie is set
@@ -167,7 +176,9 @@ class TestTokenRefresh:
         assert "Invalid session token" in data["detail"]
 
     @pytest.mark.asyncio
-    async def test_refresh_expired_token_fails(self, client, test_session, sample_campaign):
+    async def test_refresh_expired_token_fails(
+        self, client, test_session, sample_campaign
+    ):
         """Test that refreshing with an expired token returns 401."""
         campaign = sample_campaign["campaign"]
         player = CampaignPlayerRecord(
@@ -227,7 +238,9 @@ class TestExpirationEnforcement:
         pass
 
     @pytest.mark.asyncio
-    async def test_valid_token_access_allowed(self, client, test_session, sample_campaign):
+    async def test_valid_token_access_allowed(
+        self, client, test_session, sample_campaign
+    ):
         """Test that a valid token can access player_dashboard."""
         campaign = sample_campaign["campaign"]
         player = CampaignPlayerRecord(

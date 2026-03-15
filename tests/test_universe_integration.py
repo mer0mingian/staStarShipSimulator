@@ -49,7 +49,9 @@ class TestUniverseLibraryIntegration:
         assert data[1]["name"] == "NPC Character"
 
     @pytest.mark.asyncio
-    async def test_list_library_characters_filter_by_category(self, client, test_session):
+    async def test_list_library_characters_filter_by_category(
+        self, client, test_session
+    ):
         """GET /api/universe/characters should filter by category."""
         item1 = UniverseItemRecord(
             name="PC",
@@ -335,7 +337,9 @@ class TestAvailableItemsForCampaign:
         test_session.add(universe_item)
         await test_session.commit()
 
-        response = client.get(f"/api/campaigns/{campaign.id}/characters/available")
+        response = client.get(
+            f"/api/universe/campaigns/{campaign.id}/characters/available"
+        )
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
@@ -343,7 +347,9 @@ class TestAvailableItemsForCampaign:
         assert data[0]["already_in_campaign"] is False
 
     @pytest.mark.asyncio
-    async def test_available_characters_shows_already_in_campaign(self, client, test_session):
+    async def test_available_characters_shows_already_in_campaign(
+        self, client, test_session
+    ):
         """GET /api/campaigns/<id>/characters/available should mark items already in campaign."""
         campaign = CampaignRecord(campaign_id="test-avail-002", name="Test Campaign")
         test_session.add(campaign)
@@ -367,7 +373,9 @@ class TestAvailableItemsForCampaign:
         test_session.add(existing_char)
         await test_session.commit()
 
-        response = client.get(f"/api/campaigns/{campaign.id}/characters/available")
+        response = client.get(
+            f"/api/universe/campaigns/{campaign.id}/characters/available"
+        )
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
@@ -395,7 +403,7 @@ class TestAvailableItemsForCampaign:
         test_session.add(universe_item)
         await test_session.commit()
 
-        response = client.get(f"/api/campaigns/{campaign.id}/ships/available")
+        response = client.get(f"/api/universe/campaigns/{campaign.id}/ships/available")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
@@ -403,7 +411,9 @@ class TestAvailableItemsForCampaign:
         assert data[0]["already_in_campaign"] is False
 
     @pytest.mark.asyncio
-    async def test_available_ships_shows_already_in_campaign(self, client, test_session):
+    async def test_available_ships_shows_already_in_campaign(
+        self, client, test_session
+    ):
         """GET /api/campaigns/<id>/ships/available should mark items already in campaign."""
         campaign = CampaignRecord(campaign_id="test-avail-004", name="Test Campaign")
         test_session.add(campaign)
@@ -433,7 +443,7 @@ class TestAvailableItemsForCampaign:
         test_session.add(existing_ship)
         await test_session.commit()
 
-        response = client.get(f"/api/campaigns/{campaign.id}/ships/available")
+        response = client.get(f"/api/universe/campaigns/{campaign.id}/ships/available")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1

@@ -13,6 +13,7 @@ Note: Unclaimed characters have session_token starting with "unclaimed_"
 
 import json
 import pytest
+from sqlalchemy import select
 from sta.database.schema import CampaignRecord, CampaignPlayerRecord, CharacterRecord
 
 
@@ -46,15 +47,17 @@ class TestCharacterClaimingAPI:
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/players",
             json={"action": "create", "name": "Test Character"},
-            
         )
         assert response.status_code == 200
 
         # Verify the new player has an unclaimed token
-        new_player = test_session.query(CampaignPlayerRecord).filter_by(
-            campaign_id=campaign.id,
-            is_gm=False
-        ).first()
+        result = await test_session.execute(
+            select(CampaignPlayerRecord).filter(
+                CampaignPlayerRecord.campaign_id == campaign.id,
+                CampaignPlayerRecord.is_gm == False,
+            )
+        )
+        new_player = result.scalars().first()
         assert new_player is not None
         assert new_player.session_token.startswith("unclaimed_")
 

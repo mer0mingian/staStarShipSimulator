@@ -372,7 +372,7 @@ async def get_ship_model(ship_id: int, db: AsyncSession = Depends(get_db)):
             "comms": model.systems.comms,
             "computers": model.systems.computers,
             "engines": model.systems.engines,
-            "sensors": model.sensors,
+            "sensors": model.systems.sensors,
             "structure": model.systems.structure,
             "weapons": model.systems.weapons,
         },
@@ -646,4 +646,58 @@ async def set_crew_quality(
 
     return {
         "crew_quality": ship.crew_quality,
+    }
+
+
+# Export endpoint
+@ships_router.get("/ships/{ship_id}/export")
+async def export_ship(
+    ship_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Export a VTT ship as JSON."""
+    ship = (
+        (await db.execute(select(VTTShipRecord).filter(VTTShipRecord.id == ship_id)))
+        .scalars()
+        .first()
+    )
+    if not ship:
+        raise HTTPException(status_code=404, detail="Ship not found")
+
+    return {
+        "id": ship.id,
+        "name": ship.name,
+        "ship_class": ship.ship_class,
+        "systems": json.loads(ship.systems_json or "{}"),
+        "departments": json.loads(ship.departments_json or "{}"),
+        "weapons": json.loads(ship.weapons_json or "[]"),
+        "talents": json.loads(ship.talents_json or "[]"),
+    }
+
+
+@ships_router.post("/ships/import")
+async def import_ship(
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import a VTT ship from JSON."""
+    name = data.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    ship = VTTShipRecord(
+        name=name,
+        ship_class=data.get("ship_class", "Unknown"),
+        systems_json=json.dumps(data.get("systems", {})),
+        departments_json=json.dumps(data.get("departments", {})),
+        weapons_json=json.dumps(data.get("weapons", [])),
+        talents_json=json.dumps(data.get("talents", [])),
+    )
+    db.add(ship)
+    await db.commit()
+
+    return {
+        "id": ship.id,
+        "name": ship.name,
+        "success": True,
     }

@@ -2,6 +2,7 @@
 
 import json
 import pytest
+from sqlalchemy import select
 
 
 @pytest.fixture
@@ -307,7 +308,6 @@ class TestCharacterExportImport:
         response = client.post(
             "/api/characters/import",
             data=json.dumps(import_data),
-            
         )
 
         assert response.status_code == 200
@@ -319,9 +319,10 @@ class TestCharacterExportImport:
         # Verify character was added
         from sta.database.schema import CharacterRecord
 
-        char = (
-            test_session.query(CharacterRecord).filter_by(name="New Character").first()
+        result = await test_session.execute(
+            select(CharacterRecord).filter(CharacterRecord.name == "New Character")
         )
+        char = result.scalars().first()
         assert char is not None
         assert char.species == "Human"
 
@@ -360,7 +361,6 @@ class TestCharacterExportImport:
         response = client.post(
             "/api/characters/import",
             data=json.dumps(import_data),
-            
         )
 
         assert response.status_code == 200
@@ -372,9 +372,10 @@ class TestCharacterExportImport:
         # Verify character was updated
         from sta.database.schema import CharacterRecord
 
-        char = (
-            test_session.query(CharacterRecord).filter_by(name="Captain Picard").first()
+        result = await test_session.execute(
+            select(CharacterRecord).filter(CharacterRecord.name == "Captain Picard")
         )
+        char = result.scalars().first()
         assert char.rank == "Captain (Updated)"
 
     @pytest.mark.asyncio
@@ -428,7 +429,6 @@ class TestCharacterExportImport:
         response = client.post(
             "/api/characters/import",
             data=json.dumps(import_data),
-            
         )
 
         assert response.status_code == 200
@@ -441,7 +441,6 @@ class TestCharacterExportImport:
         response = client.post(
             "/api/characters/import",
             data=json.dumps({"something": "else"}),
-            
         )
 
         assert response.status_code == 400
@@ -458,7 +457,6 @@ class TestCharacterExportImport:
         response = client.post(
             "/api/characters/import",
             data=json.dumps(import_data),
-            
         )
 
         assert response.status_code == 200
@@ -500,7 +498,6 @@ class TestNPCExportImport:
         response = client.post(
             "/api/npcs/import",
             data=json.dumps(import_data),
-            
         )
 
         assert response.status_code == 200
@@ -510,7 +507,10 @@ class TestNPCExportImport:
 
         from sta.database.schema import NPCRecord
 
-        npc = test_session.query(NPCRecord).filter_by(name="New NPC").first()
+        result = await test_session.execute(
+            select(NPCRecord).filter(NPCRecord.name == "New NPC")
+        )
+        npc = result.scalars().first()
         assert npc is not None
         assert npc.affiliation == "Klingon"
 
@@ -530,7 +530,6 @@ class TestNPCExportImport:
         response = client.post(
             "/api/npcs/import",
             data=json.dumps(import_data),
-            
         )
 
         assert response.status_code == 200
@@ -539,7 +538,10 @@ class TestNPCExportImport:
 
         from sta.database.schema import NPCRecord
 
-        npc = test_session.query(NPCRecord).filter_by(name="Ambassador Spock").first()
+        result = await test_session.execute(
+            select(NPCRecord).filter(NPCRecord.name == "Ambassador Spock")
+        )
+        npc = result.scalars().first()
         assert npc.affiliation == "Federation (Updated)"
 
 
@@ -595,7 +597,6 @@ class TestShipExportImport:
         response = client.post(
             "/api/ships/import",
             data=json.dumps(import_data),
-            
         )
 
         assert response.status_code == 200
@@ -605,12 +606,17 @@ class TestShipExportImport:
 
         from sta.database.schema import StarshipRecord
 
-        ship = test_session.query(StarshipRecord).filter_by(name="New Ship").first()
+        result = await test_session.execute(
+            select(StarshipRecord).filter(StarshipRecord.name == "New Ship")
+        )
+        ship = result.scalars().first()
         assert ship is not None
         assert ship.ship_class == "Defiant-class"
 
     @pytest.mark.asyncio
-    async def test_import_updates_existing_ship(self, client, sample_ships, test_session):
+    async def test_import_updates_existing_ship(
+        self, client, sample_ships, test_session
+    ):
         """Test importing updates existing ship by name."""
         import_data = {
             "ships": [
@@ -641,7 +647,6 @@ class TestShipExportImport:
         response = client.post(
             "/api/ships/import",
             data=json.dumps(import_data),
-            
         )
 
         assert response.status_code == 200
@@ -650,9 +655,10 @@ class TestShipExportImport:
 
         from sta.database.schema import StarshipRecord
 
-        ship = (
-            test_session.query(StarshipRecord).filter_by(name="USS Enterprise").first()
+        result = await test_session.execute(
+            select(StarshipRecord).filter(StarshipRecord.name == "USS Enterprise")
         )
+        ship = result.scalars().first()
         assert ship.ship_registry == "NCC-1701"  # Preserved
 
 

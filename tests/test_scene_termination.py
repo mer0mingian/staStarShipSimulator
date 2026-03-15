@@ -3,6 +3,7 @@
 import json
 import uuid
 import pytest
+from sqlalchemy import select
 from sta.database import (
     SceneRecord,
     CampaignRecord,
@@ -91,19 +92,24 @@ class TestSceneTerminationAPI:
         await test_session.commit()
 
         # Verify scene completed
-        updated_scene = test_session.query(SceneRecord).filter_by(id=scene_id).first()
+        result = await test_session.execute(
+            select(SceneRecord).filter(SceneRecord.id == scene_id)
+        )
+        updated_scene = result.scalars().first()
         assert updated_scene.status == "completed"
 
         # Verify encounter deactivated
-        updated_encounter = (
-            test_session.query(EncounterRecord).filter_by(id=encounter_id).first()
+        result = await test_session.execute(
+            select(EncounterRecord).filter(EncounterRecord.id == encounter_id)
         )
+        updated_encounter = result.scalars().first()
         assert updated_encounter.is_active is False
 
         # Verify campaign momentum reduced
-        updated_campaign = (
-            test_session.query(CampaignRecord).filter_by(id=campaign.id).first()
+        result = await test_session.execute(
+            select(CampaignRecord).filter(CampaignRecord.id == campaign.id)
         )
+        updated_campaign = result.scalars().first()
         assert updated_campaign.momentum == 2
 
     @pytest.mark.asyncio
@@ -131,13 +137,19 @@ class TestSceneTerminationAPI:
         await test_session.commit()
 
         # Verify personnel encounter deactivated
-        updated_pe = (
-            test_session.query(PersonnelEncounterRecord).filter_by(id=pe_id).first()
+        result = await test_session.execute(
+            select(PersonnelEncounterRecord).filter(
+                PersonnelEncounterRecord.id == pe_id
+            )
         )
+        updated_pe = result.scalars().first()
         assert updated_pe.is_active is False
 
         # Verify scene completed
-        updated_scene = test_session.query(SceneRecord).filter_by(id=scene_id).first()
+        result = await test_session.execute(
+            select(SceneRecord).filter(SceneRecord.id == scene_id)
+        )
+        updated_scene = result.scalars().first()
         assert updated_scene.status == "completed"
 
     @pytest.mark.asyncio

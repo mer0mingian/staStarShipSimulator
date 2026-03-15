@@ -18,6 +18,7 @@ from fastapi import (
     Form,
     Query,
     Cookie,
+    Body,
 )
 
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -302,7 +303,7 @@ async def api_create_player(
         CampaignRecord.campaign_id == campaign_id
     )
     campaign_result = await db.execute(campaign_stmt)
-    campaign = campaign_stmt.scalars().first()
+    campaign = campaign_result.scalars().first()
 
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
@@ -439,7 +440,7 @@ async def api_update_player_position(
         CampaignRecord.campaign_id == campaign_id
     )
     campaign_result = await db.execute(campaign_stmt)
-    campaign = campaign_stmt.scalars().first()
+    campaign = campaign_result.scalars().first()
 
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
@@ -516,7 +517,7 @@ async def api_remove_player(
         CampaignRecord.campaign_id == campaign_id
     )
     campaign_result = await db.execute(campaign_stmt)
-    campaign = campaign_stmt.scalars().first()
+    campaign = campaign_result.scalars().first()
 
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
@@ -682,6 +683,128 @@ async def get_campaign_available_ships(
     return result
 
 
+# =============================================================================
+# VTT Character/Ship Linking
+# =============================================================================
+
+
+@campaigns_router.post("/api/campaign/{campaign_id}/link-character")
+async def link_vtt_character_to_player(
+    campaign_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Link a VTT character to a campaign player (GM only)."""
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    player_id = data.get("player_id")
+    vtt_character_id = data.get("vtt_character_id")
+
+    if player_id is None:
+        raise HTTPException(status_code=400, detail="player_id is required")
+
+    if vtt_character_id is None:
+        raise HTTPException(status_code=400, detail="vtt_character_id is required")
+
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.campaign_id == campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    gm_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.session_token == sta_session_token,
+        CampaignPlayerRecord.campaign_id == campaign.id,
+        CampaignPlayerRecord.is_gm == True,
+    )
+    gm_result = await db.execute(gm_stmt)
+    gm = gm_result.scalars().first()
+
+    if not gm:
+        raise HTTPException(status_code=403, detail="GM authentication required")
+
+    player_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.id == player_id,
+        CampaignPlayerRecord.campaign_id == campaign.id,
+    )
+    player_result = await db.execute(player_stmt)
+    player = player_result.scalars().first()
+
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    player.vtt_character_id = vtt_character_id
+    await db.commit()
+
+    return {"success": True, "vtt_character_id": vtt_character_id}
+
+
+@campaigns_router.post("/api/campaign/{campaign_id}/link-ship")
+async def link_vtt_ship_to_campaign(
+    campaign_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Link a VTT ship to a campaign ship (GM only)."""
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    campaign_ship_id = data.get("campaign_ship_id")
+    vtt_ship_id = data.get("vtt_ship_id")
+
+    if campaign_ship_id is None:
+        raise HTTPException(status_code=400, detail="campaign_ship_id is required")
+
+    if vtt_ship_id is None:
+        raise HTTPException(status_code=400, detail="vtt_ship_id is required")
+
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.campaign_id == campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    gm_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.session_token == sta_session_token,
+        CampaignPlayerRecord.campaign_id == campaign.id,
+        CampaignPlayerRecord.is_gm == True,
+    )
+    gm_result = await db.execute(gm_stmt)
+    gm = gm_result.scalars().first()
+
+    if not gm:
+        raise HTTPException(status_code=403, detail="GM authentication required")
+
+    ship_stmt = select(CampaignShipRecord).filter(
+        CampaignShipRecord.id == campaign_ship_id,
+        CampaignShipRecord.campaign_id == campaign.id,
+    )
+    ship_result = await db.execute(ship_stmt)
+    campaign_ship = ship_result.scalars().first()
+
+    if not campaign_ship:
+        raise HTTPException(status_code=404, detail="Campaign ship not found")
+
+    campaign_ship.vtt_ship_id = vtt_ship_id
+    await db.commit()
+
+    return {"success": True, "vtt_ship_id": vtt_ship_id}
+
+
+# =============================================================================
+# Random Campaign Generation
+# =============================================================================
+
+
 @campaigns_router.post("/api/generate-random")
 async def api_generate_random_campaign(db: AsyncSession = Depends(get_db)):
     """API: Generate a random campaign with ship and encounter ready to go."""
@@ -783,3 +906,176 @@ async def api_generate_random_campaign(db: AsyncSession = Depends(get_db)):
         "campaign_name": campaign_name,
         "ship_name": ship.name,
     }
+
+
+# =============================================================================
+# Campaign Resource Management
+# =============================================================================
+
+
+@campaigns_router.get("/api/campaign/{campaign_id}/resources")
+async def get_campaign_resources(
+    campaign_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get campaign momentum and threat resources."""
+    stmt = select(CampaignRecord).filter(CampaignRecord.campaign_id == campaign_id)
+    result = await db.execute(stmt)
+    campaign = result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    return {
+        "momentum": campaign.momentum or 0,
+        "threat": campaign.threat or 0,
+        "momentum_max": 6,
+    }
+
+
+@campaigns_router.post("/api/campaign/{campaign_id}/momentum")
+async def update_campaign_momentum(
+    campaign_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update campaign momentum pool."""
+    stmt = select(CampaignRecord).filter(CampaignRecord.campaign_id == campaign_id)
+    result = await db.execute(stmt)
+    campaign = result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    amount = data.get("amount", 0)
+    campaign.momentum = max(0, min(6, (campaign.momentum or 0) + amount))
+    await db.commit()
+
+    return {"momentum": campaign.momentum}
+
+
+@campaigns_router.post("/api/campaign/{campaign_id}/threat")
+async def update_campaign_threat(
+    campaign_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update campaign threat level."""
+    stmt = select(CampaignRecord).filter(CampaignRecord.campaign_id == campaign_id)
+    result = await db.execute(stmt)
+    campaign = result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    amount = data.get("amount", 0)
+    campaign.threat = max(0, (campaign.threat or 0) + amount)
+    await db.commit()
+
+    return {"threat": campaign.threat}
+
+
+# =============================================================================
+# Character Claiming Pages
+# =============================================================================
+
+
+@campaigns_router.get("/{campaign_id}/join")
+async def campaign_join_page(
+    campaign_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Display the character claiming join page."""
+    stmt = select(CampaignRecord).filter(CampaignRecord.campaign_id == campaign_id)
+    result = await db.execute(stmt)
+    campaign = result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    players_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.campaign_id == campaign.id,
+        CampaignPlayerRecord.is_gm == False,
+    )
+    players_result = await db.execute(players_stmt)
+    players = players_result.scalars().all()
+
+    html = "<html><body><h1>Join Campaign</h1><ul>"
+    for player in players:
+        if player.session_token and not player.session_token.startswith("unclaimed_"):
+            continue
+        html += f'<li><a href="/campaigns/{campaign_id}/claim/{player.id}">{player.player_name}</a></li>'
+    html += "</ul></body></html>"
+
+    return {"content": html, "content_type": "text/html"}
+
+
+@campaigns_router.post("/{campaign_id}/join")
+async def claim_character(
+    campaign_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Claim a character for a player."""
+    stmt = select(CampaignRecord).filter(CampaignRecord.campaign_id == campaign_id)
+    result = await db.execute(stmt)
+    campaign = result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    player_id = data.get("player_id")
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id required")
+
+    player_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.id == player_id,
+        CampaignPlayerRecord.campaign_id == campaign.id,
+    )
+    player_result = await db.execute(player_stmt)
+    player = player_result.scalars().first()
+
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    if player.is_gm:
+        raise HTTPException(status_code=400, detail="GM cannot be claimed")
+
+    new_token = secrets.token_urlsafe(32)
+    player.session_token = new_token
+    await db.commit()
+
+    return {
+        "success": True,
+        "session_token": new_token,
+        "redirect": f"/campaigns/{campaign_id}/dashboard",
+    }
+
+
+@campaigns_router.get("/{campaign_id}/switch-character")
+async def switch_character_page(
+    campaign_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Display the character switch page."""
+    stmt = select(CampaignRecord).filter(CampaignRecord.campaign_id == campaign_id)
+    result = await db.execute(stmt)
+    campaign = result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    players_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.campaign_id == campaign.id,
+        CampaignPlayerRecord.is_gm == False,
+    )
+    players_result = await db.execute(players_stmt)
+    players = players_result.scalars().all()
+
+    html = "<html><body><h1>Switch Character</h1><ul>"
+    for player in players:
+        html += f'<li><a href="/campaigns/{campaign_id}/claim/{player.id}">{player.player_name}</a></li>'
+    html += "</ul></body></html>"
+
+    return {"content": html, "content_type": "text/html"}
