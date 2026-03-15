@@ -280,12 +280,51 @@ See `docs/tasks/milestone3_tasks.md` for complete task breakdown.
 
 ---
 
-## Milestone 5: Flask to FastAPI Migration
+## Milestone 5: VTT Scene Lifecycle & Combat Integration
 
 ### Overview
-Complete migration from Flask to FastAPI routing infrastructure.
+Complete migration from Flask to FastAPI and implement new 4-state scene lifecycle with multi-scene support.
 
 ### Status: 🚧 IN PROGRESS
+
+### Scene Lifecycle (NEW - 2026-03-15)
+
+The VTT now supports a 4-state scene lifecycle:
+
+| State | Description | Visibility |
+|-------|-------------|------------|
+| **draft** | No title or player character list | GM only, never visible to players |
+| **ready** | Has title + GM-short-description | Available in scene-transition dialogue |
+| **active** | Currently in progress | All participants, can have multiple |
+| **completed** | Archived | Can be re-activated or copied |
+
+#### State Transitions
+
+```
+draft ──(GM adds title+PCs)──► ready ──(GM activates)──► active ──(GM ends)──► completed
+                                            ▲                      │
+                                            │                      ▼
+                                            └────(re-activate)─────┘
+                                            └────(copy)──────────► ready (new)
+```
+
+#### Scene Transition Dialogue
+
+When completing a scene, GM sees:
+1. **Connected scenes** (first) - scenes linked to current
+2. **Ready scenes** (dropdown last) - available to activate
+3. **Create new scene** - on-the-fly creation
+
+#### Split-Party Support (NEW)
+
+- Multiple scenes can be **active** simultaneously
+- GM can **switch focus** between parallel active scenes
+- **All party members visible** even when not in active scene
+
+#### Connection Termination
+
+- Completing a scene **terminates its connections**
+- Connected scenes must be re-linked after re-activation
 
 ### Tasks
 
@@ -350,6 +389,31 @@ Complete migration from Flask to FastAPI routing infrastructure.
 | Personnel | 10 | Validation |
 | Session Tokens | 8 | Flask redirects |
 | Other | 41 | Various |
+
+### Current Test State (2026-03-15)
+
+| Metric | Value |
+|--------|-------|
+| Failed Tests | 122 → 110 → 102 |
+| Passed Tests | 292 → 304 → 312 |
+| Total Tests | 414 |
+
+### Key Issues Identified
+
+| Category | Count | Examples |
+|----------|-------|----------|
+| **404 Route Errors** | ~30 | Scene API endpoints returning 404 (FastAPI routing issues) |
+| **Flask 3.x API Changes** | ~15 | `get_data()` removed, `delete_cookie` missing |
+| **Async/SQLAlchemy Issues** | ~10 | MissingGreenlet, AsyncEngine inspection errors |
+| **Status Code Mismatches** | ~15 | 422 vs 400, 200 vs 400, 404 vs 302 |
+| **Logic Errors** | ~5 | Scene activation returns 'draft' instead of 'active' |
+
+### Proposed Fix Order
+
+1. **Fix FastAPI Routing** - Routes not properly registered (likely `/api/` prefix issues)
+2. **Fix/Remove Flask Remainders** - Update tests for Flask 3.x TestClient API changes
+3. **Fix Async Issues** - Use `run_sync` for SQLAlchemy inspection in async context
+4. **Fix Scene Activation** - Clarify logic bug returning wrong status
 
 ### Acceptance Criteria
 

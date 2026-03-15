@@ -1710,6 +1710,10 @@ async def create_or_update_scene(
     if not scene:
         scene = SceneRecord(
             encounter_id=encounter.id,
+            campaign_id=encounter.campaign_id,
+            name=data.get("name", "Scene"),
+            scene_type=data.get("scene_type", "narrative"),
+            status="draft",
             stardate=data.get("stardate"),
             scene_traits_json=json.dumps(data.get("scene_traits", [])),
             challenges_json=json.dumps(data.get("challenges", [])),
@@ -1805,4 +1809,73 @@ async def get_personnel_status(
         "encounter_id": encounter.encounter_id,
         "current_turn": encounter.current_turn,
         "round": encounter.round,
+    }
+
+
+@api_router.get("/scene/{scene_id}")
+async def get_scene_by_id(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get scene by ID."""
+    from sta.database.schema import SceneRecord
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    return {
+        "id": scene.id,
+        "name": scene.name,
+        "description": scene.description,
+        "scene_type": scene.scene_type,
+        "status": scene.status,
+        "stardate": scene.stardate,
+        "scene_traits": json.loads(scene.scene_traits_json or "[]"),
+        "challenges": json.loads(scene.challenges_json or "[]"),
+        "has_map": scene.has_map,
+    }
+
+
+@api_router.put("/scene/{scene_id}")
+async def update_scene_by_id(
+    scene_id: int,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update scene by ID."""
+    from sta.database.schema import SceneRecord
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    if "name" in data:
+        scene.name = data["name"]
+    if "description" in data:
+        scene.description = data["description"]
+    if "stardate" in data:
+        scene.stardate = data["stardate"]
+    if "scene_traits" in data:
+        scene.scene_traits_json = json.dumps(data["scene_traits"])
+    if "challenges" in data:
+        scene.challenges_json = json.dumps(data["challenges"])
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "id": scene.id,
+        "name": scene.name,
+        "description": scene.description,
+        "scene_type": scene.scene_type,
+        "stardate": scene.stardate,
+        "scene_traits": json.loads(scene.scene_traits_json or "[]"),
+        "challenges": json.loads(scene.challenges_json or "[]"),
     }

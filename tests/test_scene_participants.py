@@ -642,7 +642,7 @@ class TestSceneParticipantsAPI:
         )
         participant_id = resp.json()["participant_id"]
 
-        client.delete_cookie("sta_session_token")
+        client.cookies.clear()
         response = client.put(
             f"/scenes/{scene_id}/participants/{participant_id}",
             json={"is_visible_to_players": True},

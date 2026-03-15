@@ -378,7 +378,7 @@ class TestRaceConditionPrevention:
 
         # Second claim attempt (simulating another player)
         # Clear cookies to simulate different browser
-        client.delete_cookie("sta_session_token")
+        client.cookies.clear()
 
         response2 = client.post(
             f"/campaigns/{campaign.campaign_id}/join",

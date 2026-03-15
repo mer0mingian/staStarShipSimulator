@@ -975,6 +975,165 @@ async def update_campaign_threat(
     return {"threat": campaign.threat}
 
 
+# Campaign Scene Management
+
+
+@campaigns_router.post("/api/campaign/{campaign_id}/scenes")
+async def create_scene_for_campaign(
+    campaign_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new scene for a campaign."""
+    stmt = select(CampaignRecord).filter(CampaignRecord.campaign_id == campaign_id)
+    result = await db.execute(stmt)
+    campaign = result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    scene = SceneRecord(
+        campaign_id=campaign.id,
+        name=data.get("name", "New Scene"),
+        description=data.get("description"),
+        scene_type=data.get("scene_type", "narrative"),
+        status="draft",
+        stardate=data.get("stardate"),
+        scene_traits_json=json.dumps(data.get("scene_traits", [])),
+        challenges_json=json.dumps(data.get("challenges", [])),
+    )
+    db.add(scene)
+    await db.commit()
+
+    return {
+        "success": True,
+        "scene_id": scene.id,
+        "name": scene.name,
+    }
+
+
+@campaigns_router.delete("/api/scene/{scene_id}")
+async def delete_scene(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a scene."""
+    from sta.database.schema import SceneRecord
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    if scene.status == "active":
+        raise HTTPException(status_code=400, detail="Cannot delete active scene")
+
+    await db.delete(scene)
+    await db.commit()
+
+    return {"success": True}
+
+
+@campaigns_router.put("/api/scene/{scene_id}/status")
+async def update_scene_status(
+    scene_id: int,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update scene status."""
+    from sta.database.schema import SceneRecord
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    if "status" in data:
+        scene.status = data["status"]
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "status": scene.status,
+    }
+
+
+@campaigns_router.put("/api/scene/{scene_id}/convert")
+async def convert_scene_type(
+    scene_id: int,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Convert a scene to a different type."""
+    from sta.database.schema import SceneRecord
+
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.id == scene.campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    gm_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.campaign_id == campaign.id,
+        CampaignPlayerRecord.is_gm == True,
+    )
+    gm_result = await db.execute(gm_stmt)
+    gm_player = gm_result.scalars().first()
+
+    if not gm_player or sta_session_token != gm_player.session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    old_type = scene.scene_type
+    new_type = data.get("scene_type")
+
+    if not new_type:
+        raise HTTPException(status_code=400, detail="scene_type is required")
+
+    if new_type == "starship_encounter" and not campaign.active_ship_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot convert to starship_encounter without active ship",
+        )
+
+    if new_type == "starship_encounter":
+        scene.scene_type = "starship_encounter"
+        scene.has_map = True
+    elif new_type == "narrative":
+        scene.scene_type = "narrative"
+    elif new_type == "social_encounter":
+        scene.scene_type = "social_encounter"
+        scene.has_map = False
+    elif new_type == "personal_encounter":
+        scene.scene_type = "personal_encounter"
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "old_type": old_type,
+        "new_type": scene.scene_type,
+    }
+
+
 # =============================================================================
 # Character Claiming Pages
 # =============================================================================
@@ -1013,11 +1172,15 @@ async def campaign_join_page(
 @campaigns_router.post("/{campaign_id}/join")
 async def claim_character(
     campaign_id: str,
-    data: dict = Body(...),
+    data: Optional[dict] = Body(None),
+    form_data: Optional[dict] = Form(None),
     db: AsyncSession = Depends(get_db),
     sta_session_token: Optional[str] = Cookie(None),
 ):
     """Claim a character for a player."""
+    # Accept either JSON body or form data
+    request_data = data or form_data or {}
+
     stmt = select(CampaignRecord).filter(CampaignRecord.campaign_id == campaign_id)
     result = await db.execute(stmt)
     campaign = result.scalars().first()
@@ -1025,9 +1188,15 @@ async def claim_character(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    player_id = data.get("player_id")
+    player_id = request_data.get("player_id")
     if not player_id:
         raise HTTPException(status_code=400, detail="player_id required")
+
+    # Convert to int if string
+    try:
+        player_id = int(player_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="player_id must be an integer")
 
     player_stmt = select(CampaignPlayerRecord).filter(
         CampaignPlayerRecord.id == player_id,
@@ -1077,5 +1246,282 @@ async def switch_character_page(
     for player in players:
         html += f'<li><a href="/campaigns/{campaign_id}/claim/{player.id}">{player.player_name}</a></li>'
     html += "</ul></body></html>"
+
+    return {"content": html, "content_type": "text/html"}
+
+
+@campaigns_router.get("/api/campaign/{campaign_id}/npcs")
+async def list_campaign_npcs(
+    campaign_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """List NPCs in a campaign."""
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.campaign_id == campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    campaign_npcs_stmt = select(CampaignNPCRecord).filter(
+        CampaignNPCRecord.campaign_id == campaign.id
+    )
+    campaign_npcs_result = await db.execute(campaign_npcs_stmt)
+    campaign_npcs = campaign_npcs_result.scalars().all()
+
+    result = []
+    for cnpc in campaign_npcs:
+        npc_stmt = select(NPCRecord).filter(NPCRecord.id == cnpc.npc_id)
+        npc_result = await db.execute(npc_stmt)
+        npc = npc_result.scalars().first()
+        if npc:
+            result.append(
+                {
+                    "id": cnpc.id,
+                    "npc_id": npc.id,
+                    "name": npc.name,
+                    "npc_type": npc.npc_type,
+                    "affiliation": npc.affiliation,
+                    "is_visible": cnpc.is_visible_to_players,
+                }
+            )
+
+    return result
+
+
+@campaigns_router.post("/api/campaign/{campaign_id}/npcs")
+async def add_npc_to_campaign(
+    campaign_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Add an NPC to a campaign."""
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.campaign_id == campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    gm_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.session_token == sta_session_token,
+        CampaignPlayerRecord.campaign_id == campaign.id,
+        CampaignPlayerRecord.is_gm == True,
+    )
+    gm_result = await db.execute(gm_stmt)
+    gm = gm_result.scalars().first()
+
+    if not gm:
+        raise HTTPException(status_code=403, detail="Only GM can add NPCs")
+
+    action = data.get("action", "create")
+
+    if action == "create":
+        from sta.generators import generate_character
+
+        char = generate_character()
+        char.name = data.get("name", char.name)
+        char_record = CharacterRecord.from_model(char)
+        db.add(char_record)
+        await db.flush()
+
+        campaign_npc = CampaignNPCRecord(
+            campaign_id=campaign.id,
+            npc_id=char_record.id,
+            is_visible_to_players=False,
+        )
+        db.add(campaign_npc)
+        await db.commit()
+
+        return {
+            "success": True,
+            "npc_id": char_record.id,
+            "name": char_record.name,
+        }
+
+    return {"success": False, "detail": "Unknown action"}
+
+
+@campaigns_router.delete("/api/campaign/{campaign_id}/npcs/{cnpc_id}")
+async def remove_npc_from_campaign(
+    campaign_id: str,
+    cnpc_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Remove an NPC from a campaign."""
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.campaign_id == campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    gm_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.session_token == sta_session_token,
+        CampaignPlayerRecord.campaign_id == campaign.id,
+        CampaignPlayerRecord.is_gm == True,
+    )
+    gm_result = await db.execute(gm_stmt)
+    gm = gm_result.scalars().first()
+
+    if not gm:
+        raise HTTPException(status_code=403, detail="Only GM can remove NPCs")
+
+    campaign_npc_stmt = select(CampaignNPCRecord).filter(
+        CampaignNPCRecord.id == cnpc_id,
+        CampaignNPCRecord.campaign_id == campaign.id,
+    )
+    campaign_npc_result = await db.execute(campaign_npc_stmt)
+    campaign_npc = campaign_npc_result.scalars().first()
+
+    if not campaign_npc:
+        raise HTTPException(status_code=404, detail="NPC not found in campaign")
+
+    await db.delete(campaign_npc)
+    await db.commit()
+
+    return {"success": True}
+
+
+@campaigns_router.put("/api/campaign/{campaign_id}/npcs/{cnpc_id}/visibility")
+async def toggle_npc_visibility(
+    campaign_id: str,
+    cnpc_id: int,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Toggle NPC visibility in a campaign."""
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.campaign_id == campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    gm_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.session_token == sta_session_token,
+        CampaignPlayerRecord.campaign_id == campaign.id,
+        CampaignPlayerRecord.is_gm == True,
+    )
+    gm_result = await db.execute(gm_stmt)
+    gm = gm_result.scalars().first()
+
+    if not gm:
+        raise HTTPException(status_code=403, detail="Only GM can toggle visibility")
+
+    campaign_npc_stmt = select(CampaignNPCRecord).filter(
+        CampaignNPCRecord.id == cnpc_id,
+        CampaignNPCRecord.campaign_id == campaign.id,
+    )
+    campaign_npc_result = await db.execute(campaign_npc_stmt)
+    campaign_npc = campaign_npc_result.scalars().first()
+
+    if not campaign_npc:
+        raise HTTPException(status_code=404, detail="NPC not found in campaign")
+
+    is_visible = data.get("is_visible", True)
+    campaign_npc.is_visible_to_players = is_visible
+    await db.commit()
+
+    return {"success": True, "is_visible": is_visible}
+
+
+@campaigns_router.post("/api/campaign/{campaign_id}/refresh-token")
+async def refresh_session_token(
+    campaign_id: str,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Refresh a session token, extending its expiration."""
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.campaign_id == campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    player_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.session_token == sta_session_token,
+        CampaignPlayerRecord.campaign_id == campaign.id,
+    )
+    player_result = await db.execute(player_stmt)
+    player = player_result.scalars().first()
+
+    if not player:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if player.token_expires_at and player.token_expires_at < datetime.now():
+        raise HTTPException(status_code=401, detail="Token has expired")
+
+    new_token = secrets.token_urlsafe(32)
+    player.session_token = new_token
+    player.token_expires_at = datetime.now() + timedelta(days=30)
+    await db.commit()
+
+    return {
+        "success": True,
+        "session_token": new_token,
+        "expires_at": player.token_expires_at.isoformat(),
+    }
+
+
+@campaigns_router.get("/{campaign_id}/player")
+async def player_dashboard(
+    campaign_id: str,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Player dashboard page."""
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.campaign_id == campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    player_stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.session_token == sta_session_token,
+        CampaignPlayerRecord.campaign_id == campaign.id,
+    )
+    player_result = await db.execute(player_stmt)
+    player = player_result.scalars().first()
+
+    if not player:
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(url="/", status_code=302)
+
+    html = f"<html><body><h1>Player Dashboard</h1>"
+    html += f"<p>Campaign: {campaign.name}</p>"
+    html += f"<p>Player: {player.player_name}</p>"
+    html += f"<p>Position: {player.position}</p>"
+    html += "</body></html>"
 
     return {"content": html, "content_type": "text/html"}

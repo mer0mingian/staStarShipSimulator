@@ -316,7 +316,7 @@ class TestSceneShipsAPI:
         gm_token = data["gm"].session_token
         client.cookies.set("sta_session_token", gm_token)
         client.post(f"/scenes/{scene_id}/ships", json={"ship_id": ship_id})
-        client.delete_cookie("sta_session_token")
+        client.cookies.clear()
 
         response = client.put(
             f"/scenes/{scene_id}/ships/{ship_id}", json={"is_visible_to_players": True}

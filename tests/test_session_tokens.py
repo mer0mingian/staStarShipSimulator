@@ -87,7 +87,7 @@ class TestTokenCreation:
         assert new_player.token_expires_at is None
 
         # Now claim the character as a player (simulate a different player)
-        client.delete_cookie("sta_session_token")  # simulate new browser
+        client.cookies.clear()  # simulate new browser
         response = client.post(
             f"/campaigns/{campaign.campaign_id}/join",
             data={"player_id": str(player_id)},
@@ -151,7 +151,7 @@ class TestTokenRefresh:
         """Test that refresh without a session token returns 401."""
         campaign = sample_campaign["campaign"]
         # Ensure no cookie is set
-        client.delete_cookie("sta_session_token")
+        client.cookies.clear()
 
         response = client.post(
             f"/campaigns/api/campaign/{campaign.campaign_id}/refresh-token"

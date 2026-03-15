@@ -165,10 +165,10 @@ Integrate the existing combat system with the new VTT architecture. This milesto
 
 | Metric | Before | After |
 |--------|--------|-------|
-| Failed Tests | 187 | 130 |
-| Passed Tests | 227 | 284 |
+| Failed Tests | 187 | 122 |
+| Passed Tests | 227 | 292 |
 | Total Tests | 414 | 414 |
-| Improvement | - | 30% |
+| Improvement | - | 35% |
 
 #### Completed:
 - [x] FastAPI app factory in `sta/web/app.py`
@@ -187,16 +187,242 @@ Integrate the existing combat system with the new VTT architecture. This milesto
 - [x] Minor action enforcement (prevents 2nd minor action)
 - [x] Model attribute fixes (sensors)
 
-#### Remaining:
-- [ ] Scene validation/logic fixes (~41 tests)
-- [ ] Import/Export field validation (~30 tests)
-- [ ] Personnel validation (~10 tests)
-- [ ] Session token Flask redirects (~8 tests)
-- [ ] Various async SQLAlchemy issues
+#### Remaining (Priority Order):
+
+---
+
+## Task 5.6: Fix FastAPI Routing Issues
+
+**Priority**: P0 - Blocking
+**Status**: ✅ COMPLETE
+
+### Problem
+~30 tests fail with 404 errors, indicating routes aren't properly registered.
+
+### Fix Applied
+Added missing routes to FastAPI routers:
+- `api_router.py`: GET/PUT /api/scene/{scene_id}
+- `campaigns_router.py`: NPC management, token refresh, player dashboard
+- `scenes_router.py`: View scene page, edit scene page
+
+### Results
+| Metric | Before | After |
+|--------|--------|-------|
+| Failed Tests | 122 | 110 |
+| Passed Tests | 292 | 304 |
+| 404 Errors | ~25 | 0 |
+
+---
+
+## Task 5.7: Fix Flask Remainders in Tests
+
+**Priority**: P0 - Blocking
+**Status**: ✅ COMPLETE
+
+### Problem
+Flask 3.x removed/changed TestClient APIs:
+- `response.get_data()` removed
+- `client.delete_cookie()` not available
+
+### Fix Applied
+- Replaced `response.get_data(as_text=True)` with `response.content.decode('utf-8')` (13 occurrences)
+- Replaced `client.delete_cookie()` with `client.cookies.clear()` (5 occurrences)
+- Fixed in: test_scene.py, test_session_tokens.py, test_scene_participants.py, test_scene_ships.py, test_character_claiming.py
+
+### Results
+| Metric | Before | After |
+|--------|--------|-------|
+| Failed Tests | 110 | 102 |
+| Passed Tests | 304 | 312 |
+
+---
+
+## Task 5.8: Fix Async/SQLAlchemy Issues
+
+**Priority**: P1 - Important
+**Status**: TODO
+
+### Problem
+- `sqlalchemy.exc.MissingGreenlet` - Using sync SQLAlchemy in async context
+- `sqlalchemy.exc.NoInspectionAvailable` - AsyncEngine doesn't support direct inspection
+
+### Fix Approach
+1. For schema tests, use `conn.run_sync()` for inspection:
+```python
+async with engine.connect() as conn:
+    await conn.run_sync(inspect)
+```
+2. Or use sync database for tests
+3. Check if async is truly needed or if sync alternatives work
+
+### Files to Fix
+- `tests/test_scene_m3_schema.py`
+- `tests/test_scene_connections.py`
+- `tests/test_turn_enforcement.py`
+
+---
+
+## Task 5.9: Fix Scene Activation Logic
+
+**Priority**: P2 - Clarification Needed
+**Status**: QUESTION
+
+### Problem
+Tests expect `active` status but code returns `draft`:
+```
+AssertionError: assert 'draft' == 'active'
+```
+
+### Question for User
+- Should scene activation set status to `'active'` or something else?
+- Is there a specific workflow (draft → setting_up → active)?
+- Are there other valid statuses to consider?
+
+### Files to Check
+- `sta/web/routes/scenes.py` - activation endpoint
+- `sta/models/vtt/models.py` - Scene model status enum
+
+---
+
+## Task 5.10: Implement 4-State Scene Lifecycle
+
+**Priority**: P0 - New Feature
+**Status**: TODO
+
+### Objectives
+Implement the new 4-state scene lifecycle: draft → ready → active → completed
+
+### State Definitions
+
+| State | Required Fields | Notes |
+|-------|-----------------|-------|
+| **draft** | (none) | No title, no player list. Never visible to players. |
+| **ready** | title, gm_short_description | Title + GM description visible in transition dialogue |
+| **active** | (in progress) | Multiple can be active for split-party |
+| **completed** | (archived) | Can be re-activated or copied |
+
+### Implementation Steps
+1. Update Scene model status enum:
+   - Add `ready` and `completed` states
+   - Validate required fields per state
+2. Update scene validation:
+   - Draft: no title required, no participants required
+   - Ready: requires `title` and `gm_short_description`
+   - Active: requires at least one participant (?)
+   - Completed: auto-terminate connections
+3. Add state transition validation:
+   - Draft → Ready: requires title + gm_short_description
+   - Ready → Active: requires at least title (?)
+   - Active → Completed: trigger connection termination
+   - Completed → Ready: re-activation
+   - Completed → Ready: copy-as-new
+
+### Files to Modify
+- `sta/models/vtt/models.py` - SceneStatus enum
+- `sta/database/vtt_schema.py` - SceneRecord
+- `sta/web/routes/scenes.py` - state transition endpoints
+
+---
+
+## Task 5.11: Scene Transition Dialogue
+
+**Priority**: P0 - New Feature
+**Status**: TODO
+
+### Objectives
+Implement scene transition UI logic for ending/starting scenes
+
+### Implementation Steps
+1. Create endpoint to get transition options:
+   - `GET /api/campaigns/{id}/scenes/transition-options`
+   - Returns: connected_scenes[], ready_scenes[], can_create_new
+2. Update "end scene" endpoint to accept next_scene_id:
+   - End current scene
+   - Optionally activate next scene
+   - Terminate connections
+3. Support "create new scene" option:
+   - Create draft scene directly from transition
+
+### Files to Modify
+- `sta/web/routes/scenes.py` - transition endpoints
+
+---
+
+## Task 5.12: Multi-Active Scene Support
+
+**Priority**: P1 - New Feature
+**Status**: TODO
+
+### Objectives
+Support multiple active scenes for split-party situations
+
+### Implementation Steps
+1. Update scene activation logic:
+   - Don't deactivate other scenes when activating
+   - Allow multiple `active` scenes per campaign
+2. Add scene focus management:
+   - `PUT /api/scenes/{id}/focus` - set GM focus
+   - `GET /api/campaigns/{id}/active-scenes` - list all active
+3. Update participant visibility:
+   - All campaign participants visible regardless of active scene
+   - Filter by active_scene_id for scene-specific items
+
+### Files to Modify
+- `sta/web/routes/scenes.py` - activation endpoints
+- `sta/database/vtt_schema.py` - SceneRecord
+
+---
+
+## Task 5.13: Scene Connections
+
+**Priority**: P1 - New Feature
+**Status**: TODO
+
+### Objectives
+Implement scene connections and connection termination on completion
+
+### Implementation Steps
+1. Add scene connections model:
+   - `SceneConnectionRecord`: source_scene_id, target_scene_id, connection_type
+2. Update scene transition dialogue:
+   - Show connected scenes first
+   - Allow GM to link scenes
+3. On scene completion:
+   - Terminate all connections from completed scene
+   - Clear bidirectional links
+
+### Files to Modify
+- `sta/database/vtt_schema.py` - new table
+- `sta/web/routes/scenes.py` - connection endpoints
+
+---
+
+## Task 5.14: Scene Re-activation & Copy
+
+**Priority**: P2 - New Feature
+**Status**: TODO
+
+### Objectives
+Allow GM to re-activate or copy completed scenes
+
+### Implementation Steps
+1. Add re-activation endpoint:
+   - `POST /api/scenes/{id}/reactivate`
+   - Transitions: completed → ready → active
+2. Add copy-as-new endpoint:
+   - `POST /api/scenes/{id}/copy`
+   - Creates new scene in `ready` status with copied content
+   - Clears timestamps, resets status
+
+### Files to Modify
+- `sta/web/routes/scenes.py`
+
+---
 
 ### Verification
-- `uv run pytest tests/` → 130 failed, 284 passed
-- Core routing infrastructure complete
+- All scene lifecycle tests pass
+- Multi-active scene scenarios work
+- Scene transition dialogue shows correct options
 
 ---
 

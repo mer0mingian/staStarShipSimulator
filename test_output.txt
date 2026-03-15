@@ -3,6 +3,7 @@ platform linux -- Python 3.13.8, pytest-9.0.2, pluggy-1.6.0 -- /home/mer0/reposi
 cachedir: .pytest_cache
 rootdir: /home/mer0/repositories/staStarShipSimulator
 configfile: pyproject.toml
+testpaths: tests
 plugins: anyio-4.12.1, asyncio-1.3.0, cov-7.0.0
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
 collecting ... collected 416 items
@@ -307,4 +308,45 @@ tests/test_session_tokens.py::TestTokenRefresh::test_refresh_with_no_token_fails
 tests/test_session_tokens.py::TestTokenRefresh::test_refresh_with_invalid_token_fails FAILED [ 71%]
 tests/test_session_tokens.py::TestTokenRefresh::test_refresh_expired_token_fails FAILED [ 71%]
 tests/test_session_tokens.py::TestExpirationEnforcement::test_expired_token_player_dashboard_redirects FAILED [ 72%]
-tests/test_session_tokens.py::TestExpirationEnforcement::test_expired_token_player_home_no_error 
+tests/test_session_tokens.py::TestExpirationEnforcement::test_expired_token_player_home_no_error PASSED [ 72%]
+tests/test_session_tokens.py::TestExpirationEnforcement::test_valid_token_access_allowed FAILED [ 72%]
+tests/test_session_tokens.py::TestExpirationEnforcement::test_expired_token_api_endpoint_fails PASSED [ 72%]
+tests/test_ships_api.py::TestShipCRUD::test_create_ship FAILED           [ 73%]
+tests/test_ships_api.py::TestShipCRUD::test_create_ship_invalid_system FAILED [ 73%]
+tests/test_ships_api.py::TestShipCRUD::test_create_ship_invalid_department FAILED [ 73%]
+tests/test_ships_api.py::TestShipCRUD::test_create_ship_invalid_scale FAILED [ 73%]
+tests/test_ships_api.py::TestShipCRUD::test_list_ships FAILED            [ 74%]
+tests/test_ships_api.py::TestShipCRUD::test_list_ships_filter_by_campaign FAILED [ 74%]
+tests/test_ships_api.py::TestShipCRUD::test_get_ship FAILED              [ 74%]
+tests/test_ships_api.py::TestShipCRUD::test_get_ship_not_found PASSED    [ 74%]
+tests/test_ships_api.py::TestShipCRUD::test_update_ship FAILED           [ 75%]
+tests/test_ships_api.py::TestShipCRUD::test_update_ship_invalid_system FAILED [ 75%]
+tests/test_ships_api.py::TestShipCRUD::test_delete_ship FAILED           [ 75%]
+tests/test_ships_api.py::TestShipModel::test_get_ship_model FAILED       [ 75%]
+tests/test_ships_api.py::TestShipShields::test_adjust_shields FAILED     [ 75%]
+tests/test_ships_api.py::TestShipShields::test_adjust_shields_invalid FAILED [ 76%]
+tests/test_ships_api.py::TestShipPower::test_adjust_power FAILED         [ 76%]
+tests/test_ships_api.py::TestShipBreaches::test_add_breach FAILED        [ 76%]
+tests/test_ships_api.py::TestShipBreaches::test_remove_breach FAILED     [ 76%]
+tests/test_ships_api.py::TestShipWeapons::test_update_weapons FAILED     [ 77%]
+tests/test_ships_api.py::TestShipWeapons::test_arm_weapon FAILED         [ 77%]
+tests/test_ships_api.py::TestShipCrewQuality::test_get_crew_quality FAILED [ 77%]
+tests/test_ships_api.py::TestShipCrewQuality::test_set_crew_quality FAILED [ 77%]
+tests/test_ships_api.py::TestShipCrewQuality::test_set_crew_quality_invalid FAILED [ 78%]
+tests/test_turn_enforcement.py::TestPlayerAlreadyActed::test_reject_action_after_major_action FAILED [ 78%]
+tests/test_turn_enforcement.py::TestPlayerAlreadyActed::test_reject_claim_after_acted FAILED [ 78%]
+tests/test_turn_enforcement.py::TestSinglePlayerMultiplayer::test_single_player_one_turn_per_round FAILED [ 78%]
+tests/test_turn_enforcement.py::TestMultipleMinorActions::test_minor_actions_dont_mark_acted FAILED [ 79%]
+tests/test_turn_enforcement.py::TestMultipleMinorActions::test_cannot_do_two_minor_actions FAILED [ 79%]
+tests/test_turn_enforcement.py::TestFireWeaponEnforcement::test_fire_weapon_respects_acted_flag FAILED [ 79%]
+tests/test_turn_enforcement.py::TestRamActionEnforcement::test_ram_respects_acted_flag FAILED [ 79%]
+tests/test_turn_enforcement.py::TestRoundReset::test_acted_flags_reset_on_round_advance FAILED [ 80%]
+tests/test_turn_order.py::TestTurnClaiming::test_claim_turn_success FAILED [ 80%]
+tests/test_turn_order.py::TestTurnClaiming::test_claim_turn_already_acted FAILED [ 80%]
+tests/test_turn_order.py::TestTurnClaiming::test_claim_turn_already_claimed FAILED [ 80%]
+tests/test_turn_order.py::TestTurnClaiming::test_claim_turn_enemy_turn FAILED [ 81%]
+tests/test_turn_order.py::TestTurnClaiming::test_release_turn FAILED     [ 81%]
+tests/test_turn_order.py::TestMinorActions::test_minor_action_does_not_end_turn FAILED [ 81%]
+tests/test_turn_order.py::TestMinorActions::test_toggle_action_does_not_end_turn FAILED [ 81%]
+tests/test_turn_order.py::TestMajorActions::test_major_action_ends_turn FAILED [ 81%]
+tests/test_turn_order.py::TestMajorActions::test_task_roll_major_action 

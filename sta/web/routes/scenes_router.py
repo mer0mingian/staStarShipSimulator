@@ -1324,3 +1324,110 @@ async def update_scene_config(
     await db.commit()
 
     return {"success": True}
+
+
+@scenes_router.get("/{scene_id}")
+async def view_scene(
+    scene_id: int,
+    role: str = Query("player"),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """View a scene (narrative scene page)."""
+    from sta.database.schema import SceneRecord
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    if role == "gm":
+        campaign_stmt = select(CampaignRecord).filter(
+            CampaignRecord.id == scene.campaign_id
+        )
+        campaign_result = await db.execute(campaign_stmt)
+        campaign = campaign_result.scalars().first()
+
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        gm_stmt = select(CampaignPlayerRecord).filter(
+            CampaignPlayerRecord.campaign_id == campaign.id,
+            CampaignPlayerRecord.is_gm == True,
+        )
+        gm_result = await db.execute(gm_stmt)
+        gm_player = gm_result.scalars().first()
+
+        if not gm_player or sta_session_token != gm_player.session_token:
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(url="/", status_code=302)
+
+    html = f"<html><body><h1>{scene.name}</h1>"
+    html += f"<p>Type: {scene.scene_type}</p>"
+    html += f"<p>Status: {scene.status}</p>"
+
+    if scene.description:
+        html += f"<p>{scene.description}</p>"
+
+    scene_traits = json.loads(scene.scene_traits_json or "[]")
+    if scene_traits:
+        html += "<h2>Scene Traits</h2><ul>"
+        for trait in scene_traits:
+            if isinstance(trait, dict):
+                html += f"<li>{trait.get('name', 'Unknown')}</li>"
+            else:
+                html += f"<li>{trait}</li>"
+        html += "</ul>"
+
+    challenges = json.loads(scene.challenges_json or "[]")
+    if challenges:
+        html += "<h2>Extended Tasks</h2><ul>"
+        for challenge in challenges:
+            html += f"<li>{challenge.get('name', 'Unknown')}</li>"
+        html += "</ul>"
+
+    html += "</body></html>"
+
+    return {"content": html, "content_type": "text/html"}
+
+
+@scenes_router.get("/{scene_id}/edit")
+async def edit_scene_page(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Render the edit scene page."""
+    from sta.database.schema import SceneRecord
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    campaign_stmt = select(CampaignRecord).filter(
+        CampaignRecord.id == scene.campaign_id
+    )
+    campaign_result = await db.execute(campaign_stmt)
+    campaign = campaign_result.scalars().first()
+
+    html = f"<html><body>"
+    html += f"<h1>Edit Scene</h1>"
+    html += f"<h2>{scene.name}</h2>"
+    html += "<h3>Scene Details</h3>"
+    html += f"<p>Type: {scene.scene_type}</p>"
+    html += f"<p>Status: {scene.status}</p>"
+
+    if scene.description:
+        html += f"<p>{scene.description}</p>"
+
+    html += "<h3>NPCs and NP Ships</h3>"
+    html += "<h3>Scene Traits</h3>"
+    html += "<h3>Extended Tasks</h3>"
+    html += "</body></html>"
+
+    return {"content": html, "content_type": "text/html"}

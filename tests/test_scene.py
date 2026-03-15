@@ -580,7 +580,7 @@ class TestNarrativeSceneView:
 
         response = client.get(f"/scenes/{scene_id}?role=player")
         assert response.status_code == 200
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
         assert "Bridge Briefing" in html
         assert "🎬" in html
         assert "Scene Traits" in html
@@ -628,7 +628,7 @@ class TestNarrativeSceneView:
 
         response = client.get(f"/scenes/{scene_id}?role=viewscreen")
         assert response.status_code == 200
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
         assert "Observation Lounge" in html
 
     @pytest.mark.asyncio
@@ -650,7 +650,7 @@ class TestNarrativeSceneView:
 
         response = client.get(f"/scenes/{scene_id}?role=player")
         assert response.status_code == 200
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
 
         assert "FIRE WEAPONS" not in html
         assert "Dice Roller" not in html
@@ -695,7 +695,7 @@ class TestNarrativeSceneView:
 
         response = client.get(f"/scenes/{scene_id}?role=player")
         assert response.status_code == 200
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
         assert "Ambassador Sarek" in html
         assert "Secret Agent" not in html
 
@@ -933,7 +933,7 @@ class TestNarrativeSceneNoCombatAPI:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}?role=player")
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
 
         assert "const encounterId = null" in html or "const encounterId =null" in html
 
@@ -995,7 +995,7 @@ class TestNarrativeSceneNoCombatAPI:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}?role=player")
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
 
         assert "The Diplomatic Meeting" in html
 
@@ -1035,7 +1035,7 @@ class TestNarrativeSceneNoCombatAPI:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}?role=player")
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
 
         assert "Repair Warp Core" in html
 
@@ -1061,7 +1061,7 @@ class TestEditScenePage:
 
         response = client.get(f"/scenes/{scene_id}/edit")
         assert response.status_code == 200
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
         assert "Bridge Scene" in html
         assert "A tense moment on the bridge" in html
         assert "Scene Details" in html
@@ -1088,7 +1088,7 @@ class TestEditScenePage:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}/edit")
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
 
         assert campaign.name in html
         assert "Back to Campaign" in html
@@ -1112,7 +1112,7 @@ class TestEditScenePage:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}/edit")
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
 
         assert "Draft" in html
         assert "Player Crew" in html
@@ -1133,7 +1133,7 @@ class TestEditScenePage:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}/edit")
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
 
         assert 'value="draft"' in html
         assert 'value="active"' in html
@@ -1157,7 +1157,7 @@ class TestEditScenePage:
         scene_id = scene.id
 
         response = client.get(f"/scenes/{scene_id}/edit")
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
 
         assert 'value="narrative"' in html
         assert 'value="social_encounter"' in html
@@ -1246,7 +1246,7 @@ class TestSceneDescriptionField:
         # The GET /scenes/<id> renders a template, so we check the scene context
         # The scene_data dict includes description - verify via API or render
         response = client.get(f"/scenes/{scene_id}/edit")
-        html = response.get_data(as_text=True)
+        html = response.content.decode("utf-8")
         assert "Going up" in html
 
 
