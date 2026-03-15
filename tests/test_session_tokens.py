@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sta.database.schema import CampaignRecord, CampaignPlayerRecord, CharacterRecord
 
 
+@pytest.mark.session
 class TestTokenCreation:
     """Test that tokens are created with expiration."""
 
@@ -90,7 +91,10 @@ class TestTokenCreation:
         client.cookies.clear()  # simulate new browser
         response = client.post(
             f"/campaigns/{campaign.campaign_id}/join",
-            data={"player_id": str(player_id)},
+            json={"player_id": str(player_id)},
+        )
+        print(
+            f"DEBUG claim response status: {response.status_code}, body: {response.text[:500]}"
         )
         assert response.status_code == 200  # FastAPI returns 200 with error body
 
@@ -101,6 +105,7 @@ class TestTokenCreation:
         assert new_player.token_expires_at > datetime.now()
 
 
+@pytest.mark.session
 class TestTokenRefresh:
     """Test token refresh functionality."""
 
@@ -187,6 +192,7 @@ class TestTokenRefresh:
         assert "Token has expired" in data["detail"]
 
 
+@pytest.mark.session
 class TestExpirationEnforcement:
     """Test that expired tokens are rejected by protected endpoints."""
 

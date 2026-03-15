@@ -431,3 +431,42 @@ Allow GM to re-activate or copy completed scenes
 - Task 5.4: 6 hrs
 - Task 5.5: 8 hrs
 - Total: ~32 hours
+
+---
+
+## Current Agent Status (2026-03-15)
+
+### Completed Agents
+| Task | Agent | Status | Result |
+|------|-------|--------|--------|
+| 5.6 | python-dev | ✅ Complete | FastAPI routing fixes (122→110→102→93→86→47→39→37→38→34) |
+| 5.7 | python-dev | ✅ Complete | Flask TestClient compatibility (110→102) |
+| 5.8 | python-dev | ✅ Complete | Async/SQLAlchemy fixes (102→81→34) |
+| 5.9 | python-dev | ✅ Complete | Scene activation logic fixes (93→86) |
+| 5.10 | python-dev | ✅ Complete | 4-State Scene Lifecycle implementation + tests |
+| Test Restructuring | code-reviewer | ✅ Complete | Added pytest markers, created TEST_MARKERS.md |
+
+### Currently Running Agents
+| Task | Agent | Model | Purpose |
+|------|-------|-------|---------|
+| Final Test Fixes | python-dev | openrouter/step-3.5-flash:free | Fixing remaining ~34 failures |
+| M5 Analysis | code-reviewer | openrouter/step-3.5-flash:free | Analyzing test failures, providing fix plan |
+
+### Current Test State
+- **Failed**: 34 tests
+- **Passed**: 347 tests
+- **Total**: 381 tests (after export/import moved to M7)
+- **Progress**: ~91% passing
+
+### Model Update (2026-03-15)
+Changed default model from `opencode/minimax-m2.5-free` to `openrouter/step-3.5-flash:free` in both agent configs to avoid potential blocking.
+
+---
+
+## Next Steps
+
+1. **Complete final test fixes** (python-dev agent running)
+2. **Code review analysis** (code-reviewer agent)
+3. **Address remaining issues** based on review recommendations
+4. **Finalize M5** with all tests passing (or document acceptable failures)
+

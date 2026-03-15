@@ -11,6 +11,7 @@ import json
 import pytest
 
 
+@pytest.mark.action_science
 class TestCalibrateSensors:
     """Tests for Calibrate Sensors action."""
 
@@ -45,6 +46,7 @@ class TestCalibrateSensors:
         assert status.json()["current_turn"] == "player"
 
 
+@pytest.mark.action_science
 class TestScanForWeakness:
     """Tests for Scan For Weakness action."""
 
@@ -148,6 +150,7 @@ class TestScanForWeakness:
         assert "range" in data.get("detail", "").lower()
 
 
+@pytest.mark.action_science
 class TestSensorSweep:
     """Tests for Sensor Sweep action."""
 

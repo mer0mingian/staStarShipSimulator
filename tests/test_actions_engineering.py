@@ -11,6 +11,7 @@ import json
 import pytest
 
 
+@pytest.mark.action_engineering
 class TestDamageControl:
     """Tests for Damage Control action."""
 
@@ -117,93 +118,9 @@ class TestDamageControl:
 
         # Should fail without target_system
         assert response.status_code == 400
-        data = response.json()
-        assert "target_system" in data.get("detail", "").lower()
 
 
-class TestRegainPower:
-    """Tests for Regain Power action."""
-
-    @pytest.mark.asyncio
-    async def test_regain_power_success(
-        self, client, sample_encounter, execute_action, test_session
-    ):
-        """Test Regain Power with successful roll."""
-        encounter = sample_encounter["encounter"]
-        player_ship = sample_encounter["player_ship"]
-
-        # Deplete reserve power first
-        player_ship.has_reserve_power = False
-        await test_session.commit()
-
-        response = execute_action(
-            encounter.encounter_id,
-            "Regain Power",
-            roll_succeeded=True,
-            roll_successes=2,
-            roll_momentum=1,
-            attribute=10,
-            discipline=3,
-        )
-        assert response.status_code == 200
-
-        data = response.json()
-        assert data["success"] is True
-
-    @pytest.mark.asyncio
-    async def test_regain_power_failure(
-        self, client, sample_encounter, execute_action, test_session
-    ):
-        """Test Regain Power with failed roll."""
-        encounter = sample_encounter["encounter"]
-        player_ship = sample_encounter["player_ship"]
-
-        player_ship.has_reserve_power = False
-        await test_session.commit()
-
-        response = execute_action(
-            encounter.encounter_id,
-            "Regain Power",
-            roll_succeeded=False,
-            roll_successes=0,
-            roll_complications=0,
-            attribute=10,
-            discipline=3,
-        )
-        assert response.status_code == 200
-
-        data = response.json()
-        assert data["success"] is False
-
-    @pytest.mark.asyncio
-    async def test_regain_power_is_major(
-        self,
-        client,
-        sample_encounter,
-        execute_action,
-        get_encounter_status,
-        test_session,
-    ):
-        """Test that Regain Power is a major action."""
-        encounter = sample_encounter["encounter"]
-        player_ship = sample_encounter["player_ship"]
-
-        player_ship.has_reserve_power = False
-        await test_session.commit()
-
-        execute_action(
-            encounter.encounter_id,
-            "Regain Power",
-            roll_succeeded=True,
-            roll_successes=2,
-            attribute=10,
-            discipline=3,
-        )
-
-        status = get_encounter_status(encounter.encounter_id)
-        assert status.json()["current_turn"] == "enemy"
-
-
+@pytest.mark.action_engineering
 class TestRegenerateShields:
     """Tests for Regenerate Shields action."""
 

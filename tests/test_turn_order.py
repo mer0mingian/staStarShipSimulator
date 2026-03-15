@@ -14,6 +14,7 @@ import json
 import pytest
 
 
+@pytest.mark.turn_order
 class TestTurnClaiming:
     """Tests for claiming turns in multiplayer mode."""
 
@@ -118,6 +119,7 @@ class TestTurnClaiming:
         assert data["released_player_id"] == player.id
 
 
+@pytest.mark.turn_order
 class TestMinorActions:
     """Tests for minor actions (should not end turn)."""
 
@@ -169,6 +171,7 @@ class TestMinorActions:
         assert status.json()["current_turn"] == "player"
 
 
+@pytest.mark.turn_order
 class TestMajorActions:
     """Tests for major actions (should end turn and alternate)."""
 
@@ -263,6 +266,7 @@ class TestPassAction:
         assert data["round"] >= initial_round
 
 
+@pytest.mark.turn_order
 class TestRoundAdvancement:
     """Tests for round advancement when both sides exhaust turns."""
 
@@ -319,6 +323,7 @@ class TestRoundAdvancement:
         assert data["enemy_turns_used"] == 0
 
 
+@pytest.mark.turn_order
 class TestMultiplayerTurnTracking:
     """Tests for multiplayer turn tracking."""
 
@@ -411,6 +416,7 @@ class TestMultiplayerTurnTracking:
         assert player2_info["can_claim"] is True
 
 
+@pytest.mark.turn_order
 class TestTurnAlternation:
     """Tests for turn alternation between player and enemy sides."""
 
@@ -464,6 +470,7 @@ class TestTurnAlternation:
         assert data["current_turn"] in ["player", "enemy"]
 
 
+@pytest.mark.turn_order
 class TestEncounterStatus:
     """Tests for encounter status endpoint."""
 

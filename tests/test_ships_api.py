@@ -16,6 +16,7 @@ import pytest
 from sta.database.vtt_schema import VTTShipRecord
 
 
+@pytest.mark.ships
 class TestShipCRUD:
     """Tests for Ship CRUD endpoints."""
 

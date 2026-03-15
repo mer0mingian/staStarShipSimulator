@@ -4,6 +4,7 @@ import pytest
 from sta.database.schema import CampaignRecord
 
 
+@pytest.mark.campaign_resources
 class TestCampaignResources:
     """Tests for campaign momentum and threat tracking."""
 

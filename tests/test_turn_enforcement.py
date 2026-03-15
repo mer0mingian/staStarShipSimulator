@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sta.database.schema import EncounterRecord
 
 
+@pytest.mark.turn_enforcement
 class TestPlayerAlreadyActed:
     """Tests that players who have already acted are blocked from acting again."""
 
@@ -88,6 +89,7 @@ class TestPlayerAlreadyActed:
         assert "already acted" in data["detail"].lower()
 
 
+@pytest.mark.turn_enforcement
 class TestSinglePlayerMultiplayer:
     """Tests for the edge case of a single player in multiplayer mode."""
 
@@ -198,6 +200,7 @@ class TestSinglePlayerMultiplayer:
         assert "already acted" in data["detail"].lower()
 
 
+@pytest.mark.turn_enforcement
 class TestMultipleMinorActions:
     """Tests that minor actions don't allow infinite turns."""
 
@@ -272,6 +275,7 @@ class TestMultipleMinorActions:
         assert "minor action" in data["detail"].lower()
 
 
+@pytest.mark.turn_enforcement
 class TestFireWeaponEnforcement:
     """Tests for fire weapon action turn enforcement."""
 
@@ -311,6 +315,7 @@ class TestFireWeaponEnforcement:
         assert "already acted" in data["detail"].lower()
 
 
+@pytest.mark.turn_enforcement
 class TestRamActionEnforcement:
     """Tests for ram action turn enforcement."""
 
@@ -348,6 +353,7 @@ class TestRamActionEnforcement:
         assert "already acted" in data["detail"].lower()
 
 
+@pytest.mark.turn_enforcement
 class TestRoundReset:
     """Tests that player acted flags reset when round advances."""
 

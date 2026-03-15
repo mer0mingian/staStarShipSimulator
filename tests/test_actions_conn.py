@@ -11,6 +11,7 @@ import json
 import pytest
 
 
+@pytest.mark.action_conn
 class TestAttackPattern:
     """Tests for Attack Pattern action."""
 
@@ -60,6 +61,7 @@ class TestAttackPattern:
             assert data["effect"].get("duration") == "end_of_round"
 
 
+@pytest.mark.action_conn
 class TestEvasiveAction:
     """Tests for Evasive Action action."""
 
@@ -108,6 +110,7 @@ class TestEvasiveAction:
             assert data["effect"].get("duration") == "end_of_round"
 
 
+@pytest.mark.action_conn
 class TestManeuver:
     """Tests for Maneuver action."""
 

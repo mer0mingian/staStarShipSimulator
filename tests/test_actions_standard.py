@@ -9,6 +9,7 @@ import json
 import pytest
 
 
+@pytest.mark.actions
 class TestPassAction:
     """Tests for Pass action."""
 

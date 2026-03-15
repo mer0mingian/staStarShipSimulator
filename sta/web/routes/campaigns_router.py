@@ -20,6 +20,7 @@ from fastapi import (
     Cookie,
     Body,
 )
+from fastapi.responses import JSONResponse
 
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -1230,14 +1231,23 @@ async def campaign_join_page(
 @campaigns_router.post("/{campaign_id}/join")
 async def claim_character(
     campaign_id: str,
-    data: Optional[dict] = Body(None),
-    form_data: Optional[dict] = Form(None),
+    request: Request,
     db: AsyncSession = Depends(get_db),
     sta_session_token: Optional[str] = Cookie(None),
 ):
     """Claim a character for a player."""
-    # Accept either JSON body or form data
-    request_data = data or form_data or {}
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        request_data = await request.json()
+    elif (
+        "application/x-www-form-urlencoded" in content_type
+        or "multipart/form-data" in content_type
+    ):
+        form = await request.form()
+        request_data = dict(form)
+    else:
+        request_data = {}
+    print(f"DEBUG: content_type={content_type}, request_data={request_data}")
 
     stmt = select(CampaignRecord).filter(CampaignRecord.campaign_id == campaign_id)
     result = await db.execute(stmt)
@@ -1271,6 +1281,7 @@ async def claim_character(
 
     new_token = secrets.token_urlsafe(32)
     player.session_token = new_token
+    player.token_expires_at = datetime.now() + timedelta(days=30)
     await db.commit()
 
     return {
@@ -1541,11 +1552,21 @@ async def refresh_session_token(
     player.token_expires_at = datetime.now() + timedelta(days=30)
     await db.commit()
 
-    return {
-        "success": True,
-        "session_token": new_token,
-        "expires_at": player.token_expires_at.isoformat(),
-    }
+    response = JSONResponse(
+        content={
+            "success": True,
+            "session_token": new_token,
+            "expires_at": player.token_expires_at.isoformat(),
+        }
+    )
+    response.set_cookie(
+        key="sta_session_token",
+        value=new_token,
+        httponly=True,
+        max_age=60 * 60 * 24 * 30,
+        samesite="lax",
+    )
+    return response
 
 
 @campaigns_router.get("/{campaign_id}/player")

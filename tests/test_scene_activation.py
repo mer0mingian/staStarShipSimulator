@@ -16,6 +16,7 @@ from sta.database import (
 from sta.database.schema import SceneShipRecord, SceneParticipantRecord
 
 
+@pytest.mark.scene_activation
 class TestSceneActivationAPI:
     """Tests for POST /api/scenes/<id>/activate."""
 

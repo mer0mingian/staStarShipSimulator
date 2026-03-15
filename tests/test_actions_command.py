@@ -9,6 +9,7 @@ import json
 import pytest
 
 
+@pytest.mark.action_command
 class TestRally:
     """Tests for Rally action."""
 

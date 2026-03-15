@@ -9,6 +9,7 @@ import json
 import pytest
 
 
+@pytest.mark.logging
 class TestCombatLogCreation:
     """Tests for combat log entry creation."""
 

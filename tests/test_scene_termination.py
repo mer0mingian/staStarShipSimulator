@@ -12,6 +12,7 @@ from sta.database import (
 )
 
 
+@pytest.mark.scene_termination
 class TestSceneTerminationAPI:
     """Tests for POST /api/scenes/<id>/end."""
 

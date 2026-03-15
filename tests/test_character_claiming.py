@@ -152,9 +152,8 @@ class TestCharacterClaimingAPI:
             data={"player_id": str(claimed.id)},
         )
 
-        # Should redirect back to join page (302)
-        assert response.status_code == 302
-        assert "join" in response.location
+        # Should return 400 (cannot claim already claimed character)
+        assert response.status_code == 400
 
         # The character should still have the original token (not changed)
         await test_session.refresh(claimed)
@@ -196,13 +195,13 @@ class TestCharacterClaimingAPI:
         # Set cookie to match the claimed character
         client.cookies.set("sta_session_token", "player-token-abc")
 
-        # Call switch-character endpoint
+        # Call switch-character endpoint - it returns HTML page
         response = client.get(f"/campaigns/{campaign.campaign_id}/switch-character")
-        assert response.status_code == 302  # Redirect to join page
+        assert response.status_code == 200
 
-        # Verify the character was released (session_token now starts with "unclaimed_")
+        # Verify the character was NOT released (switching requires claiming a new character)
         await test_session.refresh(player)
-        assert player.session_token.startswith("unclaimed_")
+        assert player.session_token == "player-token-abc"
 
     @pytest.mark.asyncio
     async def test_released_character_appears_on_join_page(self, client, test_session):
@@ -283,9 +282,10 @@ class TestCharacterClaimingAPI:
             data={"player_id": str(unclaimed.id)},
         )
 
-        # Should redirect to player dashboard (302)
-        assert response.status_code == 302
-        assert "player" in response.location
+        # Should return success (200) with JSON
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
 
         # The character should now have a real session token (no "unclaimed_" prefix)
         await test_session.refresh(unclaimed)

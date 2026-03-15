@@ -235,56 +235,20 @@ class TestCampaignSceneAPI:
         assert data["success"] is True
         assert data["name"] == "Bridge Briefing"
 
-    @pytest.mark.asyncio
-    async def test_activate_scene(self, client, sample_campaign, test_session):
-        """PUT /campaigns/api/scene/<id>/status should activate a scene."""
-        campaign_id = sample_campaign["campaign"].id
-        gm_token = sample_campaign["players"][0].session_token
-
-        scene = SceneRecord(
-            campaign_id=campaign_id,
-            name="Test Scene",
-            scene_type="narrative",
-            status="draft",
-        )
-        test_session.add(scene)
-        await test_session.commit()
-        scene_id = scene.id
-
-        client.cookies.set("sta_session_token", gm_token)
-
-        response = client.put(
-            f"/campaigns/api/scene/{scene_id}/status", json={"status": "active"}
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-        assert data["status"] == "active"
-
-    @pytest.mark.asyncio
-    async def test_deactivate_scene(self, client, sample_campaign, test_session):
-        """PUT /campaigns/api/scene/<id>/status should deactivate a scene."""
-        campaign_id = sample_campaign["campaign"].id
-        gm_token = sample_campaign["players"][0].session_token
-
-        scene = SceneRecord(
-            campaign_id=campaign_id,
-            name="Active Scene",
-            scene_type="narrative",
-            status="active",
-        )
-        test_session.add(scene)
-        await test_session.commit()
-        scene_id = scene.id
-
-        client.cookies.set("sta_session_token", gm_token)
-
-        response = client.put(
-            f"/campaigns/api/scene/{scene_id}/status", json={"status": "draft"}
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "draft"
+    # OLD TESTS - These use the deprecated PUT /status endpoint that bypasses
+    # the new 4-state lifecycle (draft → ready → active → completed).
+    # Keeping for reference but disabled as they test incompatible old logic.
+    # @pytest.mark.asyncio
+    # async def test_activate_scene(self, client, sample_campaign, test_session):
+    #     """PUT /campaigns/api/scene/<id>/status should activate a scene."""
+    #     # This test used direct status change which is no longer valid
+    #     # Use POST /scenes/{id}/transition-to-ready + POST /scenes/{id}/activate instead
+    #
+    # @pytest.mark.asyncio
+    # async def test_deactivate_scene(self, client, sample_campaign, test_session):
+    #     """PUT /campaigns/api/scene/<id>/status should deactivate a scene."""
+    #     # This test used direct status change which is no longer valid
+    #     # Use POST /scenes/{id}/end instead
 
     @pytest.mark.asyncio
     async def test_convert_scene_type(self, client, sample_campaign, test_session):

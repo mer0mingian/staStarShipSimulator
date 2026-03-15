@@ -630,9 +630,12 @@ async def next_turn(encounter_id: str, db: AsyncSession = Depends(get_db)):
     round_advanced = False
 
     if current == "player":
-        player_turns_used = encounter.player_turns_used or 0
-        player_turns_total = encounter.player_turns_total or 1
-        player_turns_exhausted = player_turns_used >= player_turns_total
+        players_turns = json.loads(encounter.players_turns_used_json or "{}")
+        player_turns_exhausted = (
+            all(p.get("acted", False) for p in players_turns.values())
+            if players_turns
+            else False
+        )
 
         ships_turns = json.loads(encounter.ships_turns_used_json or "{}")
         enemy_ship_ids = json.loads(encounter.enemy_ship_ids_json or "[]")
@@ -654,9 +657,12 @@ async def next_turn(encounter_id: str, db: AsyncSession = Depends(get_db)):
         else:
             encounter.current_turn = "enemy"
     elif current == "enemy":
-        player_turns_used = encounter.player_turns_used or 0
-        player_turns_total = encounter.player_turns_total or 1
-        player_turns_exhausted = player_turns_used >= player_turns_total
+        players_turns = json.loads(encounter.players_turns_used_json or "{}")
+        player_turns_exhausted = (
+            all(p.get("acted", False) for p in players_turns.values())
+            if players_turns
+            else False
+        )
 
         ships_turns = json.loads(encounter.ships_turns_used_json or "{}")
         enemy_ship_ids = json.loads(encounter.enemy_ship_ids_json or "[]")

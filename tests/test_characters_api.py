@@ -15,6 +15,7 @@ from sta.database.schema import CampaignRecord, CampaignPlayerRecord
 from sta.database.vtt_schema import VTTCharacterRecord
 
 
+@pytest.mark.characters
 class TestCharacterCRUD:
     """Tests for Character CRUD endpoints."""
 
@@ -394,6 +395,7 @@ class TestCharacterCRUD:
         assert response.status_code == 404
 
 
+@pytest.mark.characters
 class TestCharacterModel:
     """Tests for character model conversion."""
 
@@ -446,6 +448,7 @@ class TestCharacterModel:
         assert data["species"] == "Human"
 
 
+@pytest.mark.characters
 class TestStressDetermination:
     """Tests for stress and determination adjustment endpoints."""
 
@@ -600,6 +603,7 @@ class TestStressDetermination:
         assert data["determination"] == 2
 
 
+@pytest.mark.characters
 class TestCharacterState:
     """Tests for character state management."""
 
@@ -675,6 +679,7 @@ class TestCharacterState:
         assert response.status_code == 400
 
 
+@pytest.mark.characters
 class TestCharacterTalents:
     """Tests for character talent management."""
 
