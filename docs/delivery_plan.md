@@ -15,6 +15,7 @@ This document outlines the comprehensive plan for transitioning the Star Trek Ad
 - [Milestone 4: Character/Ship CRUD](#milestone-4-charactership-crud)
 - [Milestone 5: Combat Integration](#milestone-5-combat-integration)
 - [Milestone 6: UI/UX Overhaul](#milestone-6-uiux-overhaul)
+- [Milestone 7: Import/Export & Final Integration](#milestone-7-importexport--final-integration)
 - [Parallel Work Strategy](#parallel-work-strategy)
 - [Testing Strategy](#testing-strategy)
 - [Code Review Process](#code-review-process)
@@ -394,9 +395,9 @@ When completing a scene, GM sees:
 
 | Metric | Value |
 |--------|-------|
-| Failed Tests | 122 → 110 → 102 → 93 → 86 |
-| Passed Tests | 292 → 304 → 312 → 321 → 328 |
-| Total Tests | 414 |
+| Failed Tests | 122 → 110 → 102 → 93 → 86 → 47 |
+| Passed Tests | 292 → 304 → 312 → 321 → 328 → 334 |
+| Total Tests | 414 → 370 (export/import tests moved to M7) |
 
 ### Key Issues Identified
 
@@ -613,6 +614,35 @@ Complete UI/UX redesign for mobile-responsive VTT experience.
 - ✅ All tests passing
 
 ### Timeline: 10-14 days
+
+## Milestone 7: Import/Export & Final Integration
+
+### Overview
+Implement import/export functionality and complete VTT integration.
+
+### Status: 📋 Planned
+
+### Tasks
+
+#### Task 7.1: VTT Character Export/Import
+- Export characters to JSON
+- Import characters from JSON
+- Handle updates to existing characters
+
+#### Task 7.2: VTT Ship Export/Import
+- Export ships to JSON
+- Import ships from JSON
+- Handle updates to existing ships
+
+#### Task 7.3: Full Campaign Backup
+- Export entire campaign to JSON
+- Import full campaign backup
+- Validate backup structure
+
+### Reference
+See `docs/tasks/milestone7_tasks.md` for detailed specification.
+
+### Timeline: 3-5 days
 
 ## Parallel Work Strategy
 
