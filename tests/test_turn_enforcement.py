@@ -27,16 +27,17 @@ class TestPlayerAlreadyActed:
         encounter = multiplayer_encounter["encounter"]
         encounter_id = encounter.encounter_id
         player = multiplayer_encounter["players"][1]  # Non-GM player
+        player_id = player.id
 
         # Player claims turn and executes a major action
-        claim_response = claim_turn(encounter_id, player.id)
+        claim_response = claim_turn(encounter_id, player_id)
         assert claim_response.status_code == 200
 
         # Execute a major action (Attack Pattern)
         action_response = execute_action(
             encounter_id,
             "Attack Pattern",
-            player_id=player.id,
+            player_id=player_id,
         )
         assert action_response.status_code == 200
 
@@ -56,7 +57,7 @@ class TestPlayerAlreadyActed:
         second_action_response = execute_action(
             encounter_id,
             "Calibrate Weapons",
-            player_id=player.id,
+            player_id=player_id,
         )
 
         # Should be rejected
@@ -108,6 +109,7 @@ class TestSinglePlayerMultiplayer:
         players = sample_campaign["players"]
         gm = players[0]
         single_player = players[1]
+        single_player_id = single_player.id
 
         # Deactivate other players
         for p in players[2:]:
@@ -157,7 +159,7 @@ class TestSinglePlayerMultiplayer:
         # Claim and execute first action
         claim_response = client.post(
             f"/api/encounter/{encounter_id}/claim-turn",
-            json={"player_id": single_player.id},
+            json={"player_id": single_player_id},
         )
         assert claim_response.status_code == 200
 
@@ -165,7 +167,7 @@ class TestSinglePlayerMultiplayer:
             f"/api/encounter/{encounter_id}/execute-action",
             json={
                 "action_name": "Attack Pattern",
-                "player_id": single_player.id,
+                "player_id": single_player_id,
             },
         )
         assert action_response.status_code == 200
@@ -187,7 +189,7 @@ class TestSinglePlayerMultiplayer:
             f"/api/encounter/{encounter_id}/execute-action",
             json={
                 "action_name": "Calibrate Weapons",
-                "player_id": single_player.id,
+                "player_id": single_player_id,
             },
         )
 

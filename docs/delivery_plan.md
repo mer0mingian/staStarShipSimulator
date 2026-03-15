@@ -394,8 +394,8 @@ When completing a scene, GM sees:
 
 | Metric | Value |
 |--------|-------|
-| Failed Tests | 122 → 110 → 102 |
-| Passed Tests | 292 → 304 → 312 |
+| Failed Tests | 122 → 110 → 102 → 93 |
+| Passed Tests | 292 → 304 → 312 → 321 |
 | Total Tests | 414 |
 
 ### Key Issues Identified

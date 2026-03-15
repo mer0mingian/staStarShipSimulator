@@ -10,6 +10,34 @@ from sta.database.schema import (
     CampaignRecord,
 )
 from sta.database.vtt_schema import VTTCharacterRecord, VTTShipRecord
+from sta.database.async_db import engine as async_engine
+
+
+async def get_table_inspector(async_session):
+    """Get a synchronous inspector from an async session."""
+    inspector_data = {}
+
+    async with async_session.bind.begin() as conn:
+
+        def _capture_inspector(sync_conn):
+            insp = inspect(sync_conn)
+            inspector_data["tables"] = insp.get_table_names()
+            inspector_data["participant_columns"] = insp.get_columns(
+                "scene_participants"
+            )
+            inspector_data["participant_fks"] = insp.get_foreign_keys(
+                "scene_participants"
+            )
+            inspector_data["participant_unique"] = insp.get_unique_constraints(
+                "scene_participants"
+            )
+            inspector_data["ship_columns"] = insp.get_columns("scene_ships")
+            inspector_data["ship_fks"] = insp.get_foreign_keys("scene_ships")
+            inspector_data["ship_unique"] = insp.get_unique_constraints("scene_ships")
+
+        await conn.run_sync(_capture_inspector)
+
+    return inspector_data
 
 
 class TestSceneRecordM3Columns:
@@ -78,15 +106,15 @@ class TestSceneParticipantRecord:
     @pytest.mark.asyncio
     async def test_table_exists(self, test_session):
         """Scene_participants table should exist."""
-        inspector = inspect(test_session.bind)
-        tables = inspector.get_table_names()
+        inspector_data = await get_table_inspector(test_session)
+        tables = inspector_data["tables"]
         assert "scene_participants" in tables
 
     @pytest.mark.asyncio
     async def test_columns_exist(self, test_session):
         """Scene_participants should have the correct columns."""
-        inspector = inspect(test_session.bind)
-        columns = inspector.get_columns("scene_participants")
+        inspector_data = await get_table_inspector(test_session)
+        columns = inspector_data["participant_columns"]
         column_names = {col["name"] for col in columns}
 
         expected = {
@@ -101,8 +129,8 @@ class TestSceneParticipantRecord:
     @pytest.mark.asyncio
     async def test_foreign_keys(self, test_session):
         """Check foreign key constraints are set up correctly."""
-        inspector = inspect(test_session.bind)
-        fks = inspector.get_foreign_keys("scene_participants")
+        inspector_data = await get_table_inspector(test_session)
+        fks = inspector_data["participant_fks"]
 
         # Check scenes FK
         scenes_fk = next((fk for fk in fks if fk["referred_table"] == "scenes"), None)
@@ -126,8 +154,8 @@ class TestSceneParticipantRecord:
     @pytest.mark.asyncio
     async def test_unique_constraint(self, test_session):
         """Should have unique constraint on (scene_id, character_id)."""
-        inspector = inspect(test_session.bind)
-        constraints = inspector.get_unique_constraints("scene_participants")
+        inspector_data = await get_table_inspector(test_session)
+        constraints = inspector_data["participant_unique"]
         constraint_names = [c["name"] for c in constraints]
 
         assert "uq_scene_participant" in constraint_names
@@ -176,15 +204,15 @@ class TestSceneShipRecord:
     @pytest.mark.asyncio
     async def test_table_exists(self, test_session):
         """Scene_ships table should exist."""
-        inspector = inspect(test_session.bind)
-        tables = inspector.get_table_names()
+        inspector_data = await get_table_inspector(test_session)
+        tables = inspector_data["tables"]
         assert "scene_ships" in tables
 
     @pytest.mark.asyncio
     async def test_columns_exist(self, test_session):
         """Scene_ships should have the correct columns."""
-        inspector = inspect(test_session.bind)
-        columns = inspector.get_columns("scene_ships")
+        inspector_data = await get_table_inspector(test_session)
+        columns = inspector_data["ship_columns"]
         column_names = {col["name"] for col in columns}
 
         expected = {"id", "scene_id", "ship_id", "is_visible_to_players"}
@@ -193,8 +221,8 @@ class TestSceneShipRecord:
     @pytest.mark.asyncio
     async def test_foreign_keys(self, test_session):
         """Check foreign key constraints are set up correctly."""
-        inspector = inspect(test_session.bind)
-        fks = inspector.get_foreign_keys("scene_ships")
+        inspector_data = await get_table_inspector(test_session)
+        fks = inspector_data["ship_fks"]
 
         # Check scenes FK
         scenes_fk = next((fk for fk in fks if fk["referred_table"] == "scenes"), None)
@@ -209,8 +237,8 @@ class TestSceneShipRecord:
     @pytest.mark.asyncio
     async def test_unique_constraint(self, test_session):
         """Should have unique constraint on (scene_id, ship_id)."""
-        inspector = inspect(test_session.bind)
-        constraints = inspector.get_unique_constraints("scene_ships")
+        inspector_data = await get_table_inspector(test_session)
+        constraints = inspector_data["ship_unique"]
         constraint_names = [c["name"] for c in constraints]
 
         assert "uq_scene_ship" in constraint_names

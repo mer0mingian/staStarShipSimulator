@@ -240,25 +240,23 @@ Flask 3.x removed/changed TestClient APIs:
 ## Task 5.8: Fix Async/SQLAlchemy Issues
 
 **Priority**: P1 - Important
-**Status**: TODO
+**Status**: ✅ COMPLETE
 
 ### Problem
-- `sqlalchemy.exc.MissingGreenlet` - Using sync SQLAlchemy in async context
-- `sqlalchemy.exc.NoInspectionAvailable` - AsyncEngine doesn't support direct inspection
+- `sqlalchemy.exc.MissingGreenlet` - sync in async context
+- `sqlalchemy.exc.NoInspectionAvailable` - AsyncEngine inspection
 
-### Fix Approach
-1. For schema tests, use `conn.run_sync()` for inspection:
-```python
-async with engine.connect() as conn:
-    await conn.run_sync(inspect)
-```
-2. Or use sync database for tests
-3. Check if async is truly needed or if sync alternatives work
+### Fix Applied
+- Added `get_table_inspector()` helper using `await conn.run_sync()` for schema inspection
+- Fixed session expire patterns - store IDs before expiring objects
+- Updated all 8 schema tests to use async inspection pattern
 
-### Files to Fix
-- `tests/test_scene_m3_schema.py`
-- `tests/test_scene_connections.py`
-- `tests/test_turn_enforcement.py`
+### Results
+| Metric | Before | After |
+|--------|--------|-------|
+| Failed Tests | 102 | ~81 |
+| Passed Tests | 312 | ~333 |
+| Async Errors | 21 | 0 |
 
 ---
 

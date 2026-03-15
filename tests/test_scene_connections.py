@@ -85,7 +85,7 @@ class TestSceneConnectionsAPI:
 
         session.expire(scene)
         result = await session.execute(
-            select(SceneRecord).filter(SceneRecord.id == scene.id)
+            select(SceneRecord).filter(SceneRecord.id == scene_id)
         )
         scene = result.scalars().first()
         assert next_scene.id in json.loads(scene.next_scene_ids_json)
