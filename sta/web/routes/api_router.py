@@ -1248,20 +1248,18 @@ async def execute_action_with_encounter_id(
         if is_minor and player_acted:
             raise HTTPException(
                 status_code=403,
-                detail="Player has already taken a minor action this turn. Only one minor action allowed per turn.",
+                detail="Player has already acted this turn. Only one minor action allowed per turn.",
             )
+
+        # Mark player as acted (for both major and minor actions) before switching turn
+        if str(player_id) not in players_turns:
+            players_turns[str(player_id)] = {"acted": True}
+            encounter.players_turns_used_json = json.dumps(players_turns)
 
     # If major action and it's player's turn, switch to enemy
     if is_major and encounter.current_turn == "player":
         encounter.current_turn = "enemy"
         encounter.current_player_id = None
-
-    # Mark player as acted for minor actions
-    if player_id and encounter.current_turn == "player":
-        players_turns = json.loads(encounter.players_turns_used_json or "{}")
-        if str(player_id) not in players_turns:
-            players_turns[str(player_id)] = {"acted": True}
-            encounter.players_turns_used_json = json.dumps(players_turns)
 
     # Get the ship name from the encounter's player ship
     ship_name = data.get("ship_name")
@@ -1363,20 +1361,18 @@ async def execute_action(
         if is_minor and player_acted:
             raise HTTPException(
                 status_code=403,
-                detail="Player has already taken a minor action this turn. Only one minor action allowed per turn.",
+                detail="Player has already acted this turn. Only one minor action allowed per turn.",
             )
+
+        # Mark player as acted (for both major and minor actions) before switching turn
+        if str(player_id) not in players_turns:
+            players_turns[str(player_id)] = {"acted": True}
+            encounter.players_turns_used_json = json.dumps(players_turns)
 
     # If major action and it's player's turn, switch to enemy
     if is_major and encounter.current_turn == "player":
         encounter.current_turn = "enemy"
         encounter.current_player_id = None
-
-    # Mark player as acted for minor actions
-    if player_id and encounter.current_turn == "player":
-        players_turns = json.loads(encounter.players_turns_used_json or "{}")
-        if str(player_id) not in players_turns:
-            players_turns[str(player_id)] = {"acted": True}
-            encounter.players_turns_used_json = json.dumps(players_turns)
 
     # Get the ship name from the encounter's player ship
     ship_name = data.get("ship_name")

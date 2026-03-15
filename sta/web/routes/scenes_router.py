@@ -1183,6 +1183,7 @@ async def activate_scene(
     scene.status = "active"
     await db.commit()
 
+    response_data["status"] = scene.status
     return response_data
 
 

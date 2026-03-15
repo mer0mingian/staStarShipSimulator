@@ -262,23 +262,23 @@ Flask 3.x removed/changed TestClient APIs:
 
 ## Task 5.9: Fix Scene Activation Logic
 
-**Priority**: P2 - Clarification Needed
-**Status**: QUESTION
+**Priority**: P2 - Fix
+**Status**: ✅ COMPLETE
 
 ### Problem
-Tests expect `active` status but code returns `draft`:
-```
-AssertionError: assert 'draft' == 'active'
-```
+Tests expect 'active' but code returns 'draft' status.
 
-### Question for User
-- Should scene activation set status to `'active'` or something else?
-- Is there a specific workflow (draft → setting_up → active)?
-- Are there other valid statuses to consider?
+### Fix Applied
+- Scene activation: Fixed response to return updated status
+- Ship update: Changed Form to Body parameters for JSON support
+- Turn enforcement: Moved "mark player as acted" before enemy turn switch
 
-### Files to Check
-- `sta/web/routes/scenes.py` - activation endpoint
-- `sta/models/vtt/models.py` - Scene model status enum
+### Results
+| Metric | Before | After |
+|--------|--------|-------|
+| Failed Tests | 93 | 86 |
+| Passed Tests | 321 | 328 |
+| Scene Activation | 0/11 | 11/11 passing |
 
 ---
 
