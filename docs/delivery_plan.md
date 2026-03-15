@@ -395,8 +395,8 @@ When completing a scene, GM sees:
 
 | Metric | Value |
 |--------|-------|
-| Failed Tests | 122 → 110 → 102 → 93 → 86 → 47 |
-| Passed Tests | 292 → 304 → 312 → 321 → 328 → 334 |
+| Failed Tests | 122 → 110 → 102 → 93 → 86 → 47 → 39 |
+| Passed Tests | 292 → 304 → 312 → 321 → 328 → 334 → 342 |
 | Total Tests | 414 → 370 (export/import tests moved to M7) |
 
 ### Key Issues Identified

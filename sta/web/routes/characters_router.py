@@ -9,6 +9,7 @@ from fastapi import (
     status,
     Body,
     Form,
+    Cookie,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -348,7 +349,7 @@ async def delete_character(
     char_id: int,
     db: AsyncSession = Depends(get_db),
     campaign_id: Optional[int] = None,
-    sta_session_token: Optional[str] = None,
+    sta_session_token: Optional[str] = Cookie(None),
 ):
     """Delete character (GM only)."""
     stmt = select(VTTCharacterRecord).filter(VTTCharacterRecord.id == char_id)

@@ -75,7 +75,6 @@ class TestCharacterCRUD:
                     "security": 2,
                 },
             },
-            
         )
         assert response.status_code == 400
         assert "must be between 7-12" in response.json()["detail"]
@@ -103,7 +102,6 @@ class TestCharacterCRUD:
                     "security": 2,
                 },
             },
-            
         )
         assert response.status_code == 400
         assert "must be between 0-5" in response.json()["detail"]
@@ -133,7 +131,6 @@ class TestCharacterCRUD:
                 "stress": 10,  # Invalid - above max
                 "stress_max": 5,
             },
-            
         )
         assert response.status_code == 400
         assert "Stress must be between" in response.json()["detail"]
@@ -334,8 +331,7 @@ class TestCharacterCRUD:
 
         response = client.put(
             f"/api/characters/{char.id}",
-            json={"name": "Updated Name", "stress": 4},
-            
+            data={"name": "Updated Name", "stress": "4"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -486,7 +482,6 @@ class TestStressDetermination:
         response = client.put(
             f"/api/characters/{char.id}/stress",
             json={"adjustment": 2},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -525,7 +520,6 @@ class TestStressDetermination:
         response = client.put(
             f"/api/characters/{char.id}/stress",
             json={"adjustment": -2},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -564,7 +558,6 @@ class TestStressDetermination:
         response = client.put(
             f"/api/characters/{char.id}/stress",
             json={"adjustment": -5},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -601,7 +594,6 @@ class TestStressDetermination:
         response = client.put(
             f"/api/characters/{char.id}/determination",
             json={"adjustment": 1},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -643,7 +635,6 @@ class TestCharacterState:
         response = client.put(
             f"/api/characters/{char.id}/state",
             json={"state": "Injured"},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -680,7 +671,6 @@ class TestCharacterState:
         response = client.put(
             f"/api/characters/{char.id}/state",
             json={"state": "InvalidState"},
-            
         )
         assert response.status_code == 400
 
@@ -755,7 +745,6 @@ class TestCharacterTalents:
         response = client.post(
             f"/api/characters/{char.id}/talents",
             json={"talent_name": "Tough"},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -793,7 +782,6 @@ class TestCharacterTalents:
         response = client.post(
             f"/api/characters/{char.id}/talents",
             json={"talent_name": "Tough"},
-            
         )
         assert response.status_code == 400
         assert "already has this talent" in response.json()["detail"]
@@ -830,7 +818,6 @@ class TestCharacterTalents:
         response = client.post(
             f"/api/characters/{char.id}/talents",
             json={"talent_name": "InvalidTalent"},
-            
         )
         assert response.status_code == 400
         assert "Unknown talent" in response.json()["detail"]
