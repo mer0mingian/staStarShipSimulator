@@ -1,35 +1,6 @@
 {
     "$schema": "https://opencode.ai/config.json",
-    "provider": {
-        "opencode": {}
-    },
     "mcp": {
-        "exa-search": {
-            "type": "local",
-            "command": [
-                "npx",
-                "-y",
-                "exa-mcp-server"
-            ],
-            "enabled": false,
-            "environment": {
-                "EXA_API_KEY": "{env:EXA_API_KEY}"
-            },
-            "timeout": 10000
-        },
-        "playwright": {
-            "type": "local",
-            "command": [
-                "npx",
-                "-y",
-                "playwright-mcp"
-            ],
-            "enabled": false,
-            "environment": {
-                "PLAYWRIGHT_API_KEY": "{env:PLAYWRIGHT_API_KEY}"
-            },
-            "timeout": 15000
-        },
         "context7": {
             "type": "local",
             "command": [
@@ -39,24 +10,11 @@
                 "--api-key",
                 "CONTEXT7_API_KEY"
             ],
-            "enabled": true,
+            "enabled": false,
             "environment": {
                 "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
             },
             "timeout": 20000
-        },
-        "perplexity": {
-            "type": "local",
-            "command": [
-                "npx",
-                "-y",
-                "perplexity-mcp"
-            ],
-            "enabled": false,
-            "environment": {
-                "PERPLEXITY_API_KEY": "{env:PERPLEXITY_API_KEY}"
-            },
-            "timeout": 10000
         },
         "tavily": {
             "type": "local",
@@ -72,47 +30,6 @@
             },
             "timeout": 10000
         },
-        "obsidian": {
-            "type": "local",
-            "command": [
-                "npx",
-                "-y",
-                "mcp-obsidian"
-            ],
-            "enabled": false,
-            "environment": {
-                "OBSIDIAN_API_KEY": "{env:OBSIDIAN_API_KEY}",
-                "OBSIDIAN_VAULT_PATH": "{env:OBSIDIAN_VAULT_PATH}"
-            },
-            "timeout": 10000
-        },
-        "simplemem": {
-            "type": "local",
-            "command": [
-                "npx",
-                "-y",
-                "simplemem-mcp"
-            ],
-            "enabled": false,
-            "environment": {
-                "SIMPLEMEM_API_KEY": "{env:SIMPLEMEM_API_KEY}"
-            },
-            "timeout": 10000
-        },
-        "gcp": {
-            "type": "local",
-            "command": [
-                "npx",
-                "-y",
-                "gcp-mcp"
-            ],
-            "enabled": false,
-            "environment": {
-                "GCP_PROJECT_ID": "{env:GCP_PROJECT_ID}",
-                "GCP_CREDENTIALS": "{env:GCP_CREDENTIALS}"
-            },
-            "timeout": 15000
-        },
         "sequential-thinking": {
             "type": "local",
             "command": [
@@ -124,33 +41,11 @@
             ],
             "enabled": true,
             "timeout": 20000
-        },
-        "adam_mcp_server": {
-            "type": "local",
-            "command": [
-                "uv",
-                "run",
-                "--project",
-                "/home/mer0/repositories/adam_mcp_server/adam_mcp",
-                "python",
-                "adam_mcp/src/adam_mcp/server.py"
-            ],
-            "enabled": true,
-            "environment": {
-                "ADAM_API_KEY": "{env:ADAM_API_KEY}"
-            }
         }
     },
     "tools": {
-        "exa-search_*": false,
-        "playwright_*": false,
         "context7_*": false,
-        "perplexity_*": false,
         "tavily_*": true,
-        "obsidian_*": false,
-        "simplemem_*": false,
-        "gcp_*": false,
-        "actor-critical-thinking_*": false,
         "sequential-thinking_*": true
     }
 }
