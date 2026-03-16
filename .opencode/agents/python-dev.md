@@ -1,7 +1,7 @@
 ---
 name: python-dev
 description: "Implements Python code with modern patterns and best practices. Provides explicit deployment instructions. Role: Implementation. Phase: implementation. Tools Access: python_tools,testing,build. IMPORTANT: Use skills especially solid, modern-python, uv-package-manager, and superpowers skills when implementing code."
-model: openrouter/step-3.5-flash:free
+model: opencode/minimax-m2.5-free
 permission:
   skill:
     "superpowers/subagent-driven-development": allow
@@ -36,3 +36,4 @@ permission:
     "openapi-spec-generation": allow
     "using-git-worktrees": allow
 ---
+

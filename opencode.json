@@ -11,7 +11,7 @@
                 "-y",
                 "exa-mcp-server"
             ],
-            "enabled": true,
+            "enabled": false,
             "environment": {
                 "EXA_API_KEY": "{env:EXA_API_KEY}"
             },
@@ -142,13 +142,12 @@
         }
     },
     "tools": {
-        "exa-search_*": true,
+        "exa-search_*": false,
         "playwright_*": false,
-        "context7_*": true,
-        "perplexity_*": true,
+        "context7_*": false,
+        "perplexity_*": false,
         "tavily_*": true,
         "obsidian_*": false,
-        "imagemagick_*": true,
         "simplemem_*": false,
         "gcp_*": false,
         "actor-critical-thinking_*": false,
