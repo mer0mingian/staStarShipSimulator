@@ -48,6 +48,7 @@ def create_app():
     from sta.web.routes.universe_router import universe_router
     from sta.web.routes.characters_router import characters_router
     from sta.web.routes.ships_router import ships_router
+    from sta.web.routes.import_export_router import backup_router
 
     # Register routers with prefixes mirroring original blueprint URLs
     # Note: Some routers have internal prefixes, others rely on the include_router prefix
@@ -74,6 +75,7 @@ def create_app():
     app.include_router(
         ships_router, prefix="/api/vtt"
     )  # VTT ship routes -> /api/vtt/ships
+    app.include_router(backup_router, prefix="/api")  # Backup routes -> /api/backup
 
     return app
 
