@@ -2,7 +2,13 @@
 
 ## Executive Summary
 
-This document outlines the comprehensive plan for transitioning the Star Trek Adventures Starship Simulator from a dedicated combat encounter tool to a minimal Virtual Tabletop (VTT) experience. The plan covers all 6 milestones with detailed task breakdowns, parallel work assignments, testing strategies, and acceptance criteria.
+This document outlines the comprehensive plan for transitioning the Star Trek Adventures Starship Simulator from a dedicated combat encounter tool to a minimal Virtual Tabletop (VTT) experience. The plan covers all milestones with detailed task breakdowns, parallel work assignments, testing strategies, and acceptance criteria.
+
+**Status**: M1-M8 **COMPLETE** - Alpha v0.1.0 released (376 tests passing)
+
+---
+
+## Milestone 9: Web UI & Theme Support (Future)
 
 ## Table of Contents
 

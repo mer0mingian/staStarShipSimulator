@@ -7,17 +7,27 @@ This project uses **progressive disclosure** - showing essential information fir
 | Level | Files | Description |
 |-------|-------|-------------|
 | **Start Here** | `delivery_plan.md` | VTT transition overview and milestone roadmap |
-| **Current Work** | `tasks/milestone5_tasks.md` | Specific tasks for current milestone (M5 in progress) |
+| **Current Work** | `tasks/future/roadmap_proposal.md` | M8+ future roadmap |
 | **Reference** | See `references/` folder | Game rules, data models, technical details |
 
 ## Folder Structure
 
 ### Essential (Start Here)
-- **delivery_plan.md** - High-level VTT transition plan with all 6 milestones
+- **delivery_plan.md** - High-level VTT transition plan with all milestones (M1-M8 complete)
 
 ### Tasks (`tasks/`)
-Active and completed milestone task lists:
-- `milestone7_tasks.md` - Import/Export (current)
+Completed milestone task lists:
+- `milestone8_tasks.md` - Test Cleanup (complete - 376 passed, 0 skipped)
+- `milestone7_tasks.md` - Import/Export (complete)
+- `milestone6_tasks.md` - UI/UX Overhaul (complete)
+- `milestone5_tasks.md` - Combat Integration + Scene Lifecycle (complete)
+- `milestone4_tasks.md` - Character/Ship CRUD (complete)
+- `milestone3_tasks.md` - Scene Management (complete)
+- `milestone2_tasks.md` - Campaign Management (complete)
+
+### Future (`tasks/future/`)
+Upcoming work:
+- `roadmap_proposal.md` - M8+ features (Social Conflict, NPC Systems, GM Tools)
 - `milestone6_tasks.md` - UI/UX Overhaul (complete)
 - `milestone5_tasks.md` - Combat Integration + Scene Lifecycle (complete)
 - `milestone4_tasks.md` - Character/Ship CRUD (complete)

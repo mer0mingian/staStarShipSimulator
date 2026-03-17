@@ -22,7 +22,9 @@ This app digitizes the starship combat experience for STA 2e tabletop sessions. 
 | **M4** | ✅ Complete | Character/Ship CRUD |
 | **M5** | ✅ Complete | Combat Integration + Scene Lifecycle |
 | **M6** | ✅ Complete | UI/UX Overhaul |
-| **M7** | 🚧 In Progress | Import/Export + Final Integration |
+| **M7** | ✅ Complete | Import/Export + Final Integration |
+| **M8** | ✅ Complete | Test Cleanup (376 passed, 0 skipped) |
+| **M9+** | 🔭 Future | Advanced features |
 
 See `docs/delivery_plan.md` for full VTT transition plan.
 

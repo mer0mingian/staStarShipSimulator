@@ -66,9 +66,14 @@ Analysis of the STA 2e rules reveals several advanced systems that require dedic
   - Logic for obtaining items (Momentum/Threat spend via Resource Pool).
 - **Status**: Covered in M4 (Character/Ship CRUD) via "Items/Equipment" object.
 
-## Proposed Milestones (M7+)
+## Proposed Milestones (M8+)
 
-### Milestone 7: Advanced Conflict Systems
+### Milestone 8: Test Cleanup & Investigation
+- **Goal**: Investigate and fix remaining 28 skipped tests
+- **Status**: Pending investigation
+- **Duration**: 1-2 days
+
+### Milestone 9: Advanced Conflict Systems
 - **Goal**: Implement Social Conflict and Extended Tasks.
 - **Features**:
   - Social Conflict UI (Opposed tasks, persuasion) linked to `Social Encounter` entity.
@@ -77,7 +82,7 @@ Analysis of the STA 2e rules reveals several advanced systems that require dedic
 - **Duration**: 5-7 days.
 - **Entities**: `Social Encounter`, `Extended Task`, `Injury`.
 
-### Milestone 8: NPC & Creature Systems
+### Milestone 10: NPC & Creature Systems
 - **Goal**: Implement full NPC generation and Creature rules.
 - **Features**:
   - NPC Category logic (Minor/Notable/Major) via `NPC Category Logic` entity.
@@ -86,7 +91,7 @@ Analysis of the STA 2e rules reveals several advanced systems that require dedic
 - **Duration**: 5-7 days.
 - **Entities**: `NPC`, `NPC Category Logic`, `Trait`.
 
-### Milestone 9: GM Tools & Scene Logic
+### Milestone 11: GM Tools & Scene Logic
 - **Goal**: Enhance GM control over scenes and resources.
 - **Features**:
   - Scene Transition Logic (Connected scenes) via `Scene` entity.
@@ -95,7 +100,7 @@ Analysis of the STA 2e rules reveals several advanced systems that require dedic
 - **Duration**: 5-7 days.
 - **Entities**: `Scene`, `Resource Pool`, `Extended Task`.
 
-### Milestone 10: Beta & Polish
+### Milestone 12: Beta & Polish
 - **Goal**: Refine UI/UX and prepare for release.
 - **Features**:
   - Performance optimization (database indexes on entity IDs).
