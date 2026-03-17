@@ -232,12 +232,12 @@
         {% endif %}
     </div>
 
-    <!-- Player Crew (only available when not draft) -->
+    <!-- Player Crew (Participants) -->
     <div class="panel" style="border-color: var(--lcars-green);" id="player-crew-panel">
-        <h2 style="color: var(--lcars-green);">Player Crew</h2>
+        <h2 style="color: var(--lcars-green);">Participant Management</h2>
         <p style="color: var(--lcars-tan); font-size: 0.9em;">
             {% if scene.status == 'draft' %}
-            <em>Enable the scene (change status from Draft) to manage player crew.</em>
+            <em>Enable the scene (change status from Draft) to manage participant crew.</em>
             {% else %}
             Manage which player characters are present in this scene.
             {% endif %}
@@ -273,6 +273,70 @@
         </a>
     </div>
 </form>
+
+<!-- Scene Connections Panel -->
+<div class="panel" style="border-color: var(--lcars-tomato); margin-top: 20px;">
+    <h2 style="color: var(--lcars-tomato);">Scene Connections</h2>
+    <p style="color: var(--lcars-tan); font-size: 0.9em; margin-bottom: 15px;">
+        Link scenes together to create branching narratives. Each scene can have multiple previous and next scenes.
+    </p>
+    
+    <div class="grid" style="gap: 20px;">
+        <!-- Previous Scenes -->
+        <div style="background: #1a1a1a; padding: 15px; border-radius: 8px;">
+            <h3 style="color: var(--lcars-orange); margin-top: 0;">Previous Scenes</h3>
+            <p style="color: var(--lcars-tan); font-size: 0.85em;">Scenes that lead to this scene:</p>
+            <div id="previous-scenes-list">
+                {% if scene.previous_scenes %}
+                {% for prev in scene.previous_scenes %}
+                <div style="background: #222; padding: 8px 12px; border-radius: 5px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <span>
+                        <strong style="color: var(--lcars-orange);">{{ prev.name }}</strong>
+                        <span style="color: var(--lcars-tan); font-size: 0.85em;">({{ prev.status }})</span>
+                    </span>
+                    <button type="button" class="btn btn-small btn-danger" onclick="removeConnection({{ prev.id }}, 'previous')">&times;</button>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p style="color: var(--lcars-tan); font-style: italic;">No previous scenes linked</p>
+                {% endif %}
+            </div>
+            <div style="margin-top: 15px;">
+                <select id="add-previous-scene" style="width: 70%;">
+                    <option value="">Select a scene...</option>
+                </select>
+                <button type="button" class="btn btn-small" onclick="addConnection('previous')" style="background: var(--lcars-orange);">Add</button>
+            </div>
+        </div>
+        
+        <!-- Next Scenes -->
+        <div style="background: #1a1a1a; padding: 15px; border-radius: 8px;">
+            <h3 style="color: var(--lcars-green); margin-top: 0;">Next Scenes</h3>
+            <p style="color: var(--lcars-tan); font-size: 0.85em;">Scenes that follow this scene:</p>
+            <div id="next-scenes-list">
+                {% if scene.next_scenes %}
+                {% for next_s in scene.next_scenes %}
+                <div style="background: #222; padding: 8px 12px; border-radius: 5px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <span>
+                        <strong style="color: var(--lcars-green);">{{ next_s.name }}</strong>
+                        <span style="color: var(--lcars-tan); font-size: 0.85em;">({{ next_s.status }})</span>
+                    </span>
+                    <button type="button" class="btn btn-small btn-danger" onclick="removeConnection({{ next_s.id }}, 'next')">&times;</button>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p style="color: var(--lcars-tan); font-style: italic;">No next scenes linked</p>
+                {% endif %}
+            </div>
+            <div style="margin-top: 15px;">
+                <select id="add-next-scene" style="width: 70%;">
+                    <option value="">Select a scene...</option>
+                </select>
+                <button type="button" class="btn btn-small" onclick="addConnection('next')" style="background: var(--lcars-green);">Add</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Add NPC Modal -->
 <div id="add-npc-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
@@ -617,5 +681,153 @@ function renderCharacters() {
         list.innerHTML = '<p style="color: var(--lcars-tan); font-style: italic;">No characters added</p>';
     }
 }
+
+// Scene Connections
+let sceneConnections = {
+    previous_scene_ids: [],
+    next_scene_ids: []
+};
+
+// Load scene connections on page load
+async function loadSceneConnections() {
+    try {
+        const response = await fetch(`/scenes/${sceneId}/connections`);
+        if (response.ok) {
+            sceneConnections = await response.json();
+            populateSceneSelectors();
+        }
+    } catch (e) {
+        console.error('Failed to load scene connections:', e);
+    }
+}
+
+// Populate the dropdown selectors with available scenes
+async function populateSceneSelectors() {
+    try {
+        const response = await fetch(`/campaigns/${campaignId}/scenes`);
+        if (!response.ok) return;
+        
+        const scenes = await response.json();
+        
+        const prevSelect = document.getElementById('add-previous-scene');
+        const nextSelect = document.getElementById('add-next-scene');
+        
+        if (prevSelect) {
+            prevSelect.innerHTML = '<option value="">Select a scene...</option>';
+            scenes.forEach(s => {
+                if (s.id !== sceneId && !sceneConnections.previous_scene_ids.includes(s.id)) {
+                    prevSelect.innerHTML += `<option value="${s.id}">${s.name} (${s.status})</option>`;
+                }
+            });
+        }
+        
+        if (nextSelect) {
+            nextSelect.innerHTML = '<option value="">Select a scene...</option>';
+            scenes.forEach(s => {
+                if (s.id !== sceneId && !sceneConnections.next_scene_ids.includes(s.id)) {
+                    nextSelect.innerHTML += `<option value="${s.id}">${s.name} (${s.status})</option>`;
+                }
+            });
+        }
+    } catch (e) {
+        console.error('Failed to populate scene selectors:', e);
+    }
+}
+
+// Add a connection
+async function addConnection(type) {
+    const select = document.getElementById(`add-${type}-scene`);
+    const targetId = parseInt(select.value);
+    
+    if (!targetId || isNaN(targetId)) return;
+    
+    try {
+        const data = {};
+        if (type === 'previous') {
+            data.previous_scene_ids = [...sceneConnections.previous_scene_ids, targetId];
+            data.next_scene_ids = sceneConnections.next_scene_ids;
+        } else {
+            data.previous_scene_ids = sceneConnections.previous_scene_ids;
+            data.next_scene_ids = [...sceneConnections.next_scene_ids, targetId];
+        }
+        
+        const response = await fetch(`/scenes/${sceneId}/connections`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            sceneConnections = await response.json();
+            renderConnections(type);
+            populateSceneSelectors();
+        } else {
+            alert('Failed to add connection');
+        }
+    } catch (e) {
+        console.error('Failed to add connection:', e);
+        alert('Failed to add connection');
+    }
+}
+
+// Remove a connection
+async function removeConnection(targetId, type) {
+    try {
+        const data = {};
+        if (type === 'previous') {
+            data.previous_scene_ids = sceneConnections.previous_scene_ids.filter(id => id !== targetId);
+            data.next_scene_ids = sceneConnections.next_scene_ids;
+        } else {
+            data.previous_scene_ids = sceneConnections.previous_scene_ids;
+            data.next_scene_ids = sceneConnections.next_scene_ids.filter(id => id !== targetId);
+        }
+        
+        const response = await fetch(`/scenes/${sceneId}/connections`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            sceneConnections = await response.json();
+            renderConnections(type);
+            populateSceneSelectors();
+        } else {
+            alert('Failed to remove connection');
+        }
+    } catch (e) {
+        console.error('Failed to remove connection:', e);
+        alert('Failed to remove connection');
+    }
+}
+
+// Render connection lists
+function renderConnections(type) {
+    const listId = type === 'previous' ? 'previous-scenes-list' : 'next-scenes-list';
+    const list = document.getElementById(listId);
+    if (!list) return;
+    
+    const ids = type === 'previous' ? sceneConnections.previous_scene_ids : sceneConnections.next_scene_ids;
+    const color = type === 'previous' ? 'var(--lcars-orange)' : 'var(--lcars-green)';
+    
+    if (ids.length === 0) {
+        list.innerHTML = '<p style="color: var(--lcars-tan); font-style: italic;">No ' + type + ' scenes linked</p>';
+        return;
+    }
+    
+    // We need to fetch scene names - for now show IDs
+    // A more complete implementation would fetch scene details
+    list.innerHTML = ids.map(id => `
+        <div style="background: #222; padding: 8px 12px; border-radius: 5px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <span>
+                <strong style="color: ${color};">Scene #${id}</strong>
+            </span>
+            <button type="button" class="btn btn-small btn-danger" onclick="removeConnection(${id}, '${type}')">&times;</button>
+        </div>
+    `).join('');
+}
+
+// Load connections on page load
+loadSceneConnections();
 </script>
 {% endblock %}

@@ -47,6 +47,7 @@ class SceneStatus(str, Enum):
     ACTIVE = "Active"
     ARCHIVED = "Archived"
     CONNECTED = "Connected"
+    READY = "Ready"
 
 
 class TraitCategory(str, Enum):

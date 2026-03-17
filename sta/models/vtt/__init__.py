@@ -25,6 +25,12 @@ from .models import (
     Scene,
 )
 from .campaign import Campaign, UniverseLibrary, TemplateLibrary
+from .scene_validation import (
+    SceneValidationError,
+    validate_state_transition,
+    validate_scene_for_ready,
+    validate_scene_for_active,
+)
 
 __all__ = [
     "Attribute",
@@ -52,4 +58,8 @@ __all__ = [
     "Campaign",
     "UniverseLibrary",
     "TemplateLibrary",
+    "SceneValidationError",
+    "validate_state_transition",
+    "validate_scene_for_ready",
+    "validate_scene_for_active",
 ]

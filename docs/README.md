@@ -2,34 +2,51 @@
 
 This project uses **progressive disclosure** - showing essential information first, with detailed references available on demand.
 
-## Quick Access
+## Progressive Disclosure Levels
 
 | Level | Files | Description |
 |-------|-------|-------------|
 | **Start Here** | `delivery_plan.md` | VTT transition overview and milestone roadmap |
-| **Current Work** | `milestone2_tasks.md` | Specific tasks for in-progress milestone |
-| **Reference** | `rules_reference.md`, `objects.md`, `legacy_index.md` | Game rules, data models, legacy code docs |
-| **Archive** | `open_questions.md`, `learnings_and_decisions.md` | Historical decisions, pending items |
+| **Current Work** | `tasks/milestone5_tasks.md` | Specific tasks for current milestone (M5 in progress) |
+| **Reference** | See `references/` folder | Game rules, data models, technical details |
 
-## File Guide
+## Folder Structure
 
-### Essential
+### Essential (Start Here)
 - **delivery_plan.md** - High-level VTT transition plan with all 6 milestones
-- **milestone2_tasks.md** - Executable task list for current milestone
 
-### Task Details
-- **milestone1_plan.md** - Completed M1 details (reference only)
+### Tasks (`tasks/`)
+Active and completed milestone task lists:
+- `milestone6_tasks.md` - UI/UX Overhaul (current)
+- `milestone5_tasks.md` - Combat Integration + Scene Lifecycle (complete)
+- `milestone4_tasks.md` - Character/Ship CRUD (complete)
+- `milestone3_tasks.md` - Scene Management (complete)
+- `milestone2_tasks.md` - Campaign Management (complete)
 
-### Reference
-- **rules_reference.md** - STA 2e combat rules extracted from rulebook
+### Reference (`references/`)
+Deep-dive technical documentation:
 - **objects.md** - Data models and Pydantic schemas
-- **legacy_index.md** - Legacy code inventory for VTT transition
-- **PROJECT_BRIEFING.md** - Original project requirements
+- **game_machanics.md** - Combat mechanics, dice system, actions
+- **technical.md** - Current tech stack and project structure
+- **legacy_index.md** - Legacy code inventory
 
-### Archive
+### Root Level Reference
+- **rules_reference.md** - STA 2e rules index (links to raw rulebook chapters in `sta2e_rules/`)
+
+### Archive (`archive/`)
+Historical context and decisions:
+- **PROJECT_BRIEFING.md** - Original VTT scope transition requirements
+- **learnings_and_decisions.md** - Development decision log
+- **agent_summary.md** - Agent configuration and model usage
 - **open_questions.md** - Unresolved design questions
-- **learnings_and_decisions.md** - Decision log from development
-- **agent_summary.md** - Agent interaction history
 
 ### External
-- **sta2e_rules/** - Raw STA 2e Core Rulebook chapters (reference only)
+- **sta2e_rules/** - Raw STA 2e Core Rulebook chapters (reference only, not for redistribution)
+
+---
+
+**Reading Order (Progressive Disclosure):**
+1. Start with `delivery_plan.md` to understand the project
+2. Check `tasks/milestone5_tasks.md` for current work
+3. Dive into `references/` for specific technical details
+4. Check `archive/` for historical context if needed

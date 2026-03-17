@@ -8,7 +8,8 @@ from sta.database.schema import CharacterRecord
 class TestExtendedCharacterFields:
     """Tests for extended character fields in CharacterRecord."""
 
-    def test_character_record_has_extended_fields(self, test_session):
+    @pytest.mark.asyncio
+    async def test_character_record_has_extended_fields(self, test_session):
         """CharacterRecord should have extended fields."""
         character = CharacterRecord(
             name="Jean-Luc Picard",
@@ -45,7 +46,7 @@ class TestExtendedCharacterFields:
             career_path="Starfleet Officer",
         )
         test_session.add(character)
-        test_session.flush()
+        await test_session.flush()
 
         assert character.character_type == "main"
         assert character.pronouns == "he/him"
@@ -56,7 +57,8 @@ class TestExtendedCharacterFields:
         assert character.upbringing == "France, Earth"
         assert character.career_path == "Starfleet Officer"
 
-    def test_character_record_extended_fields_default(self, test_session):
+    @pytest.mark.asyncio
+    async def test_character_record_extended_fields_default(self, test_session):
         """Extended fields should have sensible defaults."""
         character = CharacterRecord(
             name="Worf",
@@ -83,7 +85,7 @@ class TestExtendedCharacterFields:
             ),
         )
         test_session.add(character)
-        test_session.flush()
+        await test_session.flush()
 
         assert character.character_type == "support"
         assert character.pronouns is None
@@ -95,7 +97,8 @@ class TestExtendedCharacterFields:
         assert character.upbringing is None
         assert character.career_path is None
 
-    def test_character_record_character_types(self, test_session):
+    @pytest.mark.asyncio
+    async def test_character_record_character_types(self, test_session):
         """Character type should accept main, support, or npc."""
         main_char = CharacterRecord(
             name="Main Char",
@@ -174,7 +177,7 @@ class TestExtendedCharacterFields:
             character_type="npc",
         )
         test_session.add(npc_char)
-        test_session.flush()
+        await test_session.flush()
 
         assert main_char.character_type == "main"
         assert support_char.character_type == "support"
@@ -184,7 +187,8 @@ class TestExtendedCharacterFields:
 class TestCharacterModelExtendedFields:
     """Tests for Character model extended fields."""
 
-    def test_character_model_has_extended_fields(self):
+    @pytest.mark.asyncio
+    async def test_character_model_has_extended_fields(self):
         """Character model should have extended fields."""
         from sta.models.character import Character, Attributes, Disciplines
 
@@ -213,7 +217,8 @@ class TestCharacterModelExtendedFields:
         assert char.upbringing == "Sitka, Alaska"
         assert char.career_path == "Starfleet"
 
-    def test_character_model_extended_defaults(self):
+    @pytest.mark.asyncio
+    async def test_character_model_extended_defaults(self):
         """Character model extended fields should have defaults."""
         from sta.models.character import Character, Attributes, Disciplines
 
@@ -234,7 +239,8 @@ class TestCharacterModelExtendedFields:
 class TestCharacterRecordModelConversion:
     """Tests for converting between CharacterRecord and Character model."""
 
-    def test_to_model_includes_extended_fields(self, test_session):
+    @pytest.mark.asyncio
+    async def test_to_model_includes_extended_fields(self, test_session):
         """to_model() should include extended fields."""
         record = CharacterRecord(
             name="Data",
@@ -271,7 +277,7 @@ class TestCharacterRecordModelConversion:
             career_path="Starfleet Officer",
         )
         test_session.add(record)
-        test_session.flush()
+        await test_session.flush()
 
         model = record.to_model()
 
@@ -284,7 +290,8 @@ class TestCharacterRecordModelConversion:
         assert model.upbringing == "Omicron Theta"
         assert model.career_path == "Starfleet Officer"
 
-    def test_from_model_includes_extended_fields(self):
+    @pytest.mark.asyncio
+    async def test_from_model_includes_extended_fields(self):
         """from_model() should include extended fields."""
         from sta.models.character import Character, Attributes, Disciplines
 

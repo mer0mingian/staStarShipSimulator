@@ -1,0 +1,18 @@
+{
+  // OpenCode Model Manager Configuration
+  // Providers to include (empty = all)
+  "providers": {
+    "include": ["opencode", "openrouter"],
+    "exclude": []
+  },
+  // Model whitelist/blacklist
+  "models": {
+    "whitelist": [],
+    "blacklist": []
+  },
+  // Default settings
+  "defaults": {
+    "min_context_window": 200000,
+    "preferred_model": ""
+  }
+}

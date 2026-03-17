@@ -1,6 +1,6 @@
 """Database layer for STA Starship Simulator."""
 
-from .db import init_db, get_session, engine
+from .db import init_db, get_session, get_db, engine, async_engine
 from .schema import (
     CharacterRecord,
     StarshipRecord,
@@ -15,6 +15,8 @@ from .schema import (
     SceneNPCRecord,
     CharacterTraitRecord,
     PersonnelEncounterRecord,
+    SceneParticipantRecord,
+    SceneShipRecord,
 )
 from .vtt_schema import (
     VTTCharacterRecord,
@@ -43,6 +45,8 @@ __all__ = [
     "SceneNPCRecord",
     "CharacterTraitRecord",
     "PersonnelEncounterRecord",
+    "SceneParticipantRecord",
+    "SceneShipRecord",
     "VTTCharacterRecord",
     "VTTShipRecord",
     "UniverseLibraryRecord",

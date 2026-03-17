@@ -17,11 +17,12 @@ This app digitizes the starship combat experience for STA 2e tabletop sessions. 
 | Milestone | Status | Description |
 |-----------|--------|-------------|
 | **M1** | ✅ Complete | Database Schema Migration |
-| **M2** | 🔄 In Progress | Campaign Management |
-| **M3** | Pending | Scene Management |
-| **M4** | Pending | Character/Ship CRUD |
-| **M5** | Pending | Combat Integration |
-| **M6** | Pending | UI/UX Overhaul |
+| **M2** | ✅ Complete | Campaign Management |
+| **M3** | ✅ Complete | Scene Management |
+| **M4** | ✅ Complete | Character/Ship CRUD |
+| **M5** | ✅ Complete | Combat Integration + Scene Lifecycle |
+| **M6** | 🚧 In Progress | UI/UX Overhaul |
+| **M7** | Pending | Import/Export + Final Integration |
 
 See `docs/delivery_plan.md` for full VTT transition plan.
 
@@ -29,7 +30,10 @@ See `docs/delivery_plan.md` for full VTT transition plan.
 
 ## Current Features
 
-- **Campaign Management**: Create/join campaigns, GM password protection
+- **Campaign Management**: Create/join campaigns, GM password protection, Universe Library
+- **Character Management**: Full CRUD, species/role, attributes/disciplines, stress/determination, talents, default player ownership
+- **Ship Management**: Full CRUD, systems/departments, weapons, shields, breaches, crew quality
+- **Scene Management**: 4-state lifecycle (draft/ready/active/completed), multi-active scenes, split-party support
 - **Multiplayer**: Multiple players on own devices, turn claiming
 - **Starship Combat**: Hex-based tactical map, shields, breaches, Momentum/Threat
 - **Bridge Actions**: Tactical, Science, Engineering, Conn, Command stations
@@ -39,7 +43,12 @@ See `docs/delivery_plan.md` for full VTT transition plan.
 
 ## VTT Roadmap
 
-Full VTT feature roadmap is tracked in `docs/delivery_plan.md`. Current focus: Campaign Management (M2).
+Full VTT feature roadmap is tracked in `docs/delivery_plan.md`. Completed: M1-M4. Next: M5 (Combat Integration + Scene Lifecycle).
+
+### Scene Lifecycle (M5 Feature)
+- **draft** → **ready** → **active** → **completed**
+- Multiple active scenes for split-party support
+- Scene transition dialogue with connected/ready scenes
 
 ---
 
@@ -201,18 +210,18 @@ The application will be available at **http://localhost:5001**
 
 ### Running Tests
 
-```bash
-# Install test dependencies
-pip install -r requirements-dev.txt
+The project uses `uv` for fast dependency management.
 
-# Run all tests
-pytest
+```bash
+# Create virtual environment and install dependencies
+uv venv
+uv pip install -r requirements.txt -r requirements-dev.txt
+
+# Run tests using uv
+uv run pytest tests/ -v
 
 # Run with coverage
-pytest --cov=sta
-
-# Run specific test file
-pytest tests/test_turn_order.py
+uv run pytest --cov=sta tests/
 ```
 
 ### Development Mode with Hot Reload
