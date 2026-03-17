@@ -1991,6 +1991,8 @@ async def update_scene_by_id(
         scene.scene_traits_json = json.dumps(data["scene_traits"])
     if "challenges" in data:
         scene.challenges_json = json.dumps(data["challenges"])
+    if "characters_present" in data:
+        scene.characters_present_json = json.dumps(data["characters_present"])
 
     await db.commit()
 
@@ -2003,4 +2005,5 @@ async def update_scene_by_id(
         "stardate": scene.stardate,
         "scene_traits": json.loads(scene.scene_traits_json or "[]"),
         "challenges": json.loads(scene.challenges_json or "[]"),
+        "characters_present": json.loads(scene.characters_present_json or "[]"),
     }

@@ -1174,6 +1174,16 @@ async def convert_scene_type(
         )
 
     if new_type == "starship_encounter":
+        from sta.database.schema import SceneNPCRecord
+
+        npcs_stmt = select(SceneNPCRecord).filter(SceneNPCRecord.scene_id == scene_id)
+        npcs_result = await db.execute(npcs_stmt)
+        npcs = npcs_result.scalars().all()
+        if not npcs:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot convert to starship_encounter without NPCs",
+            )
         scene.scene_type = "starship_encounter"
         scene.has_map = True
     elif new_type == "narrative":
@@ -1278,6 +1288,13 @@ async def claim_character(
 
     if player.is_gm:
         raise HTTPException(status_code=400, detail="GM cannot be claimed")
+
+    # Check if character is already claimed (has a valid session token not starting with unclaimed_)
+    if player.session_token and not player.session_token.startswith("unclaimed_"):
+        return {
+            "success": False,
+            "detail": "Character already claimed",
+        }
 
     new_token = secrets.token_urlsafe(32)
     player.session_token = new_token

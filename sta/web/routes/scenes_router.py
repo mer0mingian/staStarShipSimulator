@@ -187,7 +187,7 @@ async def add_npc_to_scene(
     """Add an NPC to a scene."""
     scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
     scene_result = await db.execute(scene_stmt)
-    scene = scene_stmt.scalars().first()
+    scene = scene_result.scalars().first()
 
     if not scene:
         raise HTTPException(status_code=404, detail="Scene not found")
@@ -770,45 +770,42 @@ async def update_scene_participant(
         participant.is_visible_to_players = is_visible_to_players
 
     if player_id is not None:
-        if player_id is not None:
-            player_stmt = select(CampaignPlayerRecord).filter(
-                CampaignPlayerRecord.id == player_id,
-                CampaignPlayerRecord.campaign_id == scene.campaign_id,
+        player_stmt = select(CampaignPlayerRecord).filter(
+            CampaignPlayerRecord.id == player_id,
+            CampaignPlayerRecord.campaign_id == scene.campaign_id,
+        )
+        player_result = await db.execute(player_stmt)
+        player = player_result.scalars().first()
+
+        if not player:
+            raise HTTPException(status_code=400, detail="Player not found in campaign")
+
+        existing_stmt = (
+            select(SceneParticipantRecord)
+            .filter(
+                SceneParticipantRecord.scene_id == scene_id,
+                SceneParticipantRecord.player_id == player_id,
             )
-            player_result = await db.execute(player_stmt)
-            player = player_result.scalars().first()
+            .filter(SceneParticipantRecord.id != participant_id)
+        )
+        existing_result = await db.execute(existing_stmt)
+        existing = existing_result.scalars().first()
 
-            if not player:
-                raise HTTPException(
-                    status_code=400, detail="Player not found in campaign"
-                )
-
-            existing_stmt = (
-                select(SceneParticipantRecord)
-                .filter(
-                    SceneParticipantRecord.scene_id == scene_id,
-                    SceneParticipantRecord.player_id == player_id,
-                )
-                .filter(SceneParticipantRecord.id != participant_id)
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail="Player already assigned to another character in this scene",
             )
-            existing_result = await db.execute(existing_stmt)
-            existing = existing_result.scalars().first()
 
-            if existing:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Player already assigned to another character in this scene",
-                )
+        if (
+            player.vtt_character_id
+            and player.vtt_character_id != participant.character_id
+        ):
+            raise HTTPException(
+                status_code=400, detail="Player is not assigned to this character"
+            )
 
-            if (
-                player.vtt_character_id
-                and player.vtt_character_id != participant.character_id
-            ):
-                raise HTTPException(
-                    status_code=400, detail="Player is not assigned to this character"
-                )
-
-        participant.player_id = player_id
+    participant.player_id = player_id
 
     await db.commit()
 
