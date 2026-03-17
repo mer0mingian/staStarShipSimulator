@@ -1,0 +1,13 @@
+Both branches have been merged and deleted. 
+Now, I have another request before we tackle M9. 
+Let's call this M8.2: "extend specifications from rules". Create a new branch for this. 
+
+Then copy the game_mechanics.md file into a new file /docs/sta2e_rules/game_mechanics_full.md and put this to .gitignore. It will contain detailed game mechanic specifications for implementation. Mention this file in docs/readme.md and move the old game_mechanics.md to legacy docs.
+
+Deploy subagents ( @architect ) to review all the files mentioned in @docs/rules_reference.md . Do this subchapter by subchapter, i.e. each subchapter should use a new agent. Instruct the subagent to read the project documentation (see  @docs/README.md and @docs/README.md , but also @docs/references/objects.md , @docs/references/game_machanics.md , @docs/references/legacy_index.md ) and do all of the below: 
+- check if the game information they read in their subchapter is compatible with the project docs. if no, document the conflict and correct the documented mechanics. 
+- check if they provide additional details that should be mentioned for the implementation. if yes, extend the game mechanics full specification (and provide the chapter + subchapter + section as reference). Focus on practices for virtual table top systems (do web research if needed).
+- Check if there is a current feature available to use the mechanic in our app. If no, add this to a list of potential future features.
+- check if you understood the rules and collect questions in another list.
+
+Note that in the current state, we still aim for an MVP that supports scene management, character management (and creation), ship management (and creation), player logs, and base die roll mechanics. We do not want to have details like implemented mechanics for Talents or Special Rules yet. However, check if our objects can hold the information needed for such an implementation and document how such a functionality can look like. Is the task clear?
