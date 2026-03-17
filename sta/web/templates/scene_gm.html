@@ -117,9 +117,21 @@
     <a href="{{ url_for('scenes.view_scene', scene_id=scene.id, role='viewscreen') }}" class="btn btn-small" style="background: var(--lcars-blue);">
         Open Viewscreen
     </a>
+    {% if scene.status == 'draft' %}
+    <button class="btn btn-small" onclick="activateScene({{ scene.id }})" style="background: var(--lcars-green);">
+        Activate Scene
+    </button>
+    {% else %}
     <button class="btn btn-small" onclick="deactivateScene({{ scene.id }})" style="background: var(--lcars-orange);">
         Deactivate Scene
     </button>
+    {% endif %}
+    <button class="btn btn-small" onclick="completeScene({{ scene.id }})" style="background: var(--lcars-purple);">
+        Mark Complete
+    </button>
+    <a href="{{ url_for('scenes.edit_scene', scene_id=scene.id) }}" class="btn btn-small" style="background: var(--lcars-tan);">
+        Edit Scene
+    </a>
 </div>
 
 <!-- Add Trait Modal -->
@@ -317,6 +329,26 @@ async function deactivateScene(sceneId) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'draft' })
+    });
+    window.location.href = '/campaigns/{{ campaign.campaign_id }}';
+}
+
+async function activateScene(sceneId) {
+    if (!confirm('Activate this scene?')) return;
+    await fetch(`/campaigns/api/scene/${sceneId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' })
+    });
+    window.location.reload();
+}
+
+async function completeScene(sceneId) {
+    if (!confirm('Mark this scene as complete?')) return;
+    await fetch(`/campaigns/api/scene/${sceneId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'completed' })
     });
     window.location.href = '/campaigns/{{ campaign.campaign_id }}';
 }

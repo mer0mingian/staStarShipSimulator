@@ -6,13 +6,19 @@
 
 {% block content %}
 <div style="max-width: 800px; margin: 0 auto;">
+    <!-- Search/Filter -->
+    <div class="lcars-panel" style="padding: 15px; margin-bottom: 15px;">
+        <input type="text" id="campaign-search" class="lcars-input" placeholder="Search campaigns..." 
+               style="width: 100%;" oninput="filterCampaigns()">
+    </div>
+
     <!-- Active Campaigns -->
     <div class="lcars-bar" style="background: var(--lcars-african-violet);">Active Campaigns</div>
     <div class="lcars-panel panel-violet">
         {% if campaigns %}
         <ul class="lcars-action-list">
             {% for campaign in campaigns %}
-            <li class="lcars-action-item">
+            <li class="lcars-action-item" data-campaign-name="{{ campaign.name|lower }}" data-campaign-desc="{{ campaign.description|lower if campaign.description else '' }}">
                 <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
                    style="color: inherit; text-decoration: none; display: flex; justify-content: space-between; align-items: center;">
                     <div>
@@ -73,6 +79,17 @@
 </div>
 
 <script>
+function filterCampaigns() {
+    const query = document.getElementById('campaign-search').value.toLowerCase();
+    const items = document.querySelectorAll('.lcars-action-item');
+    items.forEach(item => {
+        const name = item.dataset.campaignName || '';
+        const desc = item.dataset.campaignDesc || '';
+        const matches = name.includes(query) || desc.includes(query);
+        item.style.display = matches ? '' : 'none';
+    });
+}
+
 document.getElementById('join-form').addEventListener('submit', function(e) {
     e.preventDefault();
     const code = document.getElementById('campaign-code').value.trim();

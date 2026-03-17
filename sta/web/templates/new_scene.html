@@ -32,12 +32,40 @@
             <input type="text" name="name" id="name" value="New Scene" style="width: 100%;">
             
             <label for="scene_type" style="margin-top: 10px;">Scene Type</label>
-            <select name="scene_type" id="scene_type" style="width: 100%;" onchange="toggleSceneTypeFields()">
-                <option value="narrative" {% if default_scene_type == 'narrative' %}selected{% endif %}>Narrative Scene</option>
-                <option value="starship_encounter" {% if default_scene_type == 'starship_encounter' %}selected{% endif %}>Starship Combat</option>
-                <option value="personal_encounter" {% if default_scene_type == 'personal_encounter' %}selected{% endif %}>Personal Encounter</option>
-                <option value="social_encounter" {% if default_scene_type == 'social_encounter' %}selected{% endif %}>Social Encounter</option>
-            </select>
+            <div id="scene-type-selector" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px;">
+                <label style="flex: 1; min-width: 140px; cursor: pointer;">
+                    <input type="radio" name="scene_type" value="narrative" {% if default_scene_type == 'narrative' %}checked{% endif %} style="display: none;" onchange="toggleSceneTypeFields()">
+                    <div class="scene-type-card" style="background: #222; border: 2px solid #444; border-radius: 8px; padding: 15px; text-align: center; transition: all 0.2s;">
+                        <div style="font-size: 1.5em;">🎬</div>
+                        <div style="color: var(--lcars-butterscotch); font-weight: bold;">Narrative</div>
+                        <div style="font-size: 0.75em; color: var(--lcars-tan);">Roleplay</div>
+                    </div>
+                </label>
+                <label style="flex: 1; min-width: 140px; cursor: pointer;">
+                    <input type="radio" name="scene_type" value="starship_encounter" {% if default_scene_type == 'starship_encounter' %}checked{% endif %} style="display: none;" onchange="toggleSceneTypeFields()">
+                    <div class="scene-type-card" style="background: #222; border: 2px solid #444; border-radius: 8px; padding: 15px; text-align: center; transition: all 0.2s;">
+                        <div style="font-size: 1.5em;">🚀</div>
+                        <div style="color: var(--lcars-red); font-weight: bold;">Starship</div>
+                        <div style="font-size: 0.75em; color: var(--lcars-tan);">Combat</div>
+                    </div>
+                </label>
+                <label style="flex: 1; min-width: 140px; cursor: pointer;">
+                    <input type="radio" name="scene_type" value="personal_encounter" {% if default_scene_type == 'personal_encounter' %}checked{% endif %} style="display: none;" onchange="toggleSceneTypeFields()">
+                    <div class="scene-type-card" style="background: #222; border: 2px solid #444; border-radius: 8px; padding: 15px; text-align: center; transition: all 0.2s;">
+                        <div style="font-size: 1.5em;">👤</div>
+                        <div style="color: var(--lcars-purple); font-weight: bold;">Personal</div>
+                        <div style="font-size: 0.75em; color: var(--lcars-tan);">Combat</div>
+                    </div>
+                </label>
+                <label style="flex: 1; min-width: 140px; cursor: pointer;">
+                    <input type="radio" name="scene_type" value="social_encounter" {% if default_scene_type == 'social_encounter' %}checked{% endif %} style="display: none;" onchange="toggleSceneTypeFields()">
+                    <div class="scene-type-card" style="background: #222; border: 2px solid #444; border-radius: 8px; padding: 15px; text-align: center; transition: all 0.2s;">
+                        <div style="font-size: 1.5em;">💬</div>
+                        <div style="color: var(--lcars-blue); font-weight: bold;">Social</div>
+                        <div style="font-size: 0.75em; color: var(--lcars-tan);">Encounter</div>
+                    </div>
+                </label>
+            </div>
             
             <label for="description" style="margin-top: 10px;">Description (optional)</label>
             <textarea name="description" id="description" rows="3" style="width: 100%;" placeholder="Brief description of this scene..."></textarea>
@@ -214,6 +242,22 @@
 .mode-btn.active {
     background: var(--lcars-orange);
 }
+.scene-type-card {
+    border: 2px solid #444 !important;
+}
+input[type="radio"]:checked + .scene-type-card {
+    border-color: var(--lcars-butterscotch) !important;
+    background: #2a2a2a;
+}
+input[type="radio"][value="starship_encounter"]:checked + .scene-type-card {
+    border-color: var(--lcars-red) !important;
+}
+input[type="radio"][value="personal_encounter"]:checked + .scene-type-card {
+    border-color: var(--lcars-purple) !important;
+}
+input[type="radio"][value="social_encounter"]:checked + .scene-type-card {
+    border-color: var(--lcars-blue) !important;
+}
 </style>
 
 <script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
@@ -237,7 +281,7 @@ const defaultEnemyPositions = [
 ];
 
 function toggleSceneTypeFields() {
-    const sceneType = document.getElementById('scene_type').value;
+    const sceneType = document.querySelector('input[name="scene_type"]:checked').value;
     const isCombat = sceneType === 'starship_encounter';
     
     document.getElementById('enemy-ships-panel').style.display = isCombat ? 'block' : 'none';

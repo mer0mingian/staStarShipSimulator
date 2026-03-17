@@ -32,6 +32,29 @@
     </div>
 </div>
 
+<!-- Campaign Stats -->
+<div class="panel" style="border-color: var(--lcars-green); margin-bottom: 15px;">
+    <h2>Campaign Stats</h2>
+    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+        <div style="text-align: center; padding: 10px 20px; background: #222; border-radius: 8px;">
+            <div style="font-size: 1.5em; color: var(--lcars-purple);">{{ players|length }}</div>
+            <div style="font-size: 0.85em; color: var(--lcars-tan);">Crew Members</div>
+        </div>
+        <div style="text-align: center; padding: 10px 20px; background: #222; border-radius: 8px;">
+            <div style="font-size: 1.5em; color: var(--lcars-blue);">{{ ships|length }}</div>
+            <div style="font-size: 0.85em; color: var(--lcars-tan);">Ships</div>
+        </div>
+        <div style="text-align: center; padding: 10px 20px; background: #222; border-radius: 8px;">
+            <div style="font-size: 1.5em; color: var(--lcars-butterscotch);">{{ draft_scenes|length + completed_scenes|length }}</div>
+            <div style="font-size: 0.85em; color: var(--lcars-tan);">Total Scenes</div>
+        </div>
+        <div style="text-align: center; padding: 10px 20px; background: #222; border-radius: 8px;">
+            <div style="font-size: 1.5em; color: var(--lcars-orange);">{{ draft_encounters|length + completed_encounters|length }}</div>
+            <div style="font-size: 0.85em; color: var(--lcars-tan);">Encounters</div>
+        </div>
+    </div>
+</div>
+
 <div class="grid">
     <!-- Active Scene -->
     <div class="panel" style="border-color: {% if active_encounter or active_scene %}var(--lcars-green){% else %}var(--lcars-tan){% endif %};">
