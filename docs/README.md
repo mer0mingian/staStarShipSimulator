@@ -17,7 +17,8 @@ This project uses **progressive disclosure** - showing essential information fir
 
 ### Tasks (`tasks/`)
 Active and completed milestone task lists:
-- `milestone5_tasks.md` - Combat Integration + Scene Lifecycle (current)
+- `milestone6_tasks.md` - UI/UX Overhaul (current)
+- `milestone5_tasks.md` - Combat Integration + Scene Lifecycle (complete)
 - `milestone4_tasks.md` - Character/Ship CRUD (complete)
 - `milestone3_tasks.md` - Scene Management (complete)
 - `milestone2_tasks.md` - Campaign Management (complete)

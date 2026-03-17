@@ -286,7 +286,7 @@ See `docs/tasks/milestone3_tasks.md` for complete task breakdown.
 ### Overview
 Complete migration from Flask to FastAPI and implement new 4-state scene lifecycle with multi-scene support.
 
-### Status: 🚧 IN PROGRESS
+### Status: ✅ COMPLETE (2026-03-17)
 
 ### Scene Lifecycle (NEW - 2026-03-15)
 
@@ -558,7 +558,7 @@ Integrate existing combat system with new VTT architecture.
 ### Overview
 Complete UI/UX redesign for mobile-responsive VTT experience.
 
-### Sub-Milestones
+### Status: 🚧 IN PROGRESS
 
 #### 6.1: Campaign Dashboard
 **Agent**: python-dev
