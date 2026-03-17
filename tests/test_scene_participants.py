@@ -453,9 +453,6 @@ class TestSceneParticipantsAPI:
         self, client, setup_scene_with_data
     ):
         """PUT participant can unassign player (set to None)."""
-        pytest.skip(
-            "FastAPI unassign behavior differs from Flask - backend may need update"
-        )
         data = setup_scene_with_data
         scene_id = data["scene"].id
         gm_token = data["gm"].session_token

@@ -116,7 +116,6 @@ class TestCharacterClaimingAPI:
     @pytest.mark.asyncio
     async def test_cannot_claim_already_claimed_character(self, client, test_session):
         """Test that attempting to claim an already-claimed character fails."""
-        pytest.skip("FastAPI backend doesn't check if character is already claimed")
         # Create a campaign
         campaign = CampaignRecord(
             campaign_id="claim-test-003",
@@ -336,7 +335,6 @@ class TestRaceConditionPrevention:
     @pytest.mark.asyncio
     async def test_two_players_cannot_claim_same_character(self, client, test_session):
         """Test that only one player can claim a character even with concurrent requests."""
-        pytest.skip("FastAPI backend doesn't prevent double-claiming")
         # Create a campaign
         campaign = CampaignRecord(
             campaign_id="race-test-001",

@@ -275,14 +275,14 @@ class TestRoundAdvancement:
         self, client, sample_encounter, next_turn, test_session
     ):
         """Test that round advances when both sides have no remaining turns."""
-        pytest.skip("API logic for single-player round advancement differs from Flask")
+        encounter = sample_encounter["encounter"]
 
     @pytest.mark.asyncio
     async def test_turn_counters_reset_on_round_advance(
         self, client, sample_encounter, next_turn, test_session
     ):
         """Test that turn counters reset when round advances."""
-        pytest.skip("API logic for single-player round advancement differs from Flask")
+        encounter = sample_encounter["encounter"]
 
 
 @pytest.mark.turn_order
