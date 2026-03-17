@@ -47,8 +47,9 @@ Redesign campaign selection interface and campaign overview dashboard.
 - `sta/web/static/css/` (create if needed)
 
 ### Verification
-- `pytest tests/test_campaign_*.py`
-- Manual responsive testing
+- `pytest tests/test_scene*.py tests/test_campaign*.py` - all pass
+- Mobile viewport test: campaign_list renders at 320px width
+- Search input exists and has placeholder text
 
 ---
 
@@ -84,8 +85,9 @@ Improve scene creation, navigation, and transition interfaces.
 - `sta/web/templates/scene_player.html`
 
 ### Verification
-- `pytest tests/test_scene*.py`
-- Scene creation and activation workflows
+- `pytest tests/test_scene*.py` - all pass
+- new_scene.html has scene_type selection with visible labels
+- edit_scene.html has form inputs with labels
 
 ---
 
@@ -121,8 +123,9 @@ Create intuitive interfaces for character and ship creation/management.
 - May need to create new templates
 
 ### Verification
-- Character CRUD tests pass
-- Ship CRUD tests pass
+- Character CRUD tests pass: `pytest tests/test_characters_api.py -v`
+- Ship CRUD tests pass: `pytest tests/test_ships_api.py -v`
+- All character/ship form inputs have `<label>` tags
 
 ---
 
@@ -157,8 +160,9 @@ Ensure all pages work on mobile and tablet devices.
 - All page templates
 
 ### Verification
-- Test on mobile viewport
-- All interactive elements accessible
+- base.html has `@media` queries for responsive breakpoints
+- Buttons have min-height: 44px in CSS
+- Form inputs have proper labels
 
 ---
 
@@ -192,8 +196,8 @@ Enhance combat interface with better UX.
 - `sta/web/static/js/hex-map.js`
 
 ### Verification
-- Combat flow works end-to-end
-- Real-time updates work (if implemented)
+- `pytest tests/test_combat*.py` - all pass
+- Combat forms have labels for all inputs
 
 ---
 
@@ -227,8 +231,9 @@ Establish design tokens and consistent styling.
 - Create `sta/web/static/css/variables.css`
 
 ### Verification
-- Consistent styling across pages
-- Easy theme changes
+- base.html or variables.css contains `:root {` with CSS custom properties
+- At least 3 color variables defined (e.g., --primary-color, --secondary-color)
+- At least 2 spacing variables defined
 
 ---
 
@@ -425,13 +430,23 @@ Reference: `docs/tasks/milestone7_tasks.md`
 ---
 
 ## Acceptance Criteria
-- [ ] Campaign dashboard is mobile-responsive
-- [ ] Scene management UI is intuitive
-- [ ] Character/ship builders are user-friendly
-- [ ] All pages work on mobile/tablet
-- [ ] Combat UI is improved
-- [ ] Design tokens established
-- [ ] All existing tests pass
+- [ ] Campaign dashboard renders without errors on mobile (320px width)
+- [ ] campaign_list.html has working search/filter input
+- [ ] campaign_dashboard.html displays campaign stats (players, scenes count)
+- [ ] new_scene.html has visual scene type selection (cards or radio buttons with labels)
+- [ ] edit_scene.html has participant management section
+- [ ] scene_gm.html has activation controls visible
+- [ ] All existing scene tests pass: `pytest tests/test_scene*.py`
+- [ ] All existing campaign tests pass: `pytest tests/test_campaign*.py`
+- [ ] Character forms have labels for all inputs
+- [ ] Ship forms have labels for all inputs  
+- [ ] base.html has responsive CSS with @media breakpoints
+- [ ] Touch targets (buttons, links) are minimum 44px height
+- [ ] All existing character/ship tests pass: `pytest tests/test_characters_api.py tests/test_ships_api.py`
+- [ ] Combat forms have proper labels
+- [ ] All existing combat tests pass: `pytest tests/test_combat*.py`
+- [ ] CSS variables defined in base.html for: primary-color, secondary-color, font-family, spacing-unit
+- [ ] Test suite: 0 failed tests (allow skipped)
 
 ---
 
