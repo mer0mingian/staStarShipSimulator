@@ -551,6 +551,9 @@ class SceneRecord(Base):
     # Encounter configuration (for dynamic scene generation)
     encounter_config_json: Mapped[str] = mapped_column(Text, default="{}")
 
+    # GM focus for split-party management
+    is_focused: Mapped[bool] = mapped_column(default=False)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now

@@ -28,6 +28,19 @@
 
 6. **Backward Compatibility**:
    - Activate endpoint accepts both "ready" AND "draft" status
+
+### Task 5.12: Multi-Active Scene Support (March 2026)
+
+1. **Added `is_focused` field** to SceneRecord (`sta/database/schema.py`):
+   - Boolean field default=False for GM focus management in split-party sessions
+
+2. **New endpoints** (`sta/web/routes/scenes_router.py`):
+   - GET /scenes/campaign/{campaign_id}/active-scenes - Returns all active scenes for a campaign
+   - PUT /scenes/{scene_id}/focus - Set GM focus on a scene (for split-party management)
+
+3. **Activation logic unchanged**:
+   - Multiple scenes can already be active simultaneously (no deactivation logic exists in activate_scene)
+   - This was already working correctly
    - This maintains backward compatibility with existing tests
 
 ### Test Impact

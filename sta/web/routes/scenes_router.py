@@ -1229,6 +1229,57 @@ async def activate_scene(
     return response_data
 
 
+@scenes_router.get("/campaign/{campaign_id}/active-scenes")
+async def get_active_scenes(
+    campaign_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Get all active scenes for a campaign (supports split-party)."""
+    await _require_gm_auth(campaign_id, sta_session_token, db)
+
+    stmt = select(SceneRecord).filter(
+        SceneRecord.campaign_id == campaign_id, SceneRecord.status == "active"
+    )
+    result = await db.execute(stmt)
+    scenes = result.scalars().all()
+
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "scene_type": s.scene_type,
+            "status": s.status,
+            "is_focused": s.is_focused,
+            "gm_short_description": s.gm_short_description,
+        }
+        for s in scenes
+    ]
+
+
+@scenes_router.put("/{scene_id}/focus")
+async def set_scene_focus(
+    scene_id: int,
+    is_focused: bool = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Set GM focus on a scene (for split-party management)."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    scene.is_focused = is_focused
+    await db.commit()
+
+    return {"success": True, "scene_id": scene.id, "is_focused": scene.is_focused}
+
+
 @scenes_router.post("/{scene_id}/end")
 async def end_scene(
     scene_id: int,

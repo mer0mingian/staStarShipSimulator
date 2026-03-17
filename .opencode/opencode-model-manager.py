@@ -2,11 +2,32 @@
 """
 OpenCode Model Manager - Interactive CLI for managing subagent models.
 
+Data Sources:
+- models.dev: https://models.dev/api.json - Comprehensive model database
+- OpenCode Zen: https://opencode.ai/zen/v1/models - All OpenCode available models
+- OpenRouter: https://openrouter.ai/api/v1/models - OpenRouter model list
+- OpenRouter Free Models: https://openrouter.ai/collections/free-models - Free models list
+
 Workflow:
-1. Fetch models from models.dev
-2. Filter by whitelisted/blacklisted providers
-3. For authenticated providers, check if model is free via provider API
-4. Filter to only free models, sorted by benchmark score
+1. Fetch all models from models.dev
+2. Fetch available models from OpenCode Zen API
+3. Filter models to only those in OpenCode Zen (or explicitly whitelisted)
+4. Identify free models:
+   - OpenCode provider: Check if model ID contains "free" OR cost == 0 in models.dev
+   - OpenRouter: Check cost == 0 in models.dev (verified by OpenRouter page)
+5. For scoring/ranking: Use OpenRouter API order as popularity proxy (higher = more popular)
+6. Fall back to benchmark scores for unknown models
+
+Identifying Free Models:
+- OpenCode (Zen): Model ID contains "free" (e.g., "minimax-m2.5-free")
+- OpenRouter: Cost == 0 in models.dev (check https://openrouter.ai/collections/free-models)
+- Other providers: Cost == 0 in models.dev
+
+Ranking Sources:
+- OpenRouter API: Models ordered by usage/popularity (https://openrouter.ai/api/v1/models)
+- LiveCodeBench: https://llmdb.com/benchmarks/livecodebench-v5
+- SWE-Bench: https://llm-stats.com/benchmarks/swe-bench-verified
+- Vellum: https://vellum.ai/best-llm-for-coding
 """
 
 import json
@@ -207,6 +228,60 @@ def get_opencode_auth() -> dict:
         return {}
 
 
+def fetch_opencode_zen_models() -> set:
+    """Fetch available models from OpenCode Zen API."""
+    import urllib.request
+
+    url = "https://opencode.ai/zen/v1/models"
+    try:
+        req = urllib.request.Request(url)
+        req.add_header("Accept", "application/json")
+        req.add_header("User-Agent", "curl/8.0")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+            model_ids = [m.get("id") for m in data.get("data", [])]
+            return set(model_ids)
+    except Exception as e:
+        print(f"Warning: Could not fetch OpenCode Zen models: {e}")
+        return set()
+
+
+def fetch_openrouter_models_for_ranking() -> tuple[dict, set]:
+    """Fetch models from OpenRouter API for ranking (ordered by popularity)."""
+    import urllib.request
+
+    url = "https://openrouter.ai/api/v1/models"
+    try:
+        req = urllib.request.Request(url)
+        req.add_header("Accept", "application/json")
+        req.add_header("User-Agent", "curl/8.0")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+            # OpenRouter returns models ordered by popularity
+            ranking = {}
+            free_models = set()
+            for idx, m in enumerate(data.get("data", [])):
+                model_id = m.get("id", "")
+                # Store: lower index = higher popularity
+                ranking[model_id] = idx
+                # Also store by just the model name (after /)
+                short_name = model_id.split("/")[-1] if "/" in model_id else model_id
+                if short_name not in ranking:
+                    ranking[short_name] = idx
+
+                # Check if model is free (pricing.prompt == "0")
+                pricing = m.get("pricing", {})
+                if pricing:
+                    prompt_price = pricing.get("prompt", "999")
+                    if prompt_price == "0" or prompt_price == "0.0":
+                        free_models.add(model_id)
+
+            return ranking, free_models
+    except Exception as e:
+        print(f"Warning: Could not fetch OpenRouter models for ranking: {e}")
+        return {}, set()
+
+
 def fetch_provider_models(provider: str, api_key: Optional[str] = None) -> list:
     """Fetch models from a specific provider's API."""
     import urllib.request
@@ -324,13 +399,18 @@ def extract_score(model_id: str) -> float:
     return 0.0
 
 
-def filter_models_by_provider(models_dev: dict, config: dict) -> list:
-    """Filter models by provider whitelist/blacklist."""
+def filter_models_by_provider(
+    models_dev: dict, config: dict, opencode_zen: Optional[set] = None
+) -> list:
+    """Filter models by provider whitelist/blacklist and OpenCode Zen availability."""
     include_providers = config.get("providers", {}).get("include", [])
     exclude_providers = config.get("providers", {}).get("exclude", [])
     whitelist = config.get("models", {}).get("whitelist", [])
     blacklist = config.get("models", {}).get("blacklist", [])
     min_context = config.get("defaults", {}).get("min_context_window", 200000)
+
+    # If OpenCode Zen models provided, use those for matching
+    use_zen = opencode_zen is not None and len(opencode_zen) > 0
 
     filtered = []
 
@@ -343,6 +423,19 @@ def filter_models_by_provider(models_dev: dict, config: dict) -> list:
 
         models = provider_data.get("models", {})
         for model_id, model_info in models.items():
+            # OpenCode Zen filter - ONLY for OpenCode provider
+            # For other providers, we just check cost == 0 later
+            if provider.lower() == "opencode" and opencode_zen:
+                # Check if model matches any OpenCode Zen model
+                matches_zen = False
+                for zen_id in opencode_zen:
+                    # Exact match or provider/model match
+                    if zen_id == model_id or zen_id == model_id.split("/")[-1]:
+                        matches_zen = True
+                        break
+                if not matches_zen and not whitelist:
+                    continue
+
             # Model whitelist/blacklist
             if whitelist and model_id not in whitelist:
                 continue
@@ -354,24 +447,25 @@ def filter_models_by_provider(models_dev: dict, config: dict) -> list:
             if context < min_context:
                 continue
 
-            # Get pricing info (models.dev uses 'cost')
-            cost = model_info.get("cost", {})
-            is_free = False
-            if isinstance(cost, dict):
-                input_cost = cost.get("input", 999)
-                try:
-                    is_free = float(input_cost) == 0
-                except:
-                    is_free = False
+            # Clean model ID - remove duplicate provider prefix
+            clean_model_id = model_id
+            if model_id.startswith(f"{provider}/"):
+                # Remove provider prefix if already present
+                prefix = f"{provider}/"
+                if model_id.startswith(prefix):
+                    clean_model_id = model_id[len(prefix) :]
+                    # If it still has provider prefix, just use the last part
+                    if "/" in clean_model_id:
+                        clean_model_id = clean_model_id.split("/", 1)[-1]
 
             filtered.append(
                 {
                     "provider": provider,
-                    "model_id": model_id,
+                    "model_id": clean_model_id,
                     "name": model_info.get("name", model_id),
                     "context": context,
-                    "cost": cost,
-                    "free": is_free,
+                    "cost": model_info.get("cost", {}),
+                    "free": False,  # Will be set by list_models
                 }
             )
 
@@ -418,24 +512,65 @@ def enrich_with_provider_check(filtered_models: list, auth: dict) -> list:
     return filtered_models
 
 
-def sort_models(models: list) -> list:
-    """Sort models by benchmark score, then by context window."""
+def sort_models(models: list, openrouter_ranking: Optional[dict] = None) -> list:
+    """Sort models by OpenRouter ranking only."""
 
     def score_key(m):
-        score = extract_score(m["model_id"])
-        context = m.get("context", 0)
-        return (score, context)
+        model_id = m["model_id"]
+        provider = m.get("provider", "")
 
-    return sorted(models, key=score_key, reverse=True)
+        or_rank = get_openrouter_rank(model_id, provider, openrouter_ranking or {})
+
+        return (or_rank,)
+
+    return sorted(models, key=score_key)
 
 
-def format_model_line(model: dict, index: int) -> str:
+def get_openrouter_rank(model_id: str, provider: str, openrouter_ranking: dict) -> int:
+    """Find OpenRouter rank for a model. For OpenCode models, try to find matching model on OpenRouter."""
+    # First try direct match
+    if model_id in openrouter_ranking:
+        return openrouter_ranking[model_id]
+
+    # Try short name (after /)
+    short_name = model_id.split("/")[-1] if "/" in model_id else model_id
+    if short_name in openrouter_ranking:
+        return openrouter_ranking[short_name]
+
+    # For OpenCode models, try to find the same model on OpenRouter (different provider)
+    if provider.lower() == "opencode":
+        # Try common variations
+        variations = [
+            short_name.replace("-free", ""),
+            short_name.replace("_free", ""),
+            short_name.replace("free-", ""),
+            short_name.replace("_free", ""),
+            short_name.replace("-", "-"),
+        ]
+        for var in variations:
+            for or_id, rank in openrouter_ranking.items():
+                if var in or_id or or_id in var:
+                    return rank
+
+    return 999999  # No ranking found
+
+
+def format_model_line(
+    model: dict, index: int, openrouter_ranking: dict, or_rank: Optional[int] = None
+) -> str:
     """Format a model for display."""
     score = extract_score(model["model_id"])
     ctx_k = model.get("context", 0) // 1000
-    free_str = " [FREE]" if model.get("free") else ""
 
-    return f"  {index:3d}. [{score:5.1f}] {model['provider']}/{model['model_id']} (ctx: {ctx_k}k){free_str}"
+    # Show ranking if available
+    if or_rank is None:
+        or_rank = get_openrouter_rank(
+            model["model_id"], model["provider"], openrouter_ranking
+        )
+
+    rank_display = f"{or_rank:4d}" if or_rank < 999999 else "   -"
+
+    return f"  {index:3d}. [{rank_display}] [{score:5.1f}] {model['provider']}/{model['model_id']} (ctx: {ctx_k}k)"
 
 
 def list_models(config: dict) -> None:
@@ -450,28 +585,78 @@ def list_models(config: dict) -> None:
     total_models = sum(len(p.get("models", {})) for p in models_dev.values())
     print(f"Total models in database: {total_models}")
 
-    print("\n=== Filtering by provider config ===\n")
-    filtered = filter_models_by_provider(models_dev, config)
-    print(f"After provider/context filter: {len(filtered)} models")
+    print("\n=== Fetching OpenCode Zen models ===\n")
+    opencode_zen_all = fetch_opencode_zen_models()
+    opencode_zen_free = {m for m in opencode_zen_all if "free" in m.lower()}
+    print(f"OpenCode Zen models: {len(opencode_zen_all)}")
+    print(f"OpenCode Zen free: {sorted(opencode_zen_free)}")
+
+    print("\n=== Fetching OpenRouter rankings ===\n")
+    openrouter_ranking, openrouter_free = fetch_openrouter_models_for_ranking()
+    print(f"OpenRouter models fetched: {len(openrouter_ranking)}")
+    print(f"OpenRouter free models: {len(openrouter_free)}")
+
+    print("\n=== Filtering by provider config and OpenCode Zen ===\n")
+    filtered = filter_models_by_provider(models_dev, config, opencode_zen_all)
+    print(f"After OpenCode Zen filter: {len(filtered)} models")
 
     print("\n=== Checking free status ===\n")
-    auth = get_opencode_auth()
-    print(f"Authenticated providers: {list(auth.keys()) if auth else 'None'}")
 
-    enriched = enrich_with_provider_check(filtered, auth)
+    # Mark free models based on provider:
+    # - OpenCode: Must be in Zen free list AND cost == 0
+    # - OpenRouter: Check if in OpenRouter free list OR cost == 0 in models.dev
+    # - Other providers: Cost == 0
+    for m in filtered:
+        model_id = m["model_id"]
+        provider = m["provider"].lower()
+        cost = m.get("cost", {})
+
+        has_zero_cost = False
+        if isinstance(cost, dict):
+            input_cost = cost.get("input", 999)
+            try:
+                has_zero_cost = float(input_cost) == 0
+            except:
+                has_zero_cost = False
+
+        if provider == "opencode":
+            # Must be in Zen free list AND have zero cost
+            in_free_list = (
+                model_id in opencode_zen_free
+                or model_id.split("/")[-1] in opencode_zen_free
+                or any(z in model_id for z in opencode_zen_free)
+            )
+            m["free"] = in_free_list and has_zero_cost
+        elif provider == "openrouter":
+            # Check if in OpenRouter free list OR cost == 0
+            in_or_free = (
+                model_id in openrouter_free
+                or model_id.split("/")[-1] in openrouter_free
+                or any(f in model_id for f in openrouter_free)
+            )
+            m["free"] = in_or_free or has_zero_cost
+        else:
+            # Other providers: check cost == 0
+            m["free"] = has_zero_cost
 
     # Keep only free models
-    free_models = [m for m in enriched if m.get("free")]
+    free_models = [m for m in filtered if m.get("free")]
 
-    # Sort by benchmark
-    sorted_models = sort_models(free_models)
+    # Sort by OpenRouter ranking
+    sorted_models = sort_models(free_models, openrouter_ranking)
+
+    # Pre-compute ranks for display
+    for m in sorted_models:
+        m["or_rank"] = get_openrouter_rank(
+            m["model_id"], m.get("provider", ""), openrouter_ranking
+        )
 
     print(f"Free models available: {len(sorted_models)}\n")
 
-    print("=== Available Free Models (sorted by benchmark) ===\n")
+    print("=== Available Free Models (sorted by OpenRouter popularity) ===\n")
 
     for i, m in enumerate(sorted_models, 1):
-        print(format_model_line(m, i))
+        print(format_model_line(m, i, openrouter_ranking, m.get("or_rank", 999999)))
 
     print(f"\nTotal: {len(sorted_models)} free models")
 
@@ -532,20 +717,62 @@ def select_model(config: dict) -> Optional[str]:
         print("Error: Could not fetch models")
         return None
 
-    filtered = filter_models_by_provider(models_dev, config)
+    # Fetch OpenRouter rankings
+    print("Fetching OpenRouter rankings...")
+    openrouter_ranking, openrouter_free = fetch_openrouter_models_for_ranking()
 
-    auth = get_opencode_auth()
-    enriched = enrich_with_provider_check(filtered, auth)
+    # Fetch OpenCode Zen
+    opencode_zen_all = fetch_opencode_zen_models()
+    opencode_zen_free = {m for m in opencode_zen_all if "free" in m.lower()}
 
-    free_models = [m for m in enriched if m.get("free")]
-    sorted_models = sort_models(free_models)
+    filtered = filter_models_by_provider(models_dev, config, opencode_zen_all)
+
+    # Mark free models based on provider
+    for m in filtered:
+        model_id = m["model_id"]
+        provider = m["provider"].lower()
+        cost = m.get("cost", {})
+
+        has_zero_cost = False
+        if isinstance(cost, dict):
+            input_cost = cost.get("input", 999)
+            try:
+                has_zero_cost = float(input_cost) == 0
+            except:
+                has_zero_cost = False
+
+        if provider == "opencode":
+            in_free_list = (
+                model_id in opencode_zen_free
+                or model_id.split("/")[-1] in opencode_zen_free
+                or any(z in model_id for z in opencode_zen_free)
+            )
+            m["free"] = in_free_list and has_zero_cost
+        elif provider == "openrouter":
+            in_or_free = (
+                model_id in openrouter_free
+                or model_id.split("/")[-1] in openrouter_free
+                or any(f in model_id for f in openrouter_free)
+            )
+            m["free"] = in_or_free or has_zero_cost
+        else:
+            m["free"] = has_zero_cost
+
+    free_models = [m for m in filtered if m.get("free")]
+    sorted_models = sort_models(free_models, openrouter_ranking)
+
+    # Pre-compute ranks for display
+    for m in sorted_models:
+        m["or_rank"] = get_openrouter_rank(
+            m["model_id"], m.get("provider", ""), openrouter_ranking
+        )
 
     print(f"Found {len(sorted_models)} free models\n")
 
     print("=== Select a Model ===\n")
 
     for i, m in enumerate(sorted_models, 1):
-        print(format_model_line(m, i))
+        print(format_model_line(m, i, openrouter_ranking, m.get("or_rank", 999999)))
 
     print("\n  0.  Cancel")
 

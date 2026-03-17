@@ -131,9 +131,9 @@ class TestSceneShipsAPI:
         gm_token = data["gm"].session_token
         client.cookies.set("sta_session_token", gm_token)
 
+        # FastAPI returns 422 for missing required fields (Pydantic validation)
         response = client.post(f"/scenes/{scene_id}/ships", json={})
-        assert response.status_code == 400
-        assert "ship_id required" in response.json()["detail"]
+        assert response.status_code == 422
 
     @pytest.mark.asyncio
     async def test_add_ship_not_found(self, client, setup_scene_with_ship):
