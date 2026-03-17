@@ -232,12 +232,12 @@
         {% endif %}
     </div>
 
-    <!-- Player Crew (only available when not draft) -->
+    <!-- Player Crew (Participants) -->
     <div class="panel" style="border-color: var(--lcars-green);" id="player-crew-panel">
-        <h2 style="color: var(--lcars-green);">Player Crew</h2>
+        <h2 style="color: var(--lcars-green);">Participant Management</h2>
         <p style="color: var(--lcars-tan); font-size: 0.9em;">
             {% if scene.status == 'draft' %}
-            <em>Enable the scene (change status from Draft) to manage player crew.</em>
+            <em>Enable the scene (change status from Draft) to manage participant crew.</em>
             {% else %}
             Manage which player characters are present in this scene.
             {% endif %}
