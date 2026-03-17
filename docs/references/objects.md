@@ -1,129 +1,132 @@
-# Objects
-
-This is to document some object properties and relations for the new VTT experience approach.
-
-## Chars
-Have all the character properties that are shared between PCs and NPCs.
-
-### Generic Char Properties
-- Stress Track
-- List of Images
-- Description
-- Tuple of Attributes (Control, Daring, Fitness, Insight, Presence, Reason)
-- Tuple of Departments (Command, Conn, Engineering, Medicine, Science, Security)
-- List of Traits (Category: Character)
-  - Mandatory: Species Trait
-  - State: [Ok, Defeated, Fatigued, Dead]
-- Species String
-- List of Talents
-- Role String
-- --> "Attacks" (representing different weapons but impact is char-specific)
-- --> "Equipment"
-
-### NPCs
-Have all the generic Char Properties.
-- NPC Category [Major|Notable|Minor]
-- Personal Threat Pool [0-24]
-- Location String
-- NPC Background (all optional, some with drop-downs)
-  - Archetype
-  - Upbringing
-  - Environment
-  - Cultural Traits
-  - Goals
-  - Tactics
-  - Federation Outlook / Affiliation
-  - Life-Form Origin & Structure Traits
-    - Life-Form Origins (Carbon-Based Type, Exotic-Based Type, Incorporeal Type, ...)
-    - Body Structure Symmetry (Bilateral, Spherical, Biradial, Trilateral, Radial, Asymmetrical, ...)
-    - Beast/Creature Traits
-      - Size
-      - Vertebrate or Invertebrate Class
-      - Structural Adaptation
-      - Behavioral Adaptation
-      - Preferred Environment
-    - Spaceborne Entity Traits
-      - Mental Capacity/Awareness
-      - Metabolic Energy Type
-      - Morphology
-      - Spaceborne Entity Preferred Environment
-
-### PCs
-As described in Chapter 04.
-Include a section for
-- Personal Logs (tracking value usage),
-- Mission Logs (fluff text provided by players)
-- Scene Logs (who was part of which scene)
-- Character Background texts, managable by players
-- category Main vs Side (different rules apply)
-
-## Trait
-- Category: [Character, Location, Situation, Equipment]
-- Name: String
-- Description: String
-- Potency: Positive Integer (standard: 1)
-
-## Talent
-- Player Selectable: Boolean
-- Category: [Talent, Special Rule, Species Ability]
-- List of Conditions: (Logic for when the talent is active)
-- Description Text
-- Game Mechanic: (Reference to automated logic/handler)
-
-## Ships
-Represent both Player and NPC vessels.
-- Name String
-- Ship Class / Frame
-- --> "Mission Profile"
-- Scale [1-7]
-- Resistance
-- Systems (Comms, Computers, Engines, Sensors, Structure, Weapons)
-- Departments (Command, Conn, Engineering, Medicine, Science, Security)
-- Power (Current/Max) --> Replace with "Reserve Power"
-- Shields (Current/Max)
-- Crew Quality [2-5] --> Only for NPC ships
-- Traits (List of Traits, category: Equipment/Location)
-- Talents (List of Ship Talents)
-- Weapons (List of Weapon Objects)
-
-## Scenes
-The active room where gameplay happens.
-- Name String
-- Description Text
-- Status [Active|Archived|Connected]
-- Resource Pools:
-  - Momentum [0-6]
-  - Threat [GM Pool]
-- Participants: --> Divide between player and non-player
-  - List of Chars (Link to Universe/Campaign Library)
-  - List of Ships
-- Situation Traits
-- Turn Order (Initiative Track)
-- Logs (Action & Narrative history)
-
-## Items / Equipment
-- Name
-- Description
-- Traits (category: Equipment)
-- Opportunity/Cost
-- Effects (Game Mechanics)
-
-## Extended Tasks
-- Name
-- Work (Track)
-- Difficulty
-- Magnitude
-- Resistance
-
-
-# Clarifying Questions
-
-- Ship Shields: Should we maintain the quadrant-based shield tracks (Forward, Aft, Port, Starboard) from the current simulator, or is a simplified "Shield Health" value preferred for the VTT's broader scope? --> Use simplified shields, as introduced in the rules. We'll cover that with the ship properties.
-
-- Momentum Scope: Is Momentum globally shared across all scenes in a Campaign (as per the standard STA 2e rules), or do you want it tracked per Scene? --> Momentum and Threat are campaign properties, but there should be a way to reset Momentum (by the beginning of a new game session that is not represented in the programming) and automated reduction of Momentum when transitioning between scenes.
-
-- Connected Scenes: Does a "Connected" status imply a specific UI/logic (like a deck plan or map) for movement, or is it just a narrative flag for the GM? --> A connection between scenes should be represented in the following way: when the GM presses a button to end a scene, there is a dialogue for them that allows selecting a connected scene (that has not been ended), a ad-hoc creation of a new scene, or return to the GM overview, where they can select any other pregenerated scene or an already ended scene to be activated again.
-
-- Extended Tasks: Should these be independent objects in a Scene, or are they always attached to a specific Char, Ship, or Situation Trait? --> they are independent objects within a scene.
-
-- Traits/Talents Logic: You mentioned "Game Mechanic???" in the Talent diagram. For this initial data model, should these be purely descriptive (text only), or should they include a reference/ID to a functional code handler (similar to the current action_config.py system)? --> prepare a reference to a code handler, but this will only come in a late milestone.
+1: # Objects
+2: 
+3: This is to document some object properties and relations for the new VTT experience approach.
+4: 
+5: ## Chars
+6: Have all the character properties that are shared between PCs and NPCs.
+7: 
+8: ### Generic Char Properties
+9: - Stress Track (Max value, PC-specific)
+10: - List of Images
+11: - Description
+12: - Tuple of Attributes (Control, Daring, Fitness, Insight, Presence, Reason)
+13: - Tuple of Departments (Command, Conn, Engineering, Medicine, Science, Security)
+14: - List of Traits (Category: Character)
+15:   - Mandatory: Species Trait
+16:   - State: [Ok, Defeated, Fatigued, Dead]
+17: - Species String
+18: - List of Talents
+19: - Role String
+20: - --> "Attacks" (representing different weapons but impact is char-specific)
+21: - --> "Equipment"
+22: - Max Threat Pool (Capacity for NPCs to avoid consequences)
+23: 
+24: ### NPCs
+25: Have all the generic Char Properties.
+26: - NPC Category [Major|Notable|Minor]
+27: - Personal Threat Pool [0-24] (Note: This is the active pool; Line 22 is the maximum capacity)
+28: - Location String
+29: - NPC Background (all optional, some with drop-downs)
+30:   - Archetype
+31:   - Upbringing
+32:   - Environment
+33:   - Cultural Traits
+34:   - Goals
+35:   - Tactics
+36:   - Federation Outlook / Affiliation
+37:   - Life-Form Origin & Structure Traits
+38:     - Life-Form Origins (Carbon-Based Type, Exotic-Based Type, Incorporeal Type, ...)
+39:     - Body Structure Symmetry (Bilateral, Spherical, Biradial, Trilateral, Radial, Asymmetrical, ...)
+40:     - Beast/Creature Traits
+41:       - Size
+42:       - Vertebrate or Invertebrate Class
+43:       - Structural Adaptation
+44:       - Behavioral Adaptation
+45:       - Preferred Environment
+46:     - Spaceborne Entity Traits
+47:       - Mental Capacity/Awareness
+48:       - Metabolic Energy Type
+49:       - Morphology
+50:       - Spaceborne Entity Preferred Environment
+51: 
+52: ### PCs
+53: As described in Chapter 04.
+54: Include a section for
+55: - Personal Logs (tracking value usage),
+56: - Mission Logs (fluff text provided by players)
+57: - Scene Logs (who was part of which scene)
+58: - Character Background texts, managable by players
+59: - category Main vs Side (different rules apply)
+60: 
+61: ## Trait
+62: - Category: [Character, Location, Situation, Equipment]
+63: - Name: String
+64: - Description: String
+65: - Potency: Positive Integer (standard: 1)
+66: 
+67: ## Talent
+68: - Player Selectable: Boolean
+69: - Category: [Talent, Special Rule, Species Ability]
+70: - List of Conditions: (Logic for when the talent is active)
+71: - Description Text
+72: - Game Mechanic: (Reference to automated logic/handler)
+73: 
+74: ## Ships
+75: Represent both Player and NPC vessels.
+76: - Name String
+77: - Ship Class / Frame
+78: - --> "Mission Profile"
+79: - Scale [1-7]
+80: - Resistance
+81: - Systems (Comms, Computers, Engines, Sensors, Structure, Weapons)
+82: - Departments (Command, Conn, Engineering, Medicine, Security)
+83: - Power (Current/Max) --> Replace with "Reserve Power"
+84: - Shields (Current/Max)
+85: - Crew Quality [2-5] --> Only for NPC ships
+86: - Traits (List of Traits, category: Equipment/Location)
+87: - Talents (List of Ship Talents)
+88: - Weapons (List of Weapon Objects)
+89: 
+90: ## Scenes
+91: The active room where gameplay happens.
+92: - Name String
+93: - Description Text
+94: - Status [Active|Archived|Connected]
+95: - Resource Pools:
+96:   - Momentum [0-6]
+97:   - Threat [GM Pool]
+98: - Participants: --> Divide between player and non-player
+99:   - List of Chars (Link to Universe/Campaign Library)
+100:   - List of Ships
+101: - Situation Traits
+102: - Turn Order (Initiative Track)
+103: - Logs (Action & Narrative history)
+104: 
+105: ## Items / Equipment
+106: - Name
+107: - Description
+108: - Traits (category: Equipment)
+109: - Opportunity/Cost
+110: - Effects (Game Mechanics)
+111: 
+112: ## Extended Tasks
+113: - Name
+114: - Work (Track)
+115: - Difficulty
+116: - Magnitude
+117: - Resistance
+118: 
+119: 
+120: # Clarifying Questions
+121: 
+122: - Ship Shields: Should we maintain the quadrant-based shield tracks (Forward, Aft, Port, Starboard) from the current simulator, or is a simplified "Shield Health" value preferred for the VTT's broader scope? --> Use simplified shields, as introduced in the rules. We'll cover that with the ship properties.
+123: 
+124: - Momentum Scope: Is Momentum globally shared across all scenes in a Campaign (as per the standard STA 2e rules), or do you want it tracked per Scene? --> Momentum and Threat are campaign properties, but there should be a way to reset Momentum (by the beginning of a new game session that is not represented in the programming) and automated reduction of Momentum when transitioning between scenes.
+125: 
+126: - Connected Scenes: Does a "Connected" status imply a specific UI/logic (like a deck plan or map) for movement, or is it just a narrative flag for the GM? --> A connection between scenes should be represented in the following way: when the GM presses a button to end a scene, there is a dialogue for them that allows selecting a connected scene (that has not been ended), a ad-hoc creation of a new scene, or return to the GM overview, where they can select any other pregenerated scene or an already ended scene to be activated again.
+127: 
+128: - Extended Tasks: Should these be independent objects in a Scene, or are they always attached to a specific Char, Ship, or Situation Trait? --> they are independent objects within a scene.
+129: 
+130: - Traits/Talents Logic: You mentioned "Game Mechanic???" in the Talent diagram. For this initial data model, should these be purely descriptive (text only), or should they include a reference/ID to a functional code handler (similar to the current action_config.py system)? --> prepare a reference to a code handler, but this will only come in a late milestone.
+131: 
+132: (End of file - total 132 lines)
