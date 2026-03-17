@@ -787,7 +787,56 @@ pytest tests/test_*.py -v
 - ✅ Mobile-friendly on tablets
 - ✅ Stable and reliable
 
-## Next Steps
+## Immediate Next Steps (2026-03-17)
+
+### Current State
+- M6 PR #14 merged to vtt-scope
+- M7 branch created: `m7-branch`
+- M7 task document ready: `docs/tasks/milestone7_tasks.md`
+
+### Pending: M7 Agent Deployment
+
+**Three agents to deploy in parallel:**
+
+| Agent | Task | Worktree Branch |
+|-------|------|------------------|
+| Agent 1 | M7.1 Character Export/Import | feature/m7-character-import-export |
+| Agent 2 | M7.2 Ship Export/Import | feature/m7-ship-import-export |
+| Agent 3 | M7.3 Campaign Backup | feature/m7-campaign-backup |
+
+**Commands to create worktrees (for agents):**
+```bash
+# Agent 1
+git worktree add -b feature/m7-character-import-export ../m7-character-import-export m7-branch
+cd ../m7-character-import-export && uv venv && uv pip install -r requirements.txt -r requirements-dev.txt
+
+# Agent 2
+git worktree add -b feature/m7-ship-import-export ../m7-ship-import-export m7-branch
+cd ../m7-ship-import-export && uv venv && uv pip install -r requirements.txt -r requirements-dev.txt
+
+# Agent 3
+git worktree add -b feature/m7-campaign-backup ../m7-campaign-backup m7-branch
+cd ../m7-campaign-backup && uv venv && uv pip install -r requirements.txt -r requirements-dev.txt
+```
+
+**After Agents Complete:**
+1. Merge feature/m7-character-import-export → m7-branch
+2. Merge feature/m7-ship-import-export → m7-branch
+3. Merge feature/m7-campaign-backup → m7-branch
+4. Run full test suite: `uv run pytest -q`
+5. Clean up worktrees
+6. Push m7-branch to origin
+7. Create PR to vtt-scope
+
+### Documentation Updates After M7
+- Mark M7 complete in README.md
+- Mark M7 complete in docs/delivery_plan.md
+- Mark M7 complete in docs/README.md
+- Update milestone status in docs/tasks/milestone7_tasks.md
+
+---
+
+## Next Steps (Original)
 
 1. **User Review**: Please review this delivery plan
 2. **Approvals**: Confirm approach and timeline

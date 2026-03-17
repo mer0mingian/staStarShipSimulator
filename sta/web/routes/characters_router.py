@@ -588,7 +588,7 @@ async def export_character(
     char_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Export a VTT character as JSON."""
+    """Export a VTT character as JSON with all fields."""
     char = (
         (
             await db.execute(
@@ -604,40 +604,147 @@ async def export_character(
     return {
         "id": char.id,
         "name": char.name,
+        "species": char.species,
+        "rank": char.rank,
+        "role": char.role,
+        "pronouns": char.pronouns,
         "description": char.description,
         "attributes": json.loads(char.attributes_json or "{}"),
         "disciplines": json.loads(char.disciplines_json or "{}"),
+        "stress": char.stress,
+        "stress_max": char.stress_max,
+        "determination": char.determination,
+        "determination_max": char.determination_max,
         "talents": json.loads(char.talents_json or "[]"),
         "focuses": json.loads(char.focuses_json or "[]"),
+        "values": json.loads(char.values_json or "[]"),
+        "equipment": json.loads(char.equipment_json or "[]"),
+        "environment": char.environment,
+        "upbringing": char.upbringing,
+        "career_path": char.career_path,
     }
 
 
-@characters_router.post("/characters/import")
+@characters_router.post("/characters/import", status_code=status.HTTP_201_CREATED)
 async def import_character(
     data: dict = Body(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Import a VTT character from JSON."""
-    name = data.get("name")
-    if not name:
-        raise HTTPException(status_code=400, detail="name is required")
+    """Import VTT character(s) from JSON.
 
-    attributes = data.get("attributes", {})
-    disciplines = data.get("disciplines", {})
+    Accepts either a single character object or a container with 'characters' key.
+    Validates: attributes (7-12), disciplines (0-5), stress (0 to stress_max).
+    Required fields: name, species, attributes, disciplines.
+    """
+    characters_to_import = []
 
-    char = VTTCharacterRecord(
-        name=name,
-        description=data.get("description", ""),
-        attributes_json=json.dumps(attributes),
-        disciplines_json=json.dumps(disciplines),
-        talents_json=json.dumps(data.get("talents", [])),
-        focuses_json=json.dumps(data.get("focuses", [])),
-    )
-    db.add(char)
+    if "characters" in data:
+        characters_to_import = data["characters"]
+    elif isinstance(data, dict) and "name" in data:
+        characters_to_import = [data]
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid format: must be either a single character object or {'characters': [...]}",
+        )
+
+    if not isinstance(characters_to_import, list):
+        raise HTTPException(
+            status_code=400, detail="Invalid format: 'characters' must be a list"
+        )
+
+    created_ids = []
+    errors = []
+
+    for idx, char_data in enumerate(characters_to_import):
+        name = char_data.get("name")
+        species = char_data.get("species")
+        attributes = char_data.get("attributes", {})
+        disciplines = char_data.get("disciplines", {})
+
+        if not name:
+            errors.append(f"Character at index {idx}: 'name' is required")
+            continue
+
+        if not species:
+            errors.append(f"Character at index {idx}: 'species' is required")
+            continue
+
+        if not attributes:
+            errors.append(f"Character at index {idx}: 'attributes' is required")
+            continue
+
+        if not disciplines:
+            errors.append(f"Character at index {idx}: 'disciplines' is required")
+            continue
+
+        for attr_name, value in attributes.items():
+            if not isinstance(value, int) or not (7 <= value <= 12):
+                errors.append(
+                    f"Character '{name}': attribute '{attr_name}' must be between 7-12, got {value}"
+                )
+                break
+
+        for disc_name, value in disciplines.items():
+            if not isinstance(value, int) or not (0 <= value <= 5):
+                errors.append(
+                    f"Character '{name}': discipline '{disc_name}' must be between 0-5, got {value}"
+                )
+                break
+
+        stress = char_data.get("stress", 0)
+        stress_max = char_data.get("stress_max", 5)
+        if not (0 <= stress <= stress_max):
+            errors.append(
+                f"Character '{name}': stress must be between 0-{stress_max}, got {stress}"
+            )
+
+        determination = char_data.get("determination", 0)
+        determination_max = char_data.get("determination_max", 3)
+        if not (0 <= determination <= determination_max):
+            errors.append(
+                f"Character '{name}': determination must be between 0-{determination_max}, got {determination}"
+            )
+
+        if any(e.startswith(f"Character '{name}'") for e in errors):
+            continue
+
+        char = VTTCharacterRecord(
+            name=name,
+            species=species,
+            rank=char_data.get("rank"),
+            role=char_data.get("role"),
+            pronouns=char_data.get("pronouns"),
+            description=char_data.get("description"),
+            attributes_json=json.dumps(attributes),
+            disciplines_json=json.dumps(disciplines),
+            talents_json=json.dumps(char_data.get("talents", [])),
+            focuses_json=json.dumps(char_data.get("focuses", [])),
+            values_json=json.dumps(char_data.get("values", [])),
+            equipment_json=json.dumps(char_data.get("equipment", [])),
+            environment=char_data.get("environment"),
+            upbringing=char_data.get("upbringing"),
+            career_path=char_data.get("career_path"),
+            stress=stress,
+            stress_max=stress_max,
+            determination=determination,
+            determination_max=determination_max,
+            character_type=char_data.get("character_type", "support"),
+            is_visible_to_players=char_data.get("is_visible_to_players", True),
+            campaign_id=char_data.get("campaign_id"),
+        )
+        db.add(char)
+        await db.flush()
+        created_ids.append(char.id)
+
+    if errors:
+        await db.rollback()
+        return {"success": False, "errors": errors}
+
     await db.commit()
 
     return {
-        "id": char.id,
-        "name": char.name,
         "success": True,
+        "created": len(created_ids),
+        "character_ids": created_ids,
     }

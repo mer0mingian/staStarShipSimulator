@@ -655,7 +655,7 @@ async def export_ship(
     ship_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Export a VTT ship as JSON."""
+    """Export a VTT ship as JSON with all fields."""
     ship = (
         (await db.execute(select(VTTShipRecord).filter(VTTShipRecord.id == ship_id)))
         .scalars()
@@ -668,36 +668,176 @@ async def export_ship(
         "id": ship.id,
         "name": ship.name,
         "ship_class": ship.ship_class,
+        "registry": ship.ship_registry,
+        "ship_registry": ship.ship_registry,
+        "scale": ship.scale,
         "systems": json.loads(ship.systems_json or "{}"),
         "departments": json.loads(ship.departments_json or "{}"),
         "weapons": json.loads(ship.weapons_json or "[]"),
         "talents": json.loads(ship.talents_json or "[]"),
+        "traits": json.loads(ship.traits_json or "[]"),
+        "breaches": json.loads(ship.breaches_json or "[]"),
+        "shields": ship.shields,
+        "shields_max": ship.shields_max,
+        "resistance": ship.resistance,
+        "has_reserve_power": ship.has_reserve_power,
+        "shields_raised": ship.shields_raised,
+        "weapons_armed": ship.weapons_armed,
+        "crew_quality": ship.crew_quality,
+        "token_url": ship.token_url,
+        "token_scale": ship.token_scale,
+        "is_visible_to_players": ship.is_visible_to_players,
+        "vtt_position": json.loads(ship.vtt_position_json or "{}"),
+        "vtt_status_effects": json.loads(ship.vtt_status_effects_json or "[]"),
+        "vtt_facing_direction": ship.vtt_facing_direction,
+        "campaign_id": ship.campaign_id,
+        "scene_id": ship.scene_id,
     }
 
 
-@ships_router.post("/ships/import")
+@ships_router.post("/ships/import", status_code=status.HTTP_201_CREATED)
 async def import_ship(
     data: dict = Body(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Import a VTT ship from JSON."""
-    name = data.get("name")
-    if not name:
-        raise HTTPException(status_code=400, detail="name is required")
+    """Import one or more VTT ships from JSON.
 
-    ship = VTTShipRecord(
-        name=name,
-        ship_class=data.get("ship_class", "Unknown"),
-        systems_json=json.dumps(data.get("systems", {})),
-        departments_json=json.dumps(data.get("departments", {})),
-        weapons_json=json.dumps(data.get("weapons", [])),
-        talents_json=json.dumps(data.get("talents", [])),
-    )
-    db.add(ship)
+    Accepts either:
+    - Single ship object: {"name": "...", "ship_class": "...", ...}
+    - Container with ships key: {"ships": [{"name": "...", ...}, ...]}
+
+    Supports 'registry' as alias for 'ship_registry'.
+    Validates: systems (7-12), departments (0-5), scale (1-7), shields (0 to shields_max).
+    Required: name, ship_class, systems, departments.
+    """
+    ships_to_import = []
+
+    if "ships" in data:
+        ships_to_import = data["ships"]
+    elif isinstance(data, dict) and "name" in data:
+        ships_to_import = [data]
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid format. Provide single ship object or {'ships': [...]}",
+        )
+
+    if not isinstance(ships_to_import, list):
+        raise HTTPException(
+            status_code=400, detail="'ships' must be an array of ship objects"
+        )
+
+    if not ships_to_import:
+        raise HTTPException(status_code=400, detail="No ships to import")
+
+    created_ships = []
+    errors = []
+
+    for idx, ship_data in enumerate(ships_to_import):
+        try:
+            name = ship_data.get("name")
+            if not name:
+                errors.append({"index": idx, "error": "name is required"})
+                continue
+
+            ship_class = ship_data.get("ship_class")
+            if not ship_class:
+                errors.append({"index": idx, "error": "ship_class is required"})
+                continue
+
+            systems = ship_data.get("systems", {})
+            if not systems:
+                errors.append({"index": idx, "error": "systems is required"})
+                continue
+
+            departments = ship_data.get("departments", {})
+            if not departments:
+                errors.append({"index": idx, "error": "departments is required"})
+                continue
+
+            for sys_name, value in systems.items():
+                if not isinstance(value, int) or not (7 <= value <= 12):
+                    errors.append(
+                        {
+                            "index": idx,
+                            "error": f"System {sys_name} must be between 7-12, got {value}",
+                        }
+                    )
+                    continue
+
+            for dept_name, value in departments.items():
+                if not isinstance(value, int) or not (0 <= value <= 5):
+                    errors.append(
+                        {
+                            "index": idx,
+                            "error": f"Department {dept_name} must be between 0-5, got {value}",
+                        }
+                    )
+                    continue
+
+            scale = ship_data.get("scale", 4)
+            if not isinstance(scale, int) or not (1 <= scale <= 7):
+                errors.append(
+                    {"index": idx, "error": f"Scale must be between 1-7, got {scale}"}
+                )
+                continue
+
+            shields_max = ship_data.get("shields_max", 0)
+            shields = ship_data.get("shields", 0)
+            if shields_max < 0:
+                errors.append({"index": idx, "error": "shields_max cannot be negative"})
+                continue
+            if not (0 <= shields <= shields_max):
+                errors.append(
+                    {
+                        "index": idx,
+                        "error": f"Shields must be between 0-{shields_max}, got {shields}",
+                    }
+                )
+                continue
+
+            registry = ship_data.get("registry")
+            ship_registry = ship_data.get("ship_registry", registry)
+
+            ship = VTTShipRecord(
+                name=name,
+                ship_class=ship_class,
+                ship_registry=ship_registry,
+                scale=scale,
+                systems_json=json.dumps(systems),
+                departments_json=json.dumps(departments),
+                weapons_json=json.dumps(ship_data.get("weapons", [])),
+                talents_json=json.dumps(ship_data.get("talents", [])),
+                traits_json=json.dumps(ship_data.get("traits", [])),
+                breaches_json=json.dumps(ship_data.get("breaches", [])),
+                shields=shields,
+                shields_max=shields_max,
+                resistance=ship_data.get("resistance", 0),
+                has_reserve_power=ship_data.get("has_reserve_power", True),
+                shields_raised=ship_data.get("shields_raised", False),
+                weapons_armed=ship_data.get("weapons_armed", False),
+                crew_quality=ship_data.get("crew_quality"),
+                token_url=ship_data.get("token_url"),
+                token_scale=ship_data.get("token_scale"),
+                is_visible_to_players=ship_data.get("is_visible_to_players", True),
+            )
+
+            db.add(ship)
+            await db.flush()
+
+            created_ships.append({"id": ship.id, "name": ship.name})
+
+        except Exception as e:
+            errors.append({"index": idx, "error": str(e)})
+
+    if errors:
+        await db.rollback()
+        return {
+            "success": False,
+            "errors": errors,
+            "message": "Validation failed for one or more ships",
+        }
+
     await db.commit()
 
-    return {
-        "id": ship.id,
-        "name": ship.name,
-        "success": True,
-    }
+    return {"success": True, "ships": created_ships, "count": len(created_ships)}
