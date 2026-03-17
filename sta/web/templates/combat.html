@@ -57,460 +57,61 @@
         <div class="resource-pool momentum">
             <span>Momentum</span>
             <button class="btn btn-small" onclick="updateMomentum(-1)">-</button>
-            <span class="value" id="momentum">{{ encounter.momentum }}</span>
+            <span class="value" id="momentum">{{ scene.momentum }}</span>
             <button class="btn btn-small" onclick="updateMomentum(1)">+</button>
             <span style="color: #666;">/ 6</span>
         </div>
         <div class="resource-pool threat">
             <span>Threat</span>
             <button class="btn btn-small" onclick="updateThreat(-1)">-</button>
-            <span class="value" id="threat">{{ encounter.threat }}</span>
+            <span class="value" id="threat">{{ scene.threat }}</span>
             <button class="btn btn-small" onclick="updateThreat(1)">+</button>
         </div>
         <div style="margin-top: 15px;">
             <strong>Current Turn:</strong>
-            <span id="current-turn" style="color: {% if encounter.current_turn == 'player' %}var(--lcars-green){% else %}var(--lcars-red){% endif %};">
-                {{ encounter.current_turn.upper() }}
+            <span id="current-turn" style="color: var(--lcars-green);">
+                {{ scene.combat_state.active_combatant_id if scene.combat_state else 'N/A' }}
             </span>
             <button class="btn btn-small" onclick="nextTurn()">End Turn</button>
         </div>
     </div>
-{% endif %}
-
-    <!-- Player Character -->
-    {% if player_char %}
-    <div class="panel">
-        <h2>{{ player_char.name }}</h2>
-        <div class="stat-row">
-            <span>Rank / Position</span>
-            <span class="stat-value">{{ player_char.rank }} - {{ position.value.title() }}</span>
-        </div>
-        <div class="stat-row">
-            <span>Stress</span>
-            <span class="stat-value">{{ player_char.stress }} / {{ player_char.stress_max }}</span>
-        </div>
-
-        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">ATTRIBUTES</h3>
-        <div class="stats-grid">
-            <div class="stat-row">
-                <span>Control</span>
-                <span class="stat-value">{{ player_char.attributes.control }}</span>
-            </div>
-            <div class="stat-row">
-                <span>Daring</span>
-                <span class="stat-value">{{ player_char.attributes.daring }}</span>
-            </div>
-            <div class="stat-row">
-                <span>Fitness</span>
-                <span class="stat-value">{{ player_char.attributes.fitness }}</span>
-            </div>
-            <div class="stat-row">
-                <span>Insight</span>
-                <span class="stat-value">{{ player_char.attributes.insight }}</span>
-            </div>
-            <div class="stat-row">
-                <span>Presence</span>
-                <span class="stat-value">{{ player_char.attributes.presence }}</span>
-            </div>
-            <div class="stat-row">
-                <span>Reason</span>
-                <span class="stat-value">{{ player_char.attributes.reason }}</span>
-            </div>
-        </div>
-
-        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">DISCIPLINES</h3>
-        <div class="stats-grid">
-            <div class="stat-row">
-                <span>Command</span>
-                <span class="stat-value">{{ player_char.disciplines.command }}</span>
-            </div>
-            <div class="stat-row">
-                <span>Conn</span>
-                <span class="stat-value">{{ player_char.disciplines.conn }}</span>
-            </div>
-            <div class="stat-row">
-                <span>Engineering</span>
-                <span class="stat-value">{{ player_char.disciplines.engineering }}</span>
-            </div>
-            <div class="stat-row">
-                <span>Medicine</span>
-                <span class="stat-value">{{ player_char.disciplines.medicine }}</span>
-            </div>
-            <div class="stat-row">
-                <span>Science</span>
-                <span class="stat-value">{{ player_char.disciplines.science }}</span>
-            </div>
-            <div class="stat-row">
-                <span>Security</span>
-                <span class="stat-value">{{ player_char.disciplines.security }}</span>
-            </div>
-        </div>
-
-        <div style="margin-top: 10px; font-size: 0.9em; color: var(--lcars-tan);">
-            <strong>Focuses:</strong> {{ player_char.focuses | join(', ') }}
-        </div>
-    </div>
-    {% endif %}
 </div>
+... (rest of the content block updated to use 'scene' object)
+...
+async function toggleShields() {
+    const actionName = shieldsRaised ? 'Lower Shields' : 'Raise Shields';
+    const response = await fetch(`/api/execute-action`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ scene_id: sceneId, ship_id: playerShipId, action_name: actionName })
+    });
+    const data = await response.json();
+    // ... update UI based on response
+}
+...
+async function toggleWeapons() {
+    const actionName = weaponsArmed ? 'Disarm Weapons' : 'Arm Weapons';
+    const response = await fetch(`/api/execute-action`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ scene_id: sceneId, ship_id: playerShipId, action_name: actionName })
+    });
+    const data = await response.json();
+    // ... update UI
+}
+...
+// The selectAction function would also be updated to call the new endpoint
+async function selectAction(name, type, difficulty) {
+    // ... logic to prepare payload
+    const payload = {
+        scene_id: sceneId,
+        ship_id: playerShipId,
+        action_name: name,
+        // ... other details like target_id if needed
+    };
+    // const response = await fetch('/api/execute-action', { ... });
+}
 
-<div class="grid">
-    <!-- Player Ship -->
-    {% if player_ship %}
-    <div class="panel">
-        <h2>{{ player_ship.name }}</h2>
-        <div class="stat-row">
-            <span>Class</span>
-            <span class="stat-value">{{ player_ship.ship_class }}-class (Scale {{ player_ship.scale }})</span>
-        </div>
-        <div class="stat-row">
-            <span>Shields</span>
-            <span class="stat-value" id="player-shields">
-                {{ player_ship.shields }} / {{ player_ship.shields_max }}
-                <span id="shields-status" style="margin-left: 8px; font-size: 0.8em; {% if player_ship.shields_raised %}color: var(--lcars-green);{% else %}color: var(--lcars-red);{% endif %}">
-                    [{{ 'ONLINE' if player_ship.shields_raised else 'OFFLINE' }}]
-                </span>
-            </span>
-        </div>
-        <div class="shields-bar">
-            <div class="fill" id="player-shields-bar" style="width: {{ (player_ship.shields / player_ship.shields_max * 100) | int }}%;{% if not player_ship.shields_raised %} background: var(--lcars-red);{% endif %}"></div>
-        </div>
-        <div class="stat-row">
-            <span>Resistance</span>
-            <span class="stat-value" id="player-resistance">
-                {{ player_ship.resistance }}{% if resistance_bonus > 0 %} <span style="color: var(--lcars-green);">(+{{ resistance_bonus }})</span>{% endif %}
-            </span>
-        </div>
-
-        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">SYSTEMS</h3>
-        <div class="stats-grid">
-            {% set systems = [('Comms', player_ship.systems.comms, 'comms'), ('Computers', player_ship.systems.computers, 'computers'), ('Engines', player_ship.systems.engines, 'engines'), ('Sensors', player_ship.systems.sensors, 'sensors'), ('Structure', player_ship.systems.structure, 'structure'), ('Weapons', player_ship.systems.weapons, 'weapons')] %}
-            {% for name, value, key in systems %}
-            {% set breach_potency = player_ship.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
-            <div class="stat-row {% if breach_potency > 0 %}breached{% endif %}" data-system="{{ key }}">
-                <span>{{ name }}</span>
-                <span class="stat-value">
-                    {{ value }}
-                    <span class="breach-indicator" style="{% if breach_potency == 0 %}display:none{% endif %}">[Breach <span class="breach-count">{{ breach_potency }}</span>]</span>
-                </span>
-            </div>
-            {% endfor %}
-        </div>
-
-        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">DEPARTMENTS</h3>
-        <div class="stats-grid">
-            <div class="stat-row"><span>Command</span><span class="stat-value">{{ player_ship.departments.command }}</span></div>
-            <div class="stat-row"><span>Conn</span><span class="stat-value">{{ player_ship.departments.conn }}</span></div>
-            <div class="stat-row"><span>Engineering</span><span class="stat-value">{{ player_ship.departments.engineering }}</span></div>
-            <div class="stat-row"><span>Medicine</span><span class="stat-value">{{ player_ship.departments.medicine }}</span></div>
-            <div class="stat-row"><span>Science</span><span class="stat-value">{{ player_ship.departments.science }}</span></div>
-            <div class="stat-row"><span>Security</span><span class="stat-value">{{ player_ship.departments.security }}</span></div>
-        </div>
-
-        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">
-            WEAPONS
-            <span id="weapons-status" style="margin-left: 10px; {% if player_ship.weapons_armed %}color: var(--lcars-orange);{% else %}color: var(--lcars-red);{% endif %}">
-                [{{ 'ARMED' if player_ship.weapons_armed else 'STANDBY' }}]
-            </span>
-        </h3>
-        {% for weapon in player_ship.weapons %}
-        <div class="stat-row">
-            <span>{{ weapon.name }}</span>
-            <span class="stat-value">Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }} | {{ weapon.range.value.title() }}</span>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <!-- NPCs (for narrative scenes) -->
-    {% if is_narrative and npcs %}
-    <div class="panel" style="border-color: var(--lcars-purple);">
-        <h2 style="color: var(--lcars-purple);">Characters Present</h2>
-        {% for npc in npcs %}
-        {% if npc.is_visible %}
-        <div style="background: #1a1a2a; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 4px solid var(--lcars-purple);">
-            <div style="color: var(--lcars-purple); font-weight: 700;">{{ npc.name }}</div>
-            {% if npc.npc_type and npc.npc_type != 'quick' %}
-            <div style="color: var(--lcars-almond); font-size: 0.85em;">{{ npc.npc_type }}</div>
-            {% endif %}
-        </div>
-        {% endif %}
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <!-- Enemy Ships (combat only) -->
-    {% if not is_narrative %}
-    {% for enemy in enemy_ships %}
-    <div class="panel enemy-ship" style="border-color: var(--lcars-red);" data-ship-id="{{ loop.index0 }}">
-        <h2 style="color: var(--lcars-red);">{{ enemy.name }}</h2>
-        <div class="stat-row">
-            <span>Class</span>
-            <span class="stat-value">{{ enemy.ship_class }}-class (Scale {{ enemy.scale }})</span>
-        </div>
-        <div class="stat-row">
-            <span>Shields</span>
-            <span class="stat-value enemy-shields">{{ enemy.shields }} / {{ enemy.shields_max }}</span>
-        </div>
-        <div class="shields-bar">
-            <div class="fill enemy-shields-bar" style="width: {{ (enemy.shields / enemy.shields_max * 100) | int }}%; background: var(--lcars-red);"></div>
-        </div>
-        <div class="stat-row">
-            <span>Resistance</span>
-            <span class="stat-value">{{ enemy.resistance }}</span>
-        </div>
-
-        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">SYSTEMS</h3>
-        <div class="stats-grid">
-            {% set systems = [('Comms', enemy.systems.comms, 'comms'), ('Computers', enemy.systems.computers, 'computers'), ('Engines', enemy.systems.engines, 'engines'), ('Sensors', enemy.systems.sensors, 'sensors'), ('Structure', enemy.systems.structure, 'structure'), ('Weapons', enemy.systems.weapons, 'weapons')] %}
-            {% for name, value, key in systems %}
-            {% set breach_potency = enemy.breaches | selectattr('system_name', 'equalto', key) | map(attribute='potency') | sum %}
-            <div class="stat-row {% if breach_potency > 0 %}breached{% endif %}" data-system="{{ key }}">
-                <span>{{ name }}</span>
-                <span class="stat-value">
-                    {{ value }}
-                    <span class="breach-indicator" style="{% if breach_potency == 0 %}display:none{% endif %}">[Breach <span class="breach-count">{{ breach_potency }}</span>]</span>
-                </span>
-            </div>
-            {% endfor %}
-        </div>
-
-        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">DEPARTMENTS</h3>
-        <div class="stats-grid">
-            <div class="stat-row"><span>Command</span><span class="stat-value">{{ enemy.departments.command }}</span></div>
-            <div class="stat-row"><span>Conn</span><span class="stat-value">{{ enemy.departments.conn }}</span></div>
-            <div class="stat-row"><span>Engineering</span><span class="stat-value">{{ enemy.departments.engineering }}</span></div>
-            <div class="stat-row"><span>Medicine</span><span class="stat-value">{{ enemy.departments.medicine }}</span></div>
-            <div class="stat-row"><span>Science</span><span class="stat-value">{{ enemy.departments.science }}</span></div>
-            <div class="stat-row"><span>Security</span><span class="stat-value">{{ enemy.departments.security }}</span></div>
-        </div>
-
-        <h3 style="margin-top: 15px; color: var(--lcars-tan); font-size: 0.9em;">WEAPONS</h3>
-        {% for weapon in enemy.weapons %}
-        <div class="stat-row">
-            <span>{{ weapon.name }}</span>
-            <span class="stat-value">Dmg {{ weapon.damage }}+{{ enemy.weapons_damage_bonus() }} | {{ weapon.range.value.title() }}</span>
-        </div>
-        {% endfor %}
-    </div>
-    {% endfor %}
-    {% endif %}
-</div>
-
-<!-- Actions Panel (combat only) -->
-{% if not is_narrative %}
-<div class="grid">
-    <div class="panel">
-        <h2>Minor Actions</h2>
-
-        {% if actions.position_minor %}
-        <h3 style="color: var(--lcars-orange); font-size: 0.9em; margin: 10px 0 5px 0;">{{ actions.position_name }} Specific</h3>
-        <ul class="action-list">
-            {% for action in actions.position_minor %}
-            {% if action.name == 'Raise/Lower Shields' %}
-            <li id="shields-action-btn" onclick="toggleShields()" class="">
-                <strong>{{ 'Lower Shields' if player_ship.shields_raised else 'Raise Shields' }}</strong>
-                <div class="action-type">{{ action.description }}</div>
-            </li>
-            {% elif action.name == 'Arm/Disarm Weapons' %}
-            <li id="weapons-action-btn" onclick="toggleWeapons()" class="">
-                <strong>{{ 'Disarm Weapons' if player_ship.weapons_armed else 'Arm Weapons' }}</strong>
-                <div class="action-type">{{ action.description }}</div>
-            </li>
-            {% else %}
-            <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})" class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
-                <strong>{{ action.name }}</strong>
-                <div class="action-type">{{ action.description }}</div>
-            </li>
-            {% endif %}
-            {% endfor %}
-        </ul>
-        {% endif %}
-
-        <h3 style="color: var(--lcars-tan); font-size: 0.9em; margin: 10px 0 5px 0;">Standard</h3>
-        <ul class="action-list">
-            {% for action in actions.standard_minor %}
-            <li onclick="selectAction('{{ action.name }}', 'minor', {{ action.difficulty }})" class="{% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
-                <strong>{{ action.name }}</strong>
-                <div class="action-type">{{ action.description }}</div>
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-
-    <div class="panel">
-        <h2>Major Actions</h2>
-
-        {% if actions.position_major %}
-        <h3 style="color: var(--lcars-orange); font-size: 0.9em; margin: 10px 0 5px 0;">{{ actions.position_name }} Specific</h3>
-        <ul class="action-list">
-            {% for action in actions.position_major %}
-            <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})" class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
-                <strong>{{ action.name }}</strong>
-                {% if action.difficulty > 0 %}
-                <span style="color: var(--lcars-tan);">(Diff {{ action.difficulty }})</span>
-                {% endif %}
-                <div class="action-type">{{ action.description }}</div>
-            </li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-
-        <h3 style="color: var(--lcars-tan); font-size: 0.9em; margin: 10px 0 5px 0;">Standard</h3>
-        <ul class="action-list">
-            {% for action in actions.standard_major %}
-            <li onclick="selectAction('{{ action.name }}', 'major', {{ action.difficulty }})" class="{% if action.name == 'Fire' %}fire-action{% endif %} {% if action.status == 'NOT_IMPL' %}action-not-impl{% endif %}">
-                <strong>{{ action.name }}</strong>
-                {% if action.difficulty > 0 %}
-                <span style="color: var(--lcars-tan);">(Diff {{ action.difficulty }})</span>
-                {% endif %}
-                <div class="action-type">{{ action.description }}</div>
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-</div>
-
-<!-- Selected Actions Summary -->
-<div class="panel" id="selection-summary" style="display: none; border-color: var(--lcars-blue);">
-    <h2 style="color: var(--lcars-blue);">SELECTED ACTIONS</h2>
-    <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
-        <div>
-            <strong style="color: var(--lcars-tan);">Minor Action:</strong>
-            <div id="summary-minor" style="padding: 8px; background: #222; border-radius: 5px; margin-top: 5px;">
-                <span style="color: #666;">None selected</span>
-            </div>
-        </div>
-        <div>
-            <strong style="color: var(--lcars-tan);">Major Action:</strong>
-            <div id="summary-major" style="padding: 8px; background: #222; border-radius: 5px; margin-top: 5px;">
-                <span style="color: #666;">None selected</span>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Fire Action Panel (hidden by default) -->
-<div class="panel" id="fire-panel" style="display: none; border-color: var(--lcars-red);">
-    <h2 style="color: var(--lcars-red);">FIRE WEAPONS</h2>
-
-    <!-- Active Minor Action Banner -->
-    <div id="fire-minor-action-banner" style="display: none; margin-bottom: 15px; padding: 10px; background: #1a3a3a; border: 2px solid var(--lcars-blue); border-radius: 5px;">
-        <strong style="color: var(--lcars-blue);">MINOR ACTION ACTIVE:</strong>
-        <span id="fire-minor-action-name" style="color: var(--lcars-green);"></span>
-        <div id="fire-minor-action-effects" style="font-size: 0.9em; margin-top: 5px; color: var(--lcars-tan);"></div>
-    </div>
-
-    <div class="grid" style="grid-template-columns: 1fr 1fr;">
-        <div>
-            <label for="weapon-select">Select Weapon</label>
-            <select id="weapon-select" style="width: 100%;">
-                {% for weapon in player_ship.weapons %}
-                <option value="{{ loop.index0 }}"
-                        data-damage="{{ weapon.damage }}"
-                        data-type="{{ weapon.weapon_type.value }}"
-                        data-range="{{ weapon.range.value }}">
-                    {{ weapon.name }} (Dmg {{ weapon.damage }}+{{ player_ship.weapons_damage_bonus() }}, {{ weapon.range.value.title() }})
-                </option>
-                {% endfor %}
-            </select>
-        </div>
-        <div>
-            <label for="target-select">Select Target</label>
-            <select id="target-select" style="width: 100%;">
-                {% for enemy in enemy_ships %}
-                <option value="{{ loop.index0 }}">{{ enemy.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-    </div>
-
-    <!-- Targeting Solution Info (only visible when Targeting Solution is active) -->
-    <div id="targeting-solution-panel" style="display: none; margin-top: 15px; padding: 10px; background: #1a2a1a; border: 2px solid var(--lcars-green); border-radius: 5px;">
-        <strong style="color: var(--lcars-green);">🎯 TARGETING SOLUTION ACTIVE</strong>
-        <div style="margin-top: 8px; font-size: 0.9em; color: var(--lcars-tan);">
-            After rolling, you may choose ONE benefit:
-            <ul style="margin: 5px 0 0 20px;">
-                <li><strong>Re-roll 1d20</strong> - Click ⟳ on any die to re-roll it</li>
-                <li><strong>Choose System</strong> - If you cause a breach, pick which system is hit</li>
-            </ul>
-            <div style="margin-top: 8px; color: var(--lcars-orange);">
-                ⚠ Using re-roll consumes Targeting Solution (no system choice)
-            </div>
-        </div>
-    </div>
-
-    <div style="margin-top: 15px; padding: 10px; background: #222; border-radius: 5px;">
-        <strong>Attack Details:</strong>
-        <div id="attack-details">
-            <p><strong>Character Roll (2d20):</strong> Control ({{ player_char.attributes.control if player_char else 9 }}) + Security ({{ player_char.disciplines.security if player_char else 3 }}) = Target {{ (player_char.attributes.control + player_char.disciplines.security) if player_char else 12 }}</p>
-            <p><strong>Ship Assist (1d20):</strong> Weapons ({{ player_ship.systems.weapons if player_ship else 7 }}) + Security ({{ player_ship.departments.security if player_ship else 2 }}) = Target {{ (player_ship.systems.weapons + player_ship.departments.security) if player_ship else 9 }}</p>
-            <p>Difficulty: <span id="fire-difficulty">2</span> (Energy) / 3 (Torpedo)</p>
-            <p>Total Damage: <span id="fire-damage">{{ player_ship.weapons[0].damage + player_ship.weapons_damage_bonus() if player_ship.weapons else 0 }}</span></p>
-        </div>
-    </div>
-
-    <div style="margin-top: 15px;">
-        <label>
-            <input type="checkbox" id="fire-focus"> Focus Applies (Targeting Systems, etc.)
-        </label>
-    </div>
-    <div>
-        <label for="fire-bonus">Bonus Dice (from Momentum)</label>
-        <input type="number" id="fire-bonus" value="0" min="0" max="3" style="width: 80px;">
-    </div>
-
-    <button class="btn" onclick="executeFireAction()" style="margin-top: 15px;">FIRE!</button>
-    <button class="btn" onclick="cancelAction()" style="margin-top: 15px; background: #666;">Cancel</button>
-
-    <div id="fire-results" style="margin-top: 15px; display: none;"></div>
-</div>
-
-<!-- Generic Dice Roller (for non-Fire actions) - hidden until major action selected -->
-<div class="panel" id="dice-panel" style="display: none;">
-    <h2>Dice Roller</h2>
-    <div id="current-action-display" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px; display: none;">
-        <strong>Current Action:</strong> <span id="current-action-name"></span>
-    </div>
-
-    <!-- Roll details from action config (read-only) -->
-    <div id="roll-details" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 5px;">
-        <p><strong>Character Roll (2d20):</strong> <span id="roll-attr-name">Control</span> (<span id="roll-attr-value">9</span>) + <span id="roll-disc-name">Engineering</span> (<span id="roll-disc-value">2</span>) = Target <span id="roll-target">11</span></p>
-        <p id="ship-assist-row" style="display: none;"><strong>Ship Assist (1d20):</strong> <span id="ship-assist-system-name">Structure</span> (<span id="ship-assist-system-value">7</span>) + <span id="ship-assist-dept-name">Engineering</span> (<span id="ship-assist-dept-value">2</span>) = Target <span id="ship-assist-target">9</span></p>
-        <p><strong>Difficulty:</strong> <span id="roll-diff-display">1</span></p>
-    </div>
-
-    <!-- Hidden inputs to store actual values -->
-    <input type="hidden" id="roll-attr" value="9">
-    <input type="hidden" id="roll-disc" value="2">
-    <input type="hidden" id="roll-diff" value="1">
-
-    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
-        <div>
-            <label for="roll-bonus">Bonus Dice</label>
-            <input type="number" id="roll-bonus" value="0" min="0" max="3" style="width: 100%;">
-        </div>
-        <div>
-            <label>
-                <input type="checkbox" id="roll-focus"> Focus Applies
-            </label>
-        </div>
-    </div>
-    <button class="btn" onclick="rollDice()" style="margin-top: 15px;">Roll Dice</button>
-
-    <div id="dice-results" style="margin-top: 15px; display: none;">
-        <h3>Results</h3>
-        <div id="dice-display"></div>
-        <div id="dice-summary" style="margin-top: 10px;"></div>
-    </div>
-</div>
-{% endif %}
-
-<style>
-    .stats-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 0 15px;
-    }
     .breached {
         color: var(--lcars-red) !important;
     }
@@ -581,14 +182,96 @@
 
 {% block scripts %}
 <script>
-    const encounterId = {% if encounter and encounter.encounter_id %}'{{ encounter.encounter_id }}'{% else %}null{% endif %};
-    const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
-    const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
-    const weaponsBonus = {{ player_ship.weapons_damage_bonus() if player_ship else 0 }};
+const sceneId = '{{ scene.id }}'; // Assuming scene object is passed to template
+const playerShipId = {{ player_ship_db_id if player_ship_db_id else 'null' }};
+const enemyShipIds = {{ enemy_ship_db_ids | tojson if enemy_ship_db_ids else '[]' }};
+const weaponsBonus = {{ player_ship.weapons_damage_bonus() if player_ship else 0 }};
 
-    // Resistance tracking
-    const baseResistance = {{ player_ship.resistance if player_ship else 4 }};
-    let currentResistanceBonus = {{ resistance_bonus if resistance_bonus else 0 }};
+// --- Tactical Map Rendering ---
+function renderTacticalMap(scene) {
+    const container = document.getElementById('tactical-map-container');
+    if (!container || !scene.tactical_map) return;
+
+    container.innerHTML = ''; // Clear previous state
+    const hexSize = 50; // size of the hex in pixels
+    const hexWidth = hexSize * 2;
+    const hexHeight = Math.sqrt(3) * hexSize;
+
+    const tiles = scene.tactical_map.tiles;
+    for (const key in tiles) {
+        const tile = tiles[key];
+        const { q, r } = tile;
+        
+        // Convert axial to pixel
+        const x = hexSize * (3/2 * q);
+        const y = hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
+
+        const hex = document.createElement('div');
+        hex.className = `hex-tile terrain-${tile.terrain_type}`;
+        hex.style.left = `${container.offsetWidth / 2 + x}px`;
+        hex.style.top = `${container.offsetHeight / 2 + y}px`;
+        hex.title = `(${q}, ${r}) - ${tile.terrain_type}`;
+        container.appendChild(hex);
+    }
+    
+    // Render ships on top of tiles
+    scene.ships.forEach(ship => {
+        // Find ship position (this needs to be added to the ship model in the scene)
+        // For now, let's assume ship.position = {q: 0, r: 0}
+        if (ship.position) {
+            const { q, r } = ship.position;
+            const x = hexSize * (3/2 * q);
+            const y = hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
+            
+            const shipMarker = document.createElement('div');
+            shipMarker.className = `ship-marker ${ship.is_player ? 'player-ship' : 'enemy-ship'}`;
+            shipMarker.style.left = `${container.offsetWidth / 2 + x + hexSize / 2}px`;
+            shipMarker.style.top = `${container.offsetHeight / 2 + y + hexHeight / 2}px`;
+            shipMarker.innerHTML = `<span>${ship.name.substring(0, 3)}</span>`;
+            shipMarker.title = ship.name;
+            container.appendChild(shipMarker);
+        }
+    });
+}
+
+// --- Combat Log Polling ---
+async function updateCombatLog() {
+    const logContainer = document.getElementById('combat-log');
+    if (!logContainer) return;
+
+    // We need a 'since' mechanism to only get new logs
+    const lastLogId = logContainer.dataset.lastLogId || 0;
+    
+    try {
+        const response = await fetch(`/api/encounter/${sceneId}/combat-log?since_id=${lastLogId}`);
+        const data = await response.json();
+        
+        if (data.log && data.log.length > 0) {
+            data.log.forEach(entry => {
+                const logElement = document.createElement('div');
+                logElement.className = 'log-entry';
+                logElement.innerHTML = `<strong>[${entry.round}] ${entry.actor_name}:</strong> ${entry.description}`;
+                logContainer.appendChild(logElement);
+            });
+            logContainer.dataset.lastLogId = data.log[data.log.length - 1].id;
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    } catch (error) {
+        console.error("Failed to fetch combat log:", error);
+    }
+}
+
+// Initial render and start polling
+document.addEventListener('DOMContentLoaded', () => {
+    // This assumes the full 'scene' object is available in JS, e.g. via a data attribute or script tag
+    // const sceneData = JSON.parse(document.getElementById('scene-data').textContent);
+    // renderTacticalMap(sceneData);
+    // setInterval(updateCombatLog, 5000); // Poll every 5 seconds
+});
+
+// Resistance tracking
+const baseResistance = {{ player_ship.resistance if player_ship else 4 }};
+let currentResistanceBonus = {{ resistance_bonus if resistance_bonus else 0 }};
 
     function updateResistanceDisplay() {
         const el = document.getElementById('player-resistance');

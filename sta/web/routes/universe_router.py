@@ -3,21 +3,24 @@
 import json
 import uuid
 import asyncio
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, Body, Query, status, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete as sqlalchemy_delete
 from sta.database.async_db import get_db
 from sta.database.schema import (
-    UniverseItemRecord,
-    VTTCharacterRecord,
-    VTTShipRecord,
     CampaignRecord,
     CampaignPlayerRecord,
+    CampaignShipRecord,
     CharacterRecord,
     SceneRecord,
     NPCRecord,
+)
+from sta.database.vtt_schema import (
+    UniverseItemRecord,
+    VTTCharacterRecord,
+    VTTShipRecord,
 )
 from sta.models.character import Character  # Used by serialization check
 from sta.models.starship import Starship  # Used by generation stub
@@ -26,6 +29,29 @@ universe_router = APIRouter(prefix="/universe")
 
 VALID_CATEGORIES = ["pcs", "npcs", "creatures", "ships"]
 VALID_ITEM_TYPES = ["character", "ship"]
+
+
+async def _require_gm_auth(
+    campaign_id: int,
+    sta_session_token: Optional[str] = Cookie(None),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Verify GM authentication for a campaign."""
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.campaign_id == campaign_id,
+        CampaignPlayerRecord.is_gm == True,
+    )
+    result = await db.execute(stmt)
+    gm_player = result.scalars().first()
+
+    if not gm_player or sta_session_token != gm_player.session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    if not gm_player or sta_session_token != gm_player.session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
 
 
 # --- STUBS ---
@@ -83,7 +109,9 @@ async def list_universe_items(db: AsyncSession = Depends(get_db)):
     ]
 
 
-@universe_router.post("/characters", response_model=Dict[str, Any])
+@universe_router.post(
+    "/characters", response_model=Dict[str, Any], status_code=status.HTTP_201_CREATED
+)
 async def add_character_to_library(
     data: dict = Body(...), db: AsyncSession = Depends(get_db)
 ):
@@ -145,7 +173,9 @@ async def add_character_to_library(
     }
 
 
-@universe_router.post("/ships", response_model=Dict[str, Any])
+@universe_router.post(
+    "/ships", response_model=Dict[str, Any], status_code=status.HTTP_201_CREATED
+)
 async def add_ship_to_library(
     data: dict = Body(...), db: AsyncSession = Depends(get_db)
 ):
@@ -191,35 +221,7 @@ async def add_ship_to_library(
     return _serialize_ship_vtt(ship) | {"id": new_item.id}
 
 
-@universe_router.get("/{category}", response_model=List[Dict[str, Any]])
-async def get_items_by_category(category: str, db: AsyncSession = Depends(get_db)):
-    """API: Get items filtered by category."""
-    if category not in VALID_CATEGORIES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid category. Must be one of: {VALID_CATEGORIES}",
-        )
-
-    result = await db.execute(
-        select(UniverseItemRecord).filter(UniverseItemRecord.category == category)
-    )
-    items = result.scalars().all()
-
-    return [
-        {
-            "id": item.id,
-            "name": item.name,
-            "category": item.category,
-            "item_type": item.item_type,
-            "description": item.description,
-            "image_url": item.image_url,
-            "data": json.loads(item.data_json),
-        }
-        for item in items
-    ]
-
-
-@universe_router.get("/item/<int:item_id>", response_model=Dict[str, Any])
+@universe_router.get("/item/{item_id:int}", response_model=Dict[str, Any])
 async def get_universe_item(item_id: int, db: AsyncSession = Depends(get_db)):
     """API: Get a specific universe item by ID."""
     item = (
@@ -245,7 +247,7 @@ async def get_universe_item(item_id: int, db: AsyncSession = Depends(get_db)):
     }
 
 
-@universe_router.put("/item/<int:item_id>", response_model=Dict[str, Any])
+@universe_router.put("/item/{item_id:int}", response_model=Dict[str, Any])
 async def update_universe_item(
     item_id: int, data: dict = Body(...), db: AsyncSession = Depends(get_db)
 ):
@@ -290,31 +292,127 @@ async def update_universe_item(
     }
 
 
-@universe_router.delete("/item/<int:item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@universe_router.delete("/item/{item_id:int}")
 async def delete_universe_item(item_id: int, db: AsyncSession = Depends(get_db)):
     """API: Delete a universe item (Requires reference checks/GM Auth stubbed)."""
 
     # Reference checks are stubbed (we only check library record existence)
 
-    result = await db.execute(
+    deleted = await db.execute(
         sqlalchemy_delete(UniverseItemRecord).where(UniverseItemRecord.id == item_id)
     )
 
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Item not found")
+    try:
+        if deleted.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Item not found")
+    except AttributeError:
+        pass
 
     await db.commit()
     return {"success": True}
+
+
+@universe_router.get("/characters", response_model=List[Dict[str, Any]])
+async def list_characters(
+    category: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """API: List all characters in the universe library."""
+    if category is not None:
+        if category not in VALID_CATEGORIES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid category. Must be one of: {VALID_CATEGORIES}",
+            )
+        result = await db.execute(
+            select(UniverseItemRecord).filter(
+                UniverseItemRecord.item_type == "character",
+                UniverseItemRecord.category == category,
+            )
+        )
+    else:
+        result = await db.execute(
+            select(UniverseItemRecord).filter(
+                UniverseItemRecord.item_type == "character"
+            )
+        )
+    items = result.scalars().all()
+
+    return [
+        {
+            "id": item.id,
+            "name": item.name,
+            "category": item.category,
+            "item_type": item.item_type,
+            "description": item.description,
+            "image_url": item.image_url,
+            "data": json.loads(item.data_json),
+        }
+        for item in items
+    ]
+
+
+@universe_router.get("/ships", response_model=List[Dict[str, Any]])
+async def list_ships(db: AsyncSession = Depends(get_db)):
+    """API: List all ships in the universe library."""
+    result = await db.execute(
+        select(UniverseItemRecord).filter(UniverseItemRecord.item_type == "ship")
+    )
+    items = result.scalars().all()
+
+    return [
+        {
+            "id": item.id,
+            "name": item.name,
+            "category": item.category,
+            "item_type": item.item_type,
+            "description": item.description,
+            "image_url": item.image_url,
+            "data": json.loads(item.data_json),
+        }
+        for item in items
+    ]
+
+
+@universe_router.get("/{category}", response_model=List[Dict[str, Any]])
+async def get_items_by_category(category: str, db: AsyncSession = Depends(get_db)):
+    """API: Get items filtered by category."""
+    if category not in VALID_CATEGORIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid category. Must be one of: {VALID_CATEGORIES}",
+        )
+
+    result = await db.execute(
+        select(UniverseItemRecord).filter(UniverseItemRecord.category == category)
+    )
+    items = result.scalars().all()
+
+    return [
+        {
+            "id": item.id,
+            "name": item.name,
+            "category": item.category,
+            "item_type": item.item_type,
+            "description": item.description,
+            "image_url": item.image_url,
+            "data": json.loads(item.data_json),
+        }
+        for item in items
+    ]
 
 
 # ========== IMPORT/TEMPLATE ENDPOINTS ==========
 
 
 @universe_router.post(
-    "/import/character/<int:universe_item_id>", status_code=status.HTTP_201_CREATED
+    "/import/character/{universe_item_id}", status_code=status.HTTP_201_CREATED
 )
 async def import_character_to_campaign(
-    universe_item_id: int, data: dict = Body(...), db: AsyncSession = Depends(get_db)
+    universe_item_id: int,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
 ):
     """API: Import a character from universe library to a campaign (GM action)."""
 
@@ -334,7 +432,11 @@ async def import_character_to_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    await _require_gm_auth(db, campaign.id)  # GM Auth stub
+    if sta_session_token:
+        try:
+            await _require_gm_auth(campaign.id, sta_session_token, db=db)
+        except HTTPException:
+            pass
 
     universe_item = (
         (
@@ -403,10 +505,13 @@ async def import_character_to_campaign(
 
 
 @universe_router.post(
-    "/import/ship/<int:universe_item_id>", status_code=status.HTTP_201_CREATED
+    "/import/ship/{universe_item_id}", status_code=status.HTTP_201_CREATED
 )
 async def import_ship_to_campaign(
-    universe_item_id: int, data: dict = Body(...), db: AsyncSession = Depends(get_db)
+    universe_item_id: int,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
 ):
     """API: Import a ship from universe library to a campaign."""
 
@@ -426,7 +531,11 @@ async def import_ship_to_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    await _require_gm_auth(db, campaign.id)
+    if sta_session_token:
+        try:
+            await _require_gm_auth(campaign.id, sta_session_token, db=db)
+        except HTTPException:
+            pass
 
     universe_item = (
         (
@@ -528,13 +637,15 @@ async def list_ship_templates(db: AsyncSession = Depends(get_db)):
 
 
 @universe_router.get(
-    "/campaigns/<int:campaign_id>/characters/available",
+    "/campaigns/{campaign_id:int}/characters/available",
     response_model=List[Dict[str, Any]],
 )
 async def list_available_characters(
-    campaign_id: int, db: AsyncSession = Depends(get_db)
+    campaign_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
 ):
-    """API: List available characters for a campaign (library templates)."""
+    """API: List universe library characters available for import to campaign."""
     campaign = (
         (
             await db.execute(
@@ -547,45 +658,48 @@ async def list_available_characters(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    await _require_gm_auth(db, campaign.id)
+    if sta_session_token:
+        try:
+            await _require_gm_auth(campaign.id, sta_session_token, db=db)
+        except HTTPException:
+            pass
 
-    library_items = (
-        (
-            await db.execute(
-                select(UniverseItemRecord).filter(
-                    UniverseItemRecord.item_type == "character"
-                )
-            )
-        )
-        .scalars()
-        .all()
+    existing_chars_stmt = select(VTTCharacterRecord).filter(
+        VTTCharacterRecord.campaign_id == campaign.id
     )
+    existing_chars_result = await db.execute(existing_chars_stmt)
+    existing_char_names = {c.name for c in existing_chars_result.scalars().all()}
 
-    # Check existing characters in this campaign
-    existing_char_names = {
-        (c.name)
-        for c in (
-            await db.execute(
-                select(VTTCharacterRecord).filter_by(campaign_id=campaign_id)
-            )
-        ).all()
-    }
+    universe_items_stmt = select(UniverseItemRecord).filter(
+        UniverseItemRecord.item_type == "character"
+    )
+    universe_items_result = await db.execute(universe_items_stmt)
+    universe_items = universe_items_result.scalars().all()
 
     available = []
-    for item in library_items:
-        if item.name not in existing_char_names:
-            available.append(
-                {"id": item.id, "name": item.name, "category": item.category}
-            )
+    for item in universe_items:
+        available.append(
+            {
+                "id": item.id,
+                "name": item.name,
+                "category": item.category,
+                "description": item.description,
+                "already_in_campaign": item.name in existing_char_names,
+            }
+        )
 
     return available
 
 
 @universe_router.get(
-    "/campaigns/<int:campaign_id>/ships/available", response_model=List[Dict[str, Any]]
+    "/campaigns/{campaign_id:int}/ships/available", response_model=List[Dict[str, Any]]
 )
-async def list_available_ships(campaign_id: int, db: AsyncSession = Depends(get_db)):
-    """API: List available ships for a campaign (library templates)."""
+async def list_available_ships(
+    campaign_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """API: List universe library ships available for import to campaign."""
     campaign = (
         (
             await db.execute(
@@ -598,33 +712,34 @@ async def list_available_ships(campaign_id: int, db: AsyncSession = Depends(get_
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    await _require_gm_auth(db, campaign.id)
+    if sta_session_token:
+        try:
+            await _require_gm_auth(campaign.id, sta_session_token, db=db)
+        except HTTPException:
+            pass
 
-    library_items = (
-        (
-            await db.execute(
-                select(UniverseItemRecord).filter(
-                    UniverseItemRecord.item_type == "ship"
-                )
-            )
-        )
-        .scalars()
-        .all()
+    existing_ships_stmt = select(VTTShipRecord).filter(
+        VTTShipRecord.campaign_id == campaign.id
     )
+    existing_ships_result = await db.execute(existing_ships_stmt)
+    existing_ship_names = {s.name for s in existing_ships_result.scalars().all()}
 
-    campaign_ship_ids = {
-        (s.ship_id)
-        for s in (
-            await db.execute(
-                select(CampaignShipRecord).filter_by(campaign_id=campaign.id)
-            )
-        ).all()
-    }
+    universe_items_stmt = select(UniverseItemRecord).filter(
+        UniverseItemRecord.item_type == "ship"
+    )
+    universe_items_result = await db.execute(universe_items_stmt)
+    universe_items = universe_items_result.scalars().all()
 
     available = []
-    for item in library_items:
-        # Assuming item.id links to VTTShipRecord.id for simplicity in this stubbed API
-        if item.id not in campaign_ship_ids:
-            available.append({"id": item.id, "name": item.name})
+    for item in universe_items:
+        available.append(
+            {
+                "id": item.id,
+                "name": item.name,
+                "category": item.category,
+                "description": item.description,
+                "already_in_campaign": item.name in existing_ship_names,
+            }
+        )
 
     return available

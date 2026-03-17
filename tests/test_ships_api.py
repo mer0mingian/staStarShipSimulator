@@ -16,6 +16,7 @@ import pytest
 from sta.database.vtt_schema import VTTShipRecord
 
 
+@pytest.mark.ships
 class TestShipCRUD:
     """Tests for Ship CRUD endpoints."""
 
@@ -49,7 +50,6 @@ class TestShipCRUD:
                 "shields_max": 10,
                 "resistance": 4,
             },
-            
         )
         assert response.status_code == 201
         data = response.json()
@@ -82,7 +82,6 @@ class TestShipCRUD:
                     "security": 3,
                 },
             },
-            
         )
         assert response.status_code == 400
         assert "must be between 7-12" in response.json()["detail"]
@@ -112,7 +111,6 @@ class TestShipCRUD:
                     "security": 3,
                 },
             },
-            
         )
         assert response.status_code == 400
         assert "must be between 0-5" in response.json()["detail"]
@@ -142,7 +140,6 @@ class TestShipCRUD:
                     "security": 3,
                 },
             },
-            
         )
         assert response.status_code == 400
         assert "Scale must be between 1-7" in response.json()["detail"]
@@ -326,7 +323,6 @@ class TestShipCRUD:
         response = client.put(
             f"/api/ships/{ship_id}",
             json={"name": "USS Updated"},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -366,8 +362,7 @@ class TestShipCRUD:
 
         response = client.put(
             f"/api/ships/{ship_id}",
-            json={"systems": {"comms": 15}},
-            
+            json={"systems_json": json.dumps({"comms": 15})},
         )
         assert response.status_code == 400
         assert "must be between 7-12" in response.json()["detail"]
@@ -501,7 +496,6 @@ class TestShipShields:
         response = client.put(
             f"/api/ships/{ship_id}/shields",
             json={"shields": 5, "raised": False},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -545,7 +539,6 @@ class TestShipShields:
         response = client.put(
             f"/api/ships/{ship_id}/shields",
             json={"shields": 15},
-            
         )
         assert response.status_code == 400
 
@@ -589,7 +582,6 @@ class TestShipPower:
         response = client.put(
             f"/api/ships/{ship_id}/power",
             json={"current": 0},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -635,7 +627,6 @@ class TestShipBreaches:
         response = client.put(
             f"/api/ships/{ship_id}/breach",
             json={"system": "structure", "potency": 2, "action": "add"},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -679,7 +670,6 @@ class TestShipBreaches:
         response = client.put(
             f"/api/ships/{ship_id}/breach",
             json={"system": "structure", "action": "remove"},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -736,7 +726,6 @@ class TestShipWeapons:
         response = client.put(
             f"/api/ships/{ship_id}/weapons",
             json={"weapons": weapons},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -791,7 +780,6 @@ class TestShipWeapons:
         response = client.post(
             f"/api/ships/{ship_id}/weapons/Phaser%20Banks/arm",
             json={"armed": True},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -875,7 +863,6 @@ class TestShipCrewQuality:
         response = client.put(
             f"/api/ships/{ship_id}/crew-quality",
             json={"crew_quality": "exceptional"},
-            
         )
         assert response.status_code == 200
         data = response.json()
@@ -916,6 +903,5 @@ class TestShipCrewQuality:
         response = client.put(
             f"/api/ships/{ship_id}/crew-quality",
             json={"crew_quality": "invalid_quality"},
-            
         )
         assert response.status_code == 400

@@ -2,6 +2,7 @@
 
 import json
 import pytest
+from sqlalchemy import select
 from sta.database import (
     get_session,
     SceneRecord,
@@ -99,11 +100,13 @@ class TestSceneParticipantsAPI:
         test_session.add(npc_char)
 
         # Ensure there is a player (non-GM) to assign
-        player = (
-            test_session.query(CampaignPlayerRecord)
-            .filter_by(campaign_id=campaign_id, is_gm=False)
-            .first()
+        result = await test_session.execute(
+            select(CampaignPlayerRecord).filter(
+                CampaignPlayerRecord.campaign_id == campaign_id,
+                CampaignPlayerRecord.is_gm == False,
+            )
         )
+        player = result.scalars().first()
         if not player:
             player = CampaignPlayerRecord(
                 campaign_id=campaign_id,
@@ -204,7 +207,9 @@ class TestSceneParticipantsAPI:
         assert p["player_name"] is None
 
     @pytest.mark.asyncio
-    async def test_add_participant_requires_character_id(self, client, setup_scene_with_data):
+    async def test_add_participant_requires_character_id(
+        self, client, setup_scene_with_data
+    ):
         """POST participants requires character_id."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
@@ -216,7 +221,9 @@ class TestSceneParticipantsAPI:
         assert "character_id required" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_add_participant_character_not_found(self, client, setup_scene_with_data):
+    async def test_add_participant_character_not_found(
+        self, client, setup_scene_with_data
+    ):
         """POST participants fails if character does not exist."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
@@ -324,9 +331,7 @@ class TestSceneParticipantsAPI:
             },
         )
         assert response.status_code == 400
-        assert (
-            "Player is not assigned to this character" in response.json()["detail"]
-        )
+        assert "Player is not assigned to this character" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_add_participant_player_already_assigned(
@@ -350,7 +355,7 @@ class TestSceneParticipantsAPI:
         # Try to assign the same player to the same character again (duplicate)
         resp2 = client.post(f"/scenes/{scene_id}/participants", json=payload1)
         assert resp2.status_code == 400
-        assert "already assigned" in resp2.get_json()["detail"].lower()
+        assert "already assigned" in resp2.json()["detail"].lower()
 
         # Try to assign the same player to a different character (create another PC char first)
         other_pc = VTTCharacterRecord(
@@ -393,7 +398,7 @@ class TestSceneParticipantsAPI:
         }
         resp3 = client.post(f"/scenes/{scene_id}/participants", json=payload2)
         assert resp3.status_code == 400
-        assert "already assigned" in resp3.get_json()["detail"].lower()
+        assert "already assigned" in resp3.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_add_participant_character_already_in_scene(
@@ -413,7 +418,7 @@ class TestSceneParticipantsAPI:
         # Try to add same character again
         resp2 = client.post(f"/scenes/{scene_id}/participants", json=payload)
         assert resp2.status_code == 400
-        assert "already in scene" in resp2.get_json()["detail"].lower()
+        assert "already in scene" in resp2.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_update_participant_visibility(self, client, setup_scene_with_data):
@@ -427,7 +432,7 @@ class TestSceneParticipantsAPI:
         payload = {"character_id": data["pc_char"].id, "is_visible_to_players": False}
         resp = client.post(f"/scenes/{scene_id}/participants", json=payload)
         assert resp.status_code == 200
-        participant_id = resp.get_json()["participant_id"]
+        participant_id = resp.json()["participant_id"]
 
         # Update visibility
         update_resp = client.put(
@@ -435,16 +440,18 @@ class TestSceneParticipantsAPI:
             json={"is_visible_to_players": True},
         )
         assert update_resp.status_code == 200
-        assert update_resp.get_json()["success"] is True
+        assert update_resp.json()["success"] is True
 
         # Verify via GET
         get_resp = client.get(f"/scenes/{scene_id}/participants")
-        participants = get_resp.get_json()
+        participants = get_resp.json()
         assert len(participants) == 1
         assert participants[0]["is_visible_to_players"] is True
 
     @pytest.mark.asyncio
-    async def test_update_participant_player_unassign(self, client, setup_scene_with_data):
+    async def test_update_participant_player_unassign(
+        self, client, setup_scene_with_data
+    ):
         """PUT participant can unassign player (set to None)."""
         data = setup_scene_with_data
         scene_id = data["scene"].id
@@ -459,7 +466,7 @@ class TestSceneParticipantsAPI:
         }
         resp = client.post(f"/scenes/{scene_id}/participants", json=payload)
         assert resp.status_code == 200
-        participant_id = resp.get_json()["participant_id"]
+        participant_id = resp.json()["participant_id"]
 
         # Unassign player
         update_resp = client.put(
@@ -467,11 +474,11 @@ class TestSceneParticipantsAPI:
             json={"player_id": None},
         )
         assert update_resp.status_code == 200
-        assert update_resp.get_json()["success"] is True
+        assert update_resp.json()["success"] is True
 
         # Verify player_id is now None
         get_resp = client.get(f"/scenes/{scene_id}/participants")
-        participants = get_resp.get_json()
+        participants = get_resp.json()
         assert participants[0]["player_id"] is None
         assert participants[0]["type"] == "npc"  # should now be NPC type
 
@@ -539,7 +546,7 @@ class TestSceneParticipantsAPI:
         }
         resp1 = client.post(f"/scenes/{scene_id}/participants", json=payload1)
         assert resp1.status_code == 200
-        participant_id = resp1.get_json()["participant_id"]
+        participant_id = resp1.json()["participant_id"]
 
         # Reassign to second player (must link to second player's character)
         # But we want to reassign the participant to a different player? That would change player_id.
@@ -587,16 +594,16 @@ class TestSceneParticipantsAPI:
         payload = {"character_id": data["npc_char"].id, "is_visible_to_players": False}
         resp = client.post(f"/scenes/{scene_id}/participants", json=payload)
         assert resp.status_code == 200
-        participant_id = resp.get_json()["participant_id"]
+        participant_id = resp.json()["participant_id"]
 
         # Delete
         del_resp = client.delete(f"/scenes/{scene_id}/participants/{participant_id}")
         assert del_resp.status_code == 200
-        assert del_resp.get_json()["success"] is True
+        assert del_resp.json()["success"] is True
 
         # Verify removed
         get_resp = client.get(f"/scenes/{scene_id}/participants")
-        assert len(get_resp.get_json()) == 0
+        assert len(get_resp.json()) == 0
 
     @pytest.mark.asyncio
     async def test_delete_participant_not_found(self, client, setup_scene_with_data):
@@ -633,9 +640,9 @@ class TestSceneParticipantsAPI:
             f"/scenes/{scene_id}/participants",
             json={"character_id": data["pc_char"].id},
         )
-        participant_id = resp.get_json()["participant_id"]
+        participant_id = resp.json()["participant_id"]
 
-        client.delete_cookie("sta_session_token")
+        client.cookies.clear()
         response = client.put(
             f"/scenes/{scene_id}/participants/{participant_id}",
             json={"is_visible_to_players": True},

@@ -5,25 +5,29 @@ description = "Star Trek Adventures Starship Simulator"
 requires-python = ">=3.13"
 
 dependencies = [
-    "aiosqlite>=0.22.1",
-    "fastapi>=0.135.1",
-    "flask",
-    "pydantic-settings>=2.13.1",
-    "python-multipart>=0.0.22",
-    "sqlalchemy",
-    "uvicorn[standard]>=0.41.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "sqlalchemy>=2.0",
+    "aiosqlite",
     "werkzeug",
+    "jinja2",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build.targets.wheel]
-packages = ["sta"]
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+    "pytest-cov",
+]
 
 [tool.uv]
 managed = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["sta"]
 
 [tool.ruff]
 line-length = 88
@@ -33,10 +37,58 @@ target-version = "py313"
 testpaths = ["tests"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
 
-[dependency-groups]
-dev = [
-    "httpx>=0.28.1",
-    "pytest-asyncio>=1.3.0",
+# Test markers for running specific test groups
+# Usage: pytest -m <marker> to run only tests with that marker
+#        pytest -m "not <marker>" to exclude tests with that marker
+markers = [
+    # Scene-related markers
+    "scene_lifecycle: Tests for scene state transitions (draft→ready→active→completed)",
+    "scene_activation: Tests for scene activation endpoint",
+    "scene_termination: Tests for scene termination/completion endpoint",
+    "scene_management: Tests for scene CRUD and general scene operations",
+    "scene_config: Tests for scene configuration and settings",
+    "scene_connections: Tests for scene connections and transitions",
+    "scene_participants: Tests for scene participant management",
+    "scene_ships: Tests for scene ship management",
+    
+    # Combat/Turn markers
+    "combat: Tests for combat encounters and battle mechanics",
+    "turn_enforcement: Tests for turn order and enforcement rules",
+    "turn_order: Tests for turn order management",
+    
+    # Action markers
+    "actions: Tests for action execution and effects",
+    "action_tactical: Tests for tactical/security station actions",
+    "action_command: Tests for command station actions",
+    "action_conn: Tests for conn station actions",
+    "action_engineering: Tests for engineering station actions",
+    "action_science: Tests for science station actions",
+    
+    # Character markers
+    "characters: Tests for character management",
+    "character_claiming: Tests for character claiming in multiplayer",
+    
+    # Ship markers
+    "ships: Tests for ship management",
+    
+    # Campaign markers
+    "campaign: Tests for campaign management",
+    "campaign_resources: Tests for campaign resources (momentum, threat)",
+    "personnel_encounter: Tests for personnel encounters",
+    
+    # API markers
+    "api: Tests for REST API endpoints",
+    
+    # VTT integration markers
+    "vtt: Tests for VTT (Virtual Table Top) integration",
+    "universe: Tests for universe/library integration",
+    
+    # Other markers
+    "session: Tests for session/token management",
+    "visibility: Tests for visibility/privacy controls",
+    "logging: Tests for action logging",
+    
+    # Performance markers
+    "slow: Tests that take longer to run (can be excluded with -m 'not slow')",
 ]

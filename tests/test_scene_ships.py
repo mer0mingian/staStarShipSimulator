@@ -116,7 +116,7 @@ class TestSceneShipsAPI:
         # Verify via GET
         get_resp = client.get(f"/scenes/{scene_id}/ships")
         assert get_resp.status_code == 200
-        ships = get_resp.get_json()
+        ships = get_resp.json()
         assert len(ships) == 1
         s = ships[0]
         assert s["ship_id"] == ship_id
@@ -218,7 +218,7 @@ class TestSceneShipsAPI:
         # Try to add same ship again
         resp2 = client.post(f"/scenes/{scene_id}/ships", json={"ship_id": ship_id})
         assert resp2.status_code == 400
-        assert "already in scene" in resp2.get_json()["detail"].lower()
+        assert "already in scene" in resp2.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_update_ship_visibility(self, client, setup_scene_with_ship):
@@ -241,11 +241,11 @@ class TestSceneShipsAPI:
             f"/scenes/{scene_id}/ships/{ship_id}", json={"is_visible_to_players": True}
         )
         assert update_resp.status_code == 200
-        assert update_resp.get_json()["success"] is True
+        assert update_resp.json()["success"] is True
 
         # Verify via GET
         get_resp = client.get(f"/scenes/{scene_id}/ships")
-        ships = get_resp.get_json()
+        ships = get_resp.json()
         assert ships[0]["is_visible_to_players"] is True
 
     @pytest.mark.asyncio
@@ -279,11 +279,11 @@ class TestSceneShipsAPI:
         # Delete
         del_resp = client.delete(f"/scenes/{scene_id}/ships/{ship_id}")
         assert del_resp.status_code == 200
-        assert del_resp.get_json()["success"] is True
+        assert del_resp.json()["success"] is True
 
         # Verify removed
         get_resp = client.get(f"/scenes/{scene_id}/ships")
-        assert len(get_resp.get_json()) == 0
+        assert len(get_resp.json()) == 0
 
     @pytest.mark.asyncio
     async def test_delete_ship_not_found(self, client, setup_scene_with_ship):
@@ -316,7 +316,7 @@ class TestSceneShipsAPI:
         gm_token = data["gm"].session_token
         client.cookies.set("sta_session_token", gm_token)
         client.post(f"/scenes/{scene_id}/ships", json={"ship_id": ship_id})
-        client.delete_cookie("sta_session_token")
+        client.cookies.clear()
 
         response = client.put(
             f"/scenes/{scene_id}/ships/{ship_id}", json={"is_visible_to_players": True}

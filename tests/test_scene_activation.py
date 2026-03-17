@@ -3,6 +3,7 @@
 import json
 import uuid
 import pytest
+from sqlalchemy import select
 from sta.database import (
     SceneRecord,
     CampaignRecord,
@@ -15,6 +16,7 @@ from sta.database import (
 from sta.database.schema import SceneShipRecord, SceneParticipantRecord
 
 
+@pytest.mark.scene_activation
 class TestSceneActivationAPI:
     """Tests for POST /api/scenes/<id>/activate."""
 
@@ -73,14 +75,18 @@ class TestSceneActivationAPI:
         await test_session.commit()
 
         # Check scene status updated
-        updated_scene = test_session.query(SceneRecord).filter_by(id=scene_id).first()
+        result = await test_session.execute(
+            select(SceneRecord).filter(SceneRecord.id == scene_id)
+        )
+        updated_scene = result.scalars().first()
         assert updated_scene.status == "active"
 
         # Check encounter created
         encounter_id = data["encounter_id"]
-        encounter = (
-            test_session.query(EncounterRecord).filter_by(id=encounter_id).first()
+        result = await test_session.execute(
+            select(EncounterRecord).filter(EncounterRecord.id == encounter_id)
         )
+        encounter = result.scalars().first()
         assert encounter is not None
         assert encounter.campaign_id == campaign.id
         assert encounter.player_ship_id == player_ship_id
@@ -90,9 +96,10 @@ class TestSceneActivationAPI:
         assert encounter.is_active is True
 
         # Check campaign momentum reduced by 1
-        updated_campaign = (
-            test_session.query(CampaignRecord).filter_by(id=campaign.id).first()
+        result = await test_session.execute(
+            select(CampaignRecord).filter(CampaignRecord.id == campaign.id)
         )
+        updated_campaign = result.scalars().first()
         assert updated_campaign.momentum == 4
 
     @pytest.mark.asyncio
@@ -184,7 +191,9 @@ class TestSceneActivationAPI:
         assert "Player ship must be included in scene ships" in data["detail"]
 
     @pytest.mark.asyncio
-    async def test_activate_personal_success(self, client, test_session, sample_campaign):
+    async def test_activate_personal_success(
+        self, client, test_session, sample_campaign
+    ):
         """Activating a personal scene creates PersonnelEncounterRecord with correct character states."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
@@ -307,7 +316,12 @@ class TestSceneActivationAPI:
 
         # Verify personnel encounter created
         pe_id = data["personnel_encounter_id"]
-        pe = test_session.query(PersonnelEncounterRecord).filter_by(id=pe_id).first()
+        result = await test_session.execute(
+            select(PersonnelEncounterRecord).filter(
+                PersonnelEncounterRecord.id == pe_id
+            )
+        )
+        pe = result.scalars().first()
         assert pe is not None
         assert pe.scene_id == scene.id
         assert pe.is_active is True
@@ -335,9 +349,10 @@ class TestSceneActivationAPI:
         assert npc_state["is_player"] is False
 
         # Verify campaign momentum reduced
-        updated_campaign = (
-            test_session.query(CampaignRecord).filter_by(id=campaign.id).first()
+        result = await test_session.execute(
+            select(CampaignRecord).filter(CampaignRecord.id == campaign.id)
         )
+        updated_campaign = result.scalars().first()
         assert updated_campaign.momentum == 2
 
     @pytest.mark.asyncio
@@ -365,7 +380,9 @@ class TestSceneActivationAPI:
         assert "must have at least one participant" in data["detail"]
 
     @pytest.mark.asyncio
-    async def test_activate_narrative_success(self, client, test_session, sample_campaign):
+    async def test_activate_narrative_success(
+        self, client, test_session, sample_campaign
+    ):
         """Activating a narrative scene just changes status to active; no encounter created."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
@@ -395,18 +412,24 @@ class TestSceneActivationAPI:
         await test_session.commit()
 
         # Scene should be active, no encounter_id set
-        updated_scene = test_session.query(SceneRecord).filter_by(id=scene_id).first()
+        result = await test_session.execute(
+            select(SceneRecord).filter(SceneRecord.id == scene_id)
+        )
+        updated_scene = result.scalars().first()
         assert updated_scene.status == "active"
         assert updated_scene.encounter_id is None
 
         # Campaign momentum reduced
-        updated_campaign = (
-            test_session.query(CampaignRecord).filter_by(id=campaign.id).first()
+        result = await test_session.execute(
+            select(CampaignRecord).filter(CampaignRecord.id == campaign.id)
         )
+        updated_campaign = result.scalars().first()
         assert updated_campaign.momentum == 1
 
     @pytest.mark.asyncio
-    async def test_activate_fails_if_not_draft(self, client, test_session, sample_campaign):
+    async def test_activate_fails_if_not_draft(
+        self, client, test_session, sample_campaign
+    ):
         """Activation fails if scene is not in draft status."""
         campaign = sample_campaign["campaign"]
         gm_token = sample_campaign["players"][0].session_token
@@ -425,10 +448,12 @@ class TestSceneActivationAPI:
         response = client.post(f"/scenes/{scene_id}/activate")
         assert response.status_code == 400
         data = response.json()
-        assert "must be in draft status" in data["detail"]
+        assert "must be in 'ready' or 'draft' status to activate" in data["detail"]
 
     @pytest.mark.asyncio
-    async def test_activate_requires_gm_auth(self, client, test_session, sample_campaign):
+    async def test_activate_requires_gm_auth(
+        self, client, test_session, sample_campaign
+    ):
         """Activation requires GM authentication."""
         campaign = sample_campaign["campaign"]
         # No GM token set

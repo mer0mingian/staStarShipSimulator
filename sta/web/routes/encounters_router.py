@@ -12,6 +12,7 @@ from fastapi import (
     Request,
     Query,
     Form,
+    Body,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete as sqlalchemy_delete
@@ -419,6 +420,7 @@ async def combat_data(
 @encounters_router.delete("/{encounter_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_encounter(encounter_id: str, db: AsyncSession = Depends(get_db)):
     """Delete an encounter."""
+    # Add scene endpoints here
 
     encounter_id_stmt = select(EncounterRecord.id).filter(
         EncounterRecord.encounter_id == encounter_id
@@ -429,7 +431,87 @@ async def delete_encounter(encounter_id: str, db: AsyncSession = Depends(get_db)
     if not encounter_db_id:
         raise HTTPException(status_code=404, detail="Encounter not found")
 
-    # Delete Personnel Encounter (must delete related scene first if cascade isn't set up)
+
+# Scene Management for Encounter
+
+
+@encounters_router.get("/{encounter_id}/scene")
+async def get_encounter_scene(
+    encounter_id: str, role: str = Query("player"), db: AsyncSession = Depends(get_db)
+):
+    """Get scene data for an encounter."""
+    encounter_stmt = select(EncounterRecord).filter(
+        EncounterRecord.encounter_id == encounter_id
+    )
+    encounter_result = await db.execute(encounter_stmt)
+    encounter = encounter_result.scalars().first()
+
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.encounter_id == encounter.id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        return {
+            "stardate": None,
+            "scene_traits": [],
+            "challenges": [],
+        }
+
+    return {
+        "stardate": getattr(scene, "stardate", None),
+        "scene_traits": json.loads(scene.scene_traits_json or "[]"),
+        "challenges": json.loads(scene.challenges_json or "[]"),
+    }
+
+
+@encounters_router.post("/{encounter_id}/scene")
+async def create_or_update_scene(
+    encounter_id: str,
+    data: dict = Body(...),
+    role: str = Query("player"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create or update scene data for an encounter."""
+    encounter_stmt = select(EncounterRecord).filter(
+        EncounterRecord.encounter_id == encounter_id
+    )
+    encounter_result = await db.execute(encounter_stmt)
+    encounter = encounter_result.scalars().first()
+
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    scene_stmt = select(SceneRecord).filter(SceneRecord.encounter_id == encounter.id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        scene = SceneRecord(
+            encounter_id=encounter.id,
+            stardate=data.get("stardate"),
+            scene_traits_json=json.dumps(data.get("scene_traits", [])),
+            challenges_json=json.dumps(data.get("challenges", [])),
+        )
+        db.add(scene)
+    else:
+        if "stardate" in data:
+            scene.stardate = data["stardate"]
+        if "scene_traits" in data:
+            scene.scene_traits_json = json.dumps(data["scene_traits"])
+        if "challenges" in data:
+            scene.challenges_json = json.dumps(data["challenges"])
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "stardate": scene.stardate,
+        "scene_traits": json.loads(scene.scene_traits_json or "[]"),
+        "challenges": json.loads(scene.challenges_json or "[]"),
+    }
     await db.execute(
         sqlalchemy_delete(PersonnelEncounterRecord).where(
             PersonnelEncounterRecord.scene_id.in_(
@@ -553,4 +635,37 @@ async def personnel_combat_data(
         "major_actions": major_actions,
         "tactical_map": tactical_map,
         "role": role,
+    }
+
+
+@encounters_router.post("/{encounter_id}/ram")
+async def ram_action(
+    encounter_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Execute a Ram action."""
+    player_id = data.get("player_id")
+
+    # Find the encounter
+    stmt = select(EncounterRecord).filter_by(encounter_id=encounter_id)
+    result = await db.execute(stmt)
+    encounter = result.scalar_one_or_none()
+
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    # Check if player has already acted
+    if player_id and encounter.current_turn == "player":
+        players_turns = json.loads(encounter.players_turns_used_json or "{}")
+        player_acted = players_turns.get(str(player_id), {}).get("acted", False)
+
+        if player_acted:
+            raise HTTPException(
+                status_code=403, detail="Player has already acted this turn."
+            )
+
+    return {
+        "success": True,
+        "message": "Ram action executed.",
     }

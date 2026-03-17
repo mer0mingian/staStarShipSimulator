@@ -3,6 +3,7 @@
 import json
 import uuid
 import pytest
+from sqlalchemy import select
 from sta.database import (
     SceneRecord,
     CampaignRecord,
@@ -11,6 +12,7 @@ from sta.database import (
 )
 
 
+@pytest.mark.scene_termination
 class TestSceneTerminationAPI:
     """Tests for POST /api/scenes/<id>/end."""
 
@@ -73,7 +75,7 @@ class TestSceneTerminationAPI:
         campaign.momentum = 3
         await test_session.commit()
 
-        scene, encounter = self._create_active_starship_scene(
+        scene, encounter = await self._create_active_starship_scene(
             test_session, sample_campaign
         )
         scene_id = scene.id
@@ -91,19 +93,24 @@ class TestSceneTerminationAPI:
         await test_session.commit()
 
         # Verify scene completed
-        updated_scene = test_session.query(SceneRecord).filter_by(id=scene_id).first()
+        result = await test_session.execute(
+            select(SceneRecord).filter(SceneRecord.id == scene_id)
+        )
+        updated_scene = result.scalars().first()
         assert updated_scene.status == "completed"
 
         # Verify encounter deactivated
-        updated_encounter = (
-            test_session.query(EncounterRecord).filter_by(id=encounter_id).first()
+        result = await test_session.execute(
+            select(EncounterRecord).filter(EncounterRecord.id == encounter_id)
         )
+        updated_encounter = result.scalars().first()
         assert updated_encounter.is_active is False
 
         # Verify campaign momentum reduced
-        updated_campaign = (
-            test_session.query(CampaignRecord).filter_by(id=campaign.id).first()
+        result = await test_session.execute(
+            select(CampaignRecord).filter(CampaignRecord.id == campaign.id)
         )
+        updated_campaign = result.scalars().first()
         assert updated_campaign.momentum == 2
 
     @pytest.mark.asyncio
@@ -116,7 +123,9 @@ class TestSceneTerminationAPI:
         campaign.momentum = 2
         await test_session.commit()
 
-        scene, pe = self._create_active_personal_scene(test_session, sample_campaign)
+        scene, pe = await self._create_active_personal_scene(
+            test_session, sample_campaign
+        )
         scene_id = scene.id
         pe_id = pe.id
 
@@ -131,13 +140,19 @@ class TestSceneTerminationAPI:
         await test_session.commit()
 
         # Verify personnel encounter deactivated
-        updated_pe = (
-            test_session.query(PersonnelEncounterRecord).filter_by(id=pe_id).first()
+        result = await test_session.execute(
+            select(PersonnelEncounterRecord).filter(
+                PersonnelEncounterRecord.id == pe_id
+            )
         )
+        updated_pe = result.scalars().first()
         assert updated_pe.is_active is False
 
         # Verify scene completed
-        updated_scene = test_session.query(SceneRecord).filter_by(id=scene_id).first()
+        result = await test_session.execute(
+            select(SceneRecord).filter(SceneRecord.id == scene_id)
+        )
+        updated_scene = result.scalars().first()
         assert updated_scene.status == "completed"
 
     @pytest.mark.asyncio
@@ -150,7 +165,7 @@ class TestSceneTerminationAPI:
         campaign.momentum = 8
         await test_session.commit()
 
-        scene, encounter = self._create_active_starship_scene(
+        scene, encounter = await self._create_active_starship_scene(
             test_session, sample_campaign
         )
         scene_id = scene.id

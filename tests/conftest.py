@@ -64,7 +64,7 @@ async def test_session():
 @pytest.fixture(scope="function")
 async def app(test_session):
     from sta.web.app import create_app
-    from sta.database import get_db
+    from sta.database.async_db import get_db
 
     fastapi_app = create_app()
 
@@ -249,6 +249,7 @@ async def sample_campaign(test_session, sample_player_ship_data):
             is_active=True,
         )
         test_session.add(player)
+        players.append(player)
 
     await test_session.commit()
     return {"campaign": campaign, "player_ship": player_ship, "players": players}
@@ -402,6 +403,21 @@ async def scene(test_session, sample_campaign):
         campaign_id=campaign.id,
         name="Test Scene",
         scene_type="narrative",
+        status="draft",
+    )
+    test_session.add(scene)
+    await test_session.commit()
+    return scene
+
+
+@pytest.fixture
+async def scene_personal(test_session, sample_campaign):
+    """Create a personal scene for personnel encounter testing."""
+    campaign = sample_campaign["campaign"]
+    scene = SceneRecord(
+        campaign_id=campaign.id,
+        name="Personal Scene",
+        scene_type="personal",
         status="draft",
     )
     test_session.add(scene)

@@ -142,6 +142,9 @@ class Ship(BaseModel):
     weapons: List[Weapon] = []
 
 
+from sta.mechanics.combat import CombatState, HexGrid
+
+
 class Scene(BaseModel):
     id: str
     campaign_id: str
@@ -161,8 +164,9 @@ class Scene(BaseModel):
     # Situation Traits
     situation_traits: List[Trait] = []
 
-    # Initiative / Turn Order
-    initiative_order: List[str] = []  # List of participant IDs
+    # Combat State
+    combat_state: Optional[CombatState] = None
+    tactical_map: Optional[HexGrid] = None
 
     # Logs
     logs: List[str] = []

@@ -2,6 +2,7 @@
 
 import json
 import pytest
+from sqlalchemy import select
 from tests.conftest import *  # noqa: F401, F403
 
 
@@ -172,7 +173,9 @@ class TestPersonnelEncounterAPI:
         assert data["position"] == {"q": 1, "r": -1}
 
     @pytest.mark.asyncio
-    async def test_next_turn(self, client, test_session, sample_campaign, scene_personal):
+    async def test_next_turn(
+        self, client, test_session, sample_campaign, scene_personal
+    ):
         """Test advancing to next turn."""
         # Create encounter first
         client.post(f"/api/personnel/{scene_personal.id}/create")
@@ -217,11 +220,12 @@ class TestPersonnelSceneActivation:
         # Verify personnel encounter was created
         from sta.database import PersonnelEncounterRecord
 
-        personnel = (
-            test_session.query(PersonnelEncounterRecord)
-            .filter_by(scene_id=scene_personal.id)
-            .first()
+        result = await test_session.execute(
+            select(PersonnelEncounterRecord).filter(
+                PersonnelEncounterRecord.scene_id == scene_personal.id
+            )
         )
+        personnel = result.scalars().first()
         assert personnel is not None
         assert personnel.momentum == 0
         assert personnel.round == 1
