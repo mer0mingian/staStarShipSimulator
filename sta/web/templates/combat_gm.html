@@ -1774,7 +1774,9 @@
             
             <div style="border-top: 1px solid #444; padding-top: 18px; margin-top: 18px;">
                 <label class="gm-select-label" style="font-size: 1rem;">Or Create Quick NPC</label>
+                <label for="quick-npc-name" class="gm-select-label" style="font-size: 0.9rem;">NPC Name</label>
                 <input type="text" id="quick-npc-name" placeholder="NPC Name" class="gm-select" style="background: #1a1a1a; padding: 12px; margin-bottom: 10px; font-size: 1rem;">
+                <label for="quick-npc-desc" class="gm-select-label" style="font-size: 0.9rem;">Description</label>
                 <input type="text" id="quick-npc-desc" placeholder="Brief description (optional)" class="gm-select" style="background: #1a1a1a; padding: 12px; margin-bottom: 10px; font-size: 1rem;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 10px;">
                     <div>
@@ -1791,7 +1793,7 @@
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px; margin-top: 12px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <label for="quick-npc-visible" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                         <input type="checkbox" id="quick-npc-visible" style="width: 20px; height: 20px;">
                         <span style="color: var(--lcars-almond); font-size: 1rem;">Visible to players</span>
                     </label>
@@ -3166,11 +3168,11 @@
                     <h2>Add Scene Trait</h2>
                     <form onsubmit="addSceneTrait(event)">
                         <div style="margin-bottom: 15px;">
-                            <label style="color: var(--lcars-almond);">Trait Name</label>
+                            <label for="trait-name-input" style="color: var(--lcars-almond);">Trait Name</label>
                             <input type="text" id="trait-name-input" required style="width: 100%; margin-top: 4px;" placeholder="e.g., Dark, Dangerous">
                         </div>
                         <div style="margin-bottom: 15px;">
-                            <label style="color: var(--lcars-almond);">Description (optional)</label>
+                            <label for="trait-desc-input" style="color: var(--lcars-almond);">Description (optional)</label>
                             <textarea id="trait-desc-input" rows="2" style="width: 100%; margin-top: 4px;" placeholder="Shown on hover"></textarea>
                         </div>
                         <div style="display: flex; gap: 10px; justify-content: flex-end;">

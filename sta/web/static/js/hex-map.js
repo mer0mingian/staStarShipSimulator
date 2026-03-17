@@ -318,6 +318,12 @@ const HexMap = {
                         e.stopPropagation();
                         onHexClick(q, r, terrain, validMoveLookup[key]);
                     });
+                    // Touch support for mobile devices
+                    path.addEventListener('touchend', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onHexClick(q, r, terrain, validMoveLookup[key]);
+                    });
                 }
 
                 hexGroup.appendChild(path);
@@ -440,6 +446,12 @@ const HexMap = {
                 if (onShipClick) {
                     shipMarker.style.cursor = 'pointer';
                     shipMarker.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        onShipClick(ship, index);
+                    });
+                    // Touch support for mobile devices
+                    shipMarker.addEventListener('touchend', (e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         onShipClick(ship, index);
                     });
