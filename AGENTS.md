@@ -80,7 +80,7 @@ task(
     subagent_type="python-dev",
     prompt="Implement the feature.",
     description="...",
-    model="opencode/minimax-m2.5-free" # Explicitly sets the model
+    model="opencode/minimax-m2.5-free" # Explicitly sets the model. However, this specific model is only an example 
 )
 ```
 
@@ -94,7 +94,7 @@ task(
 )
 ```
 
-- **Model Choice**: ALWAYS use `opencode/minimax-m2.5-free` for all tasks (development, review, debugging) until further notice.
+- **Model Choice**: ALWAYS use `opencode/minimax-m2.5-free` for all tasks (development, review, debugging) unless instructed otherwise.
 - **Minimal Changes**: Keep changes to existing files absolutely minimal! This is a private extension to an open-source project, and compatibility with the upstream branch is paramount.
 - **Dependency Management & Testing**:
   - ALWAYS use the `python-environment` skill for dependency management and environment setup.
