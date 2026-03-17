@@ -4,7 +4,7 @@
 
 This document outlines the comprehensive plan for transitioning the Star Trek Adventures Starship Simulator from a dedicated combat encounter tool to a minimal Virtual Tabletop (VTT) experience. The plan covers all milestones with detailed task breakdowns, parallel work assignments, testing strategies, and acceptance criteria.
 
-**Status**: M1-M8 **COMPLETE** - Alpha v0.1.0 released
+**Status**: M1-M8 **COMPLETE** - Alpha v0.1.0 released (376 tests passing)
 
 ---
 

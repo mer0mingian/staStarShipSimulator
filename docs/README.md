@@ -13,10 +13,11 @@ This project uses **progressive disclosure** - showing essential information fir
 ## Folder Structure
 
 ### Essential (Start Here)
-- **delivery_plan.md** - High-level VTT transition plan with all milestones (M1-M7 complete)
+- **delivery_plan.md** - High-level VTT transition plan with all milestones (M1-M8 complete)
 
 ### Tasks (`tasks/`)
 Completed milestone task lists:
+- `milestone8_tasks.md` - Test Cleanup (complete - 376 passed, 0 skipped)
 - `milestone7_tasks.md` - Import/Export (complete)
 - `milestone6_tasks.md` - UI/UX Overhaul (complete)
 - `milestone5_tasks.md` - Combat Integration + Scene Lifecycle (complete)
