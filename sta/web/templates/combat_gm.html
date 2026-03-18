@@ -834,6 +834,63 @@
             text-transform: uppercase;
             margin-bottom: 4px;
         }
+
+        /* M9 Theme Support - GM View */
+        :root {
+            --theme-gm-bg: #FFFFFF;
+            --theme-gm-panel-bg: #F5F5F5;
+            --theme-gm-border: #CCCCCC;
+            --theme-gm-input-bg: #FFFFFF;
+            --theme-gm-card-bg: #FFFFFF;
+        }
+
+        html.theme-dark {
+            --theme-gm-bg: #0A0A0A;
+            --theme-gm-panel-bg: #1A1A1A;
+            --theme-gm-border: #333333;
+            --theme-gm-input-bg: #222222;
+            --theme-gm-card-bg: #1A1A1A;
+        }
+
+        body {
+            background-color: var(--theme-gm-bg);
+        }
+
+        .gm-wrapper {
+            background: var(--theme-gm-bg);
+        }
+
+        /* Theme-aware panels */
+        .ship-panel,
+        .npc-controls,
+        .override-section,
+        .combat-log-panel,
+        .map-panel,
+        .resource-box {
+            background: var(--theme-gm-panel-bg);
+        }
+
+        /* Theme-aware inputs */
+        .gm-select,
+        .gm-select option,
+        .modal-content input,
+        .modal-content select {
+            background: var(--theme-gm-input-bg);
+        }
+
+        /* Theme-aware cards and containers */
+        .player-status-card,
+        .action-list li,
+        .turn-count,
+        .extended-task-item,
+        #combat-log-container {
+            background: var(--theme-gm-card-bg);
+        }
+
+        /* Theme-aware modal content */
+        .modal-content {
+            background: var(--theme-gm-panel-bg);
+        }
     </style>
 </head>
 <body>

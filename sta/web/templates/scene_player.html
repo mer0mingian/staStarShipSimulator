@@ -44,14 +44,14 @@
     <div style="margin-top: 20px;">
         <h3 style="color: var(--lcars-ice);">Extended Tasks</h3>
         {% for task in scene.challenges %}
-        <div style="background: #1a1a1a; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 4px solid var(--lcars-ice);">
+        <div style="background: var(--theme-panel-bg); border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 4px solid var(--lcars-ice);">
             <div style="color: var(--lcars-ice); margin-bottom: 6px;">{{ task.name }}</div>
             <div style="display: flex; gap: 4px;">
                 {% for i in range(task.progress | default(0)) %}
                 <span style="width: 16px; height: 16px; background: var(--lcars-ice); border-radius: 3px;"></span>
                 {% endfor %}
                 {% for i in range((task.resistance | default(5)) - (task.progress | default(0))) %}
-                <span style="width: 16px; height: 16px; background: #333; border-radius: 3px;"></span>
+                <span style="width: 16px; height: 16px; background: var(--theme-border-color); border-radius: 3px;"></span>
                 {% endfor %}
             </div>
             <div style="color: var(--lcars-tan); font-size: 0.85em; margin-top: 4px;">

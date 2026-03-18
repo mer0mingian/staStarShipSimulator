@@ -311,11 +311,21 @@
         :root {
             --theme-bg-body: #FFFFFF;
             --theme-text-main: #1a1a1a;
+            --theme-panel-bg: #F5F5F5;
+            --theme-border-color: #CCCCCC;
+            --theme-sidebar-bg: #EEEEEE;
+            --theme-input-bg: #FFFFFF;
+            --theme-input-border: #CCCCCC;
         }
 
         html.theme-dark {
             --theme-bg-body: #0A0A0A;
             --theme-text-main: #FFFFFF;
+            --theme-panel-bg: #1A1A1A;
+            --theme-border-color: #333333;
+            --theme-sidebar-bg: #111111;
+            --theme-input-bg: #222222;
+            --theme-input-border: #444444;
         }
 
         body {
@@ -323,9 +333,55 @@
             color: var(--theme-text-main) !important;
         }
 
-        .panel {
+        /* Theme-aware panel styles */
+        .panel,
+        .lcars-panel,
+        .lcars-panel-header {
             background: var(--theme-panel-bg) !important;
             border-color: var(--theme-border-color) !important;
+        }
+
+        /* Theme-aware input styles */
+        input[type="text"],
+        input[type="number"],
+        input[type="email"],
+        input[type="password"],
+        input[type="search"],
+        textarea,
+        select,
+        .lcars-input,
+        .lcars-select {
+            background: var(--theme-input-bg) !important;
+            border-color: var(--theme-input-border) !important;
+        }
+
+        /* Theme-aware grid backgrounds */
+        .grid,
+        .lcars-grid,
+        .lcars-grid-2,
+        .lcars-grid-3 {
+            background: var(--theme-bg-body);
+        }
+
+        /* Theme-aware content wrapper */
+        .lcars-content-wrapper {
+            background: var(--theme-bg-body) !important;
+        }
+
+        /* Theme-aware action list items */
+        .action-list li,
+        .lcars-action-item {
+            background: var(--theme-panel-bg) !important;
+        }
+
+        .action-list li:hover,
+        .lcars-action-item:hover {
+            background: var(--theme-border-color) !important;
+        }
+
+        /* Theme-aware modal overlays */
+        .modal-content {
+            background: var(--theme-panel-bg) !important;
         }
     </style>
     {% block extra_styles %}{% endblock %}
