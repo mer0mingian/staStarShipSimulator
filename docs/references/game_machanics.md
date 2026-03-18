@@ -34,6 +34,35 @@ Each bridge position has specific minor and major actions available:
 - **Engineering**: Damage Control, Boost Power
 - **Science**: Scan, Analysis, Modulate Shields
 
+## Campaign Resource Pools (Ch 4, 9)
+
+### Momentum Pool
+- **Scope**: Campaign-wide pool, max 6
+- **Gain Sources**: Successful tasks (1-3 per Ch 4), Extended Task breakthroughs, GM awards
+- **Spend Uses**: Re-rolls, effect boosts, Keep Initiative (2), trigger complications, extra actions
+- **Reset**: Typically resets between sessions or scenes
+
+### Threat Pool
+- **Scope**: Campaign-wide pool, max 24 (typical)
+- **Gain Sources**: Failed tasks, complications, GM awards, NPC actions, player Momentum-to-Threat trades
+- **Spend Uses**: GM introduces hazards, complications, reinforcements, NPC advantages, adversarial momentum
+- **Note**: Unlike Momentum, Threat does NOT reset between sessions
+
+### Implementation
+- `ThreatManager` class: `sta/mechanics/threat_manager.py`
+- `MomentumManager` class: `sta/mechanics/momentum_manager.py`
+- Stored in `CampaignRecord` as `threat` and `momentum` columns
+
+### NPC Stress/Threat Distinction (Ch 11)
+
+- **NPCs do NOT have Stress tracks** - they cannot take Stress damage or Avoid Injury via Stress
+- **NPCs use Threat instead of Determination** - values that would grant Determination add 3 to Personal Threat instead
+- **Notable NPCs**: Avoid Injury by spending Threat (once per scene, severity = Threat cost)
+- **Major NPCs**: Avoid Injury by spending Threat (unlimited per scene)
+- **NPC Ship actions**: Based on Crew Quality rating (e.g., 10 for Talented), not department attributes
+
+See `docs/sta2e_rules/sta2ecore_ch11.md` (lines 137-150) for full NPC injury rules.
+
 ## Technical Architecture
 
 ### Stack (TBD - to be decided during implementation)
