@@ -706,6 +706,51 @@
                 opacity: 1;
             }
         }
+
+        /* M9 Theme Support - Viewscreen */
+        :root {
+            --theme-vs-bg: #FFFFFF;
+            --theme-vs-panel-bg: #F5F5F5;
+            --theme-vs-border: #CCCCCC;
+            --theme-vs-card-bg: #FFFFFF;
+            --theme-vs-text: #1A1A1A;
+        }
+
+        html.theme-dark {
+            --theme-vs-bg: #0A0A0A;
+            --theme-vs-panel-bg: #1A1A1A;
+            --theme-vs-border: #333333;
+            --theme-vs-card-bg: #111111;
+            --theme-vs-text: #FFFFFF;
+        }
+
+        body {
+            background-color: var(--theme-vs-bg);
+            color: var(--theme-vs-text);
+        }
+
+        .viewscreen-wrapper {
+            background: var(--theme-vs-bg);
+        }
+
+        /* Theme-aware panels */
+        .status-panel,
+        .map-panel {
+            background: var(--theme-vs-panel-bg);
+        }
+
+        /* Theme-aware cards */
+        .enemy-ship-card,
+        .lcars-data-fill {
+            background: var(--theme-vs-card-bg);
+        }
+
+        /* Theme-aware text elements */
+        .ship-name,
+        .ship-class,
+        .system-name {
+            color: var(--theme-vs-text);
+        }
     </style>
 </head>
 <body>
