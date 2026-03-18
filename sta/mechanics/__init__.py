@@ -8,6 +8,7 @@ from .dice import (
     assisted_task_roll,
 )
 from .threat_manager import ThreatManager, ThreatSpendReason
+from .momentum_manager import MomentumManager, MomentumSpendReason
 
 __all__ = [
     "roll_d20",
@@ -17,4 +18,6 @@ __all__ = [
     "assisted_task_roll",
     "ThreatManager",
     "ThreatSpendReason",
+    "MomentumManager",
+    "MomentumSpendReason",
 ]
