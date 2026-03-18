@@ -34,6 +34,81 @@ Each bridge position has specific minor and major actions available:
 - **Engineering**: Damage Control, Boost Power
 - **Science**: Scan, Analysis, Modulate Shields
 
+## Campaign Resource Pools (Ch 4, 9)
+
+### Momentum Pool
+- **Scope**: Campaign-wide pool, max 6
+- **Gain Sources**: Successful tasks (1-3 per Ch 4), Extended Task breakthroughs, GM awards
+- **Spend Uses**: Re-rolls, effect boosts, Keep Initiative (2), trigger complications, extra actions
+- **Reset**: Typically resets between sessions or scenes
+
+### Threat Pool
+- **Scope**: Campaign-wide pool, max 24 (typical)
+- **Gain Sources**: Failed tasks, complications, GM awards, NPC actions, player Momentum-to-Threat trades
+- **Spend Uses**: GM introduces hazards, complications, reinforcements, NPC advantages, adversarial momentum
+- **Note**: Unlike Momentum, Threat does NOT reset between sessions
+
+### Implementation
+- `ThreatManager` class: `sta/mechanics/threat_manager.py`
+- `MomentumManager` class: `sta/mechanics/momentum_manager.py`
+- Stored in `CampaignRecord` as `threat` and `momentum` columns
+
+### NPC Stress/Threat Distinction (Ch 11)
+
+- **NPCs do NOT have Stress tracks** - they cannot take Stress damage or Avoid Injury via Stress
+- **NPCs use Threat instead of Determination** - values that would grant Determination add 3 to Personal Threat instead
+- **Supporting Characters**: No values → no Stress. One value → max Stress = Fitness ÷ 2 (round up). Two or more values → max Stress = Fitness (like main PCs)
+- **Notable NPCs**: Avoid Injury by spending Threat equal to severity (once per scene). Personal Threat pool: typically 3.
+- **Major NPCs**: Avoid Injury by spending Threat equal to severity (unlimited per scene). Personal Threat pool: 6 + 1 per Value.
+- **Minor NPCs**: Instantly defeated on any Injury. Cannot Avoid Injury. No Personal Threat.
+- **NPC Ship actions**: Based on Crew Quality rating (e.g., 10 for Talented), not department attributes — unless a specific NPC is assigned to the station.
+- **Personal Threat**: Separate from GM campaign Threat. Refreshes at start of each scene. NPCs may spend from either pool in any combination.
+
+See `docs/sta2e_rules/sta2ecore_ch11.md` (lines 137-151, 73-88) for full NPC injury and Personal Threat rules.
+
+## Ship Stress, Shields, and Breaches (Ch 5, 8)
+
+### Shields Track
+- **Formula**: Max Shields = Structure + Scale + Security (Ch05 line 629; Ch08 line 1029)
+- Shields function as a depletion track — reduce by damage amount
+- **Shield Breakthrough points** (Ch08 lines 1111-1172):
+  - 50% threshold: Ship becomes *Shaken* (choose minor damage result)
+  - 25% threshold: Ship becomes *Shaken* again; if already Shaken, suffers a Breach instead
+  - 0% (shields down): Ship suffers a Breach immediately
+- Shields reset to maximum at the start of each new scene (Ch08 line 1111)
+
+### Resistance
+- **Formula**: Resistance = ceil(Scale ÷ 2) + Structure bonus (Ch05 lines 565-570)
+  - Structure 6 or lower: +0
+  - Structure 7-8: +1
+  - Structure 9-10: +2
+  - Structure 11-12: +3
+  - Structure 13+: +4
+- Resistance reduces incoming damage by 1 per point (minimum damage 1)
+
+### Breaches
+- A ship is **destroyed** when it has accumulated more breaches than its Scale (total), **OR** more breaches to a single system than half its Scale (round down) — whichever limit is reached first (Ch08 lines 1160-1172)
+- **Shaken** is a Ship Trait triggered by minor damage (Ch08 line 1114); the captain picks one: Brace for Impact, Losing Power, or Casualties/Minor Damage
+
+### Task vs. Action Distinction
+- **Tasks** (Ch07): Any dice-roll where the outcome is uncertain. Includes Challenge component tasks, combat attacks, skill checks, and Extended Task rolls.
+- **Actions** (Ch08.4): Bridge-position-specific operations during Starship Combat only. Actions are executed by characters at ship stations (Command, Helm, Tactical, Operations, Science, Communications).
+
+## Initiative and Momentum Spends (Ch 7, 8)
+
+### Keep the Initiative (Ch 07, 08)
+- **Cost**: 2 Momentum (Immediate) — same cost in Personal, Social, and Starship conflict
+- **Effect**: Pass the next turn to an ally on your own side instead of the opposition
+- **Restriction**: After someone Keeps the Initiative, no one on that side may do so again until the opposition has taken at least one turn
+- **NPC version**: Spend 2 Threat to Keep the Initiative (pass turn to an allied NPC)
+
+### Threat Spend for Reinforcements (Ch 09)
+- **Starship reinforcements**: Spend Threat equal to the new ship's Scale
+- **Minor NPC reinforcements**: 1 Threat each
+- **Notable NPC reinforcements**: 2 Threat each
+
+See Ch07 (lines 266-267, 389), Ch08.4 (line 506), Ch09 (lines 709-715).
+
 ## Technical Architecture
 
 ### Stack (TBD - to be decided during implementation)
