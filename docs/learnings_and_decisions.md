@@ -1,5 +1,52 @@
 # Learnings and Decisions
 
+## M8.2: Rules Validation & Talent System Design (March 2026)
+
+### Validation Summary
+
+All user responses in `docs/m8.2-open-questions.md` were validated against the 2e Core Rulebook:
+
+1. **Ship Shields/Resistance/Breaches** (Ch05, Ch08): ✅ VALIDATED
+   - Shields formula: Structure + Scale + Security
+   - Resistance formula: ceil(Scale/2) + Structure bonus
+   - Ship destroyed: more breaches than Scale (total) OR more breaches to one system than half Scale
+   - "Shaken" is a Ship Trait (minor damage result), not a Stress-like track
+
+2. **Keep the Initiative** (Ch07, Ch08): ✅ VALIDATED
+   - Cost: 2 Momentum (Immediate) across ALL conflict types (Personal, Social, Starship)
+   - NPCs use 2 Threat instead of Momentum
+   - Same cost applies in Starship Combat (Ch08.4 line 506)
+
+3. **NPC Stress/Threat** (Ch08.1, Ch11.1): ✅ VALIDATED
+   - Minor NPCs: no Stress, instant defeat, no Personal Threat
+   - Notable NPCs: no Stress, Avoid Injury once/scene (cost = severity), 3 Personal Threat
+   - Major NPCs: no Stress, Avoid Injury unlimited (cost = severity), 6 + 1/Value Personal Threat
+   - Supporting Characters: 0 values → no Stress; 1 value → Fitness÷2 Stress; 2+ values → Fitness Stress
+
+4. **Reinforcement Cost** (Ch09.1): ✅ VALIDATED — 1 Threat per Scale unit for starships
+
+5. **Task vs. Action** (Ch07, Ch08.4): ✅ VALIDATED — Tasks = all dice-rolls; Actions = bridge-station-specific during Starship Combat
+
+6. **NPC Trait Suppression** (Ch11.1): **CONTRADICTION FOUND** — Rulebook says suppress Stress/Determination rules for ALL NPCs. User prefers to show but flag for GM review. Design decision: follow user's preference (notify GM, allow override).
+
+### Talent System Design Created
+
+New design document: `docs/references/talent_system_design.md`
+
+Key decisions:
+- **Unified Talent model** for all rule-bearing entities (Talent, SpecialRule, SpeciesAbility, RoleBenefit)
+- **Stress modifiers stored on Talent, final value on Character** — enables GM override
+- **GM notification** for Stress-modifying abilities (even though rules suppress for NPCs)
+- **Personal Threat** = NPC-specific pool separate from campaign GM Threat; refreshes each scene
+- **Crew Quality fallback** for NPC ships: use Crew Quality unless NPC assigned to station
+- **NPC ship limitation**: max one task per system per round; extra tasks cost 1 Threat each
+- **Phase 1**: string-based conditions; **Phase 2**: structured predicate language (designed for future migration)
+
+### Documentation Updates
+
+- `docs/references/game_machanics.md`: Added Ship Shields/Resistance/Breaches rules, Initiative rules, Threat reinforcement costs, Task vs. Action distinction, expanded NPC Stress/Threat rules
+- `docs/references/objects.md`: Expanded Talent model with conditions, game_mechanic_reference, Stress Modifier; added SpecialRule, RoleBenefit, SpeciesAbility models; updated Ships with Crew Quality table and Resistance/Shields formulas; updated NPCs with category-specific rules
+
 ## Milestone 5: 4-State Scene Lifecycle Implementation (March 2026)
 
 ### Changes Made

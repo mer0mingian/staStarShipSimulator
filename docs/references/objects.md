@@ -25,7 +25,11 @@
 25: Have all the generic Char Properties.
 26: - NPC Category [Major|Notable|Minor]
 27: - Personal Threat Pool [0-24] (Note: This is the active pool; Line 22 is the maximum capacity)
-28: - Location String
+28:   - Minor NPC: 0 Personal Threat; instantly defeated on any Injury; no Stress track
+29:   - Notable NPC: 3 Personal Threat; Avoid Injury once per scene (cost = severity); no Stress track
+30:   - Major NPC: 6 + 1 per Value Personal Threat; Avoid Injury unlimited per scene (cost = severity); no Stress track
+31:   - Supporting Characters: 0 Values → no Stress; 1 Value → max Stress = Fitness ÷ 2 (round up); 2+ Values → max Stress = Fitness
+32: - Location String
 29: - NPC Background (all optional, some with drop-downs)
 30:   - Archetype
 31:   - Upbringing
@@ -66,23 +70,56 @@
 66: 
 67: ## Talent
 68: - Player Selectable: Boolean
-69: - Category: [Talent, Special Rule, Species Ability]
-70: - List of Conditions: (Logic for when the talent is active)
+69: - Category: [Talent, Special Rule, Species Ability, Role Benefit]
+70: - List of Conditions: (Logic for when the talent is active — see `docs/references/talent_system_design.md`)
 71: - Description Text
-72: - Game Mechanic: (Reference to automated logic/handler)
-73: 
-74: ## Ships
+72: - Game Mechanic Reference: Handler ID string (Phase 1) or structured predicate (Phase 2 — see `docs/references/talent_system_design.md`)
+73: - Applicable To: [Character, Ship, NPC]
+74: - Source: String (e.g., species name, role name)
+75: - Mechanically Applies: Boolean (False = GM discretion / flagged for review)
+76: - Stress Modifier: Integer | None (for Species Abilities that modify max Stress)
+77: 
+78: ### Special Rules for NPCs (Ch 11)
+79: Special Rules are the same data model as Talent, category = "SpecialRule".
+80: Additional field:
+81: - Particular Task: String describing the limiting condition (e.g., "Security tasks", "when repairing systems")
+82: See `docs/references/talent_system_design.md` Section 4 for implementation details.
+83: 
+84: ### Role Benefits (Ch 4)
+85: Same data model as Talent, category = "RoleBenefit". Auto-granted based on character role selection.
+86: 
+87: ### Species Abilities (Ch 4)
+88: Same data model as Talent, category = "SpeciesAbility". Auto-granted based on species selection.
+89: - Species abilities that modify Stress: stored with `stress_modifier` field; flagged for GM review on character creation
+90: - GM can override the stress modifier value per-character
+91: 
+92: ### NPC Special Rule Examples (Ch 11)
+93: | Rule | Effect | Handler ID |
+94: |------|--------|------------|
+95: | PROFICIENCY | First bonus d20 free on particular task | `free_first_d20` |
+96: | FAMILIARITY | Reduce Difficulty by 2 (min 0) on particular task | `reduce_difficulty:2` |
+97: | GUIDANCE | When assisting, re-roll d20 | `assist_reroll` |
+98: | ADDITIONAL THREAT SPENT | Spend 1 Threat for specific benefit | `threat_spend_bonus` |
+99: | SUBSTITUTION | Use different department on particular task | `department_swap` |
+100: | THREATENING | When buying d20s with Threat, re-roll 1 d20 | `threat_buy_reroll` |
+101: 
+102: See `docs/references/talent_system_design.md` Section 4.2 for full table.
+103: 
+104: ## Ships
 75: Represent both Player and NPC vessels.
 76: - Name String
 77: - Ship Class / Frame
 78: - --> "Mission Profile"
 79: - Scale [1-7]
-80: - Resistance
+80: - Resistance (formula: ceil(Scale/2) + Structure bonus; see game_machanics.md)
 81: - Systems (Comms, Computers, Engines, Sensors, Structure, Weapons)
 82: - Departments (Command, Conn, Engineering, Medicine, Security)
 83: - Power (Current/Max) --> Replace with "Reserve Power"
-84: - Shields (Current/Max)
-85: - Crew Quality [2-5] --> Only for NPC ships
+84: - Shields (Current/Max; formula: Structure + Scale + Security)
+85: - Crew Quality [Basic|Proficient|Talented|Exceptional] --> Only for NPC ships
+    - Basic: Attr 8 Dept 1 | Proficient: Attr 9 Dept 2 | Talented: Attr 10 Dept 3 | Exceptional: Attr 11 Dept 4
+    - Use Crew Quality for NPC ship actions unless an NPC is explicitly assigned to a station (use NPC stats)
+    - NPC ships: max one task per system per round; extra tasks cost 1 Threat each
 86: - Traits (List of Traits, category: Equipment/Location)
 87: - Talents (List of Ship Talents)
 88: - Weapons (List of Weapon Objects)
