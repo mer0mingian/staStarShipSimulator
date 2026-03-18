@@ -471,6 +471,11 @@ class CampaignPlayerRecord(Base):
         String(20), nullable=True, default=None
     )
 
+    # User preference: theme ('light' or 'dark')
+    theme_preference: Mapped[Optional[str]] = mapped_column(
+        String(10), nullable=True, default=None
+    )
+
     is_gm: Mapped[bool] = mapped_column(default=False)
     is_active: Mapped[bool] = mapped_column(default=True)
 
