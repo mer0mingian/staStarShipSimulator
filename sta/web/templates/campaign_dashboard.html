@@ -36,19 +36,19 @@
 <div class="panel" style="border-color: var(--lcars-green); margin-bottom: 15px;">
     <h2>Campaign Stats</h2>
     <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-        <div style="text-align: center; padding: 10px 20px; background: #222; border-radius: 8px;">
+        <div style="text-align: center; padding: 10px 20px; background: var(--theme-panel-bg); border-radius: 8px;">
             <div style="font-size: 1.5em; color: var(--lcars-purple);">{{ players|length }}</div>
             <div style="font-size: 0.85em; color: var(--lcars-tan);">Crew Members</div>
         </div>
-        <div style="text-align: center; padding: 10px 20px; background: #222; border-radius: 8px;">
+        <div style="text-align: center; padding: 10px 20px; background: var(--theme-panel-bg); border-radius: 8px;">
             <div style="font-size: 1.5em; color: var(--lcars-blue);">{{ ships|length }}</div>
             <div style="font-size: 0.85em; color: var(--lcars-tan);">Ships</div>
         </div>
-        <div style="text-align: center; padding: 10px 20px; background: #222; border-radius: 8px;">
+        <div style="text-align: center; padding: 10px 20px; background: var(--theme-panel-bg); border-radius: 8px;">
             <div style="font-size: 1.5em; color: var(--lcars-butterscotch);">{{ draft_scenes|length + completed_scenes|length }}</div>
             <div style="font-size: 0.85em; color: var(--lcars-tan);">Total Scenes</div>
         </div>
-        <div style="text-align: center; padding: 10px 20px; background: #222; border-radius: 8px;">
+        <div style="text-align: center; padding: 10px 20px; background: var(--theme-panel-bg); border-radius: 8px;">
             <div style="font-size: 1.5em; color: var(--lcars-orange);">{{ draft_encounters|length + completed_encounters|length }}</div>
             <div style="font-size: 0.85em; color: var(--lcars-tan);">Encounters</div>
         </div>
@@ -217,7 +217,7 @@
         {% if players %}
             <div class="crew-list">
                 {% for player in players if not player.is_gm %}
-                    <div class="crew-member" style="background: #222; border-radius: 5px; padding: 10px; margin-bottom: 10px;">
+                    <div class="crew-member" style="background: var(--theme-panel-bg); border-radius: 5px; padding: 10px; margin-bottom: 10px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <div>
                                 <strong style="font-size: 1.1em;">{{ player.player_name }}</strong>
@@ -250,53 +250,53 @@
                         </div>
                         {% if player.character %}
                             <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; font-size: 0.75em;">
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-orange);">CTL</div>
                                     <div>{{ player.character.attributes.control }}</div>
                                 </div>
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-orange);">DAR</div>
                                     <div>{{ player.character.attributes.daring }}</div>
                                 </div>
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-orange);">FIT</div>
                                     <div>{{ player.character.attributes.fitness }}</div>
                                 </div>
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-orange);">INS</div>
                                     <div>{{ player.character.attributes.insight }}</div>
                                 </div>
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-orange);">PRE</div>
                                     <div>{{ player.character.attributes.presence }}</div>
                                 </div>
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-orange);">REA</div>
                                     <div>{{ player.character.attributes.reason }}</div>
                                 </div>
                             </div>
                             <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; font-size: 0.75em; margin-top: 5px;">
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-blue);">CMD</div>
                                     <div>{{ player.character.disciplines.command }}</div>
                                 </div>
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-blue);">CON</div>
                                     <div>{{ player.character.disciplines.conn }}</div>
                                 </div>
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-blue);">ENG</div>
                                     <div>{{ player.character.disciplines.engineering }}</div>
                                 </div>
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-blue);">MED</div>
                                     <div>{{ player.character.disciplines.medicine }}</div>
                                 </div>
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-blue);">SCI</div>
                                     <div>{{ player.character.disciplines.science }}</div>
                                 </div>
-                                <div style="text-align: center; background: #333; padding: 3px; border-radius: 3px;">
+                                <div style="text-align: center; background: var(--theme-border-color); padding: 3px; border-radius: 3px;">
                                     <div style="color: var(--lcars-blue);">SEC</div>
                                     <div>{{ player.character.disciplines.security }}</div>
                                 </div>
