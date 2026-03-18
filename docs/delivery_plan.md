@@ -13,14 +13,28 @@
 13: ### Overview
 14: Analyze core rulebook chapters (Ch 4, 5, 6, 7, 8, 9, 11) against VTT mechanics reference. Agent reports are synthesized into the **Acceptance Criteria** section below and the new file `docs/m8.2-open-questions.md`.
 15: 
-16: ### Status: 📊 IN PROGRESS (Rules Analysis)
+16: ### Status: 📊 IN PROGRESS (Implementation Complete, Cleanup in Progress)
 17: 
 18: ### Findings Synthesis
 19: - **Key Conflict**: The generic Stress mechanic from Ch 8/11 conflicts with NPC rules (Ch 11) and is missing from the core mechanics reference (`game_mechanics_full.md`).
 20: - **Key Extension**: Threat Spends (Ch 9) must be added to `game_mechanics_full.md` for Starship Combat.
 21: 
-22: ## Milestone 9: Web UI & Theme Support (Future)
-23: 
+### Implementation Completed
+- [x] `ThreatManager` class (`sta/mechanics/threat_manager.py`) - 9 unit tests
+- [x] `MomentumManager` class (`sta/mechanics/momentum_manager.py`) - 11 unit tests
+- [x] Game mechanics documentation extended (`docs/references/game_mechanics.md`)
+- [x] Campaign Resource Pools section documenting Momentum/Threat per Ch 4/9
+
+### Cleanup Log (2026-03-18)
+The following files were removed but can be restored from git history if needed:
+- `CLAUDE.md`, `build_mac.sh`, `star_mac_logo.png`, `dev.sh` - Legacy/project files
+- `requirements.txt` / `requirements-dev.txt` - pyproject.toml handles deps
+- `SKILLS_SIMPLIFICATION_REPORT.md` - Report file
+- `migrate*.py` / `scripts/migrate*.py` - One-off migration scripts (5 files)
+
+To restore: `git checkout <commit> -- <filepath>`
+
+## Milestone 9: Web UI & Theme Support (Future)
 24: ## Table of Contents
 25: 
 26: - [Project Overview](#project-overview)
