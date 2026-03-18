@@ -307,6 +307,26 @@
                 display: none !important;
             }
         }
+        /* M9 Theme Support Variables */
+        :root {
+            --theme-bg-body: #FFFFFF;
+            --theme-text-main: #1a1a1a;
+        }
+
+        html.theme-dark {
+            --theme-bg-body: #0A0A0A;
+            --theme-text-main: #FFFFFF;
+        }
+
+        body {
+            background-color: var(--theme-bg-body) !important;
+            color: var(--theme-text-main) !important;
+        }
+
+        .panel {
+            background: var(--theme-panel-bg) !important;
+            border-color: var(--theme-border-color) !important;
+        }
     </style>
     {% block extra_styles %}{% endblock %}
 </head>
@@ -342,6 +362,7 @@
                             <span>21</span>
                             <span>88</span>
                             <span>03</span>
+                            <button id="theme-toggle" class="btn btn-small" style="margin-left: 10px; min-width: 55px; background: var(--lcars-butterscotch); color: var(--lcars-text-dark);">Theme</button>
                             <span>66</span>
                         </div>
                     </div>
