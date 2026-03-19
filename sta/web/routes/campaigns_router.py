@@ -20,9 +20,12 @@ from fastapi import (
     Cookie,
     Body,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.templating import Jinja2Templates
 
 from werkzeug.security import generate_password_hash, check_password_hash
+
+templates = Jinja2Templates(directory="sta/web/templates")
 
 from sta.database.async_db import get_db
 from sta.database.schema import (
@@ -1208,8 +1211,9 @@ async def convert_scene_type(
 # =============================================================================
 
 
-@campaigns_router.get("/{campaign_id}/join")
+@campaigns_router.get("/{campaign_id}/join", response_class=HTMLResponse)
 async def campaign_join_page(
+    request: Request,
     campaign_id: str,
     db: AsyncSession = Depends(get_db),
 ):
@@ -1226,16 +1230,59 @@ async def campaign_join_page(
         CampaignPlayerRecord.is_gm == False,
     )
     players_result = await db.execute(players_stmt)
-    players = players_result.scalars().all()
+    all_players = players_result.scalars().all()
 
-    html = "<html><body><h1>Join Campaign</h1><ul>"
-    for player in players:
+    available_players = []
+    for player in all_players:
         if player.session_token and not player.session_token.startswith("unclaimed_"):
             continue
-        html += f'<li><a href="/campaigns/{campaign_id}/claim/{player.id}">{player.player_name}</a></li>'
-    html += "</ul></body></html>"
+        player_data = {
+            "id": player.id,
+            "player_name": player.player_name,
+            "character": None,
+        }
+        if player.vtt_character_id:
+            char_stmt = select(VTTCharacterRecord).filter(
+                VTTCharacterRecord.id == player.vtt_character_id
+            )
+            char_result = await db.execute(char_stmt)
+            char = char_result.scalars().first()
+            if char:
+                player_data["character"] = {
+                    "name": char.name,
+                    "rank": getattr(char, "rank", None),
+                    "species": getattr(char, "species", None),
+                    "attributes": {
+                        "control": getattr(char, "control", 7),
+                        "daring": getattr(char, "daring", 7),
+                        "fitness": getattr(char, "fitness", 7),
+                        "insight": getattr(char, "insight", 7),
+                        "presence": getattr(char, "presence", 7),
+                        "reason": getattr(char, "reason", 7),
+                    },
+                    "disciplines": {
+                        "command": getattr(char, "command", 1),
+                        "conn": getattr(char, "conn", 1),
+                        "engineering": getattr(char, "engineering", 1),
+                        "medicine": getattr(char, "medicine", 1),
+                        "science": getattr(char, "science", 1),
+                        "security": getattr(char, "security", 1),
+                    },
+                }
+        available_players.append(player_data)
 
-    return {"content": html, "content_type": "text/html"}
+    return templates.TemplateResponse(
+        request,
+        "campaign_join.html",
+        {
+            "campaign": {
+                "name": campaign.name,
+                "description": getattr(campaign, "description", None),
+                "campaign_id": campaign.campaign_id,
+            },
+            "players": available_players,
+        },
+    )
 
 
 @campaigns_router.post("/{campaign_id}/join")

@@ -86,6 +86,9 @@ async def list_characters(
     if char_type:
         query = query.filter(VTTCharacterRecord.character_type == char_type)
 
+    # Exclude Q from character listings (Q is the Game Master)
+    query = query.filter(VTTCharacterRecord.name != "Q")
+
     result = await db.execute(query)
     characters = result.scalars().all()
     return [_serialize_character(c) for c in characters]
