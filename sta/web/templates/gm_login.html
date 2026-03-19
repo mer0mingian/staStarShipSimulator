@@ -5,7 +5,7 @@
 {% block header %}Game Master Access{% endblock %}
 
 {% block sidebar_nav %}
-<a href="{{ url_for('campaigns.campaign_list') }}" class="lcars-sidebar-btn color-6">Back</a>
+<a href="/campaigns" class="lcars-sidebar-btn color-6">Back</a>
 {% endblock %}
 
 {% block content %}
@@ -29,7 +29,7 @@
         </div>
         {% endif %}
 
-        <form method="POST" action="{{ url_for('campaigns.gm_login', campaign_id=campaign.campaign_id) }}">
+        <form method="POST" action="/gm/{{ campaign.campaign_id }}/login">
             <div class="mb-3">
                 <label class="lcars-label" for="password">GM Password</label>
                 <input type="password" id="password" name="password" class="lcars-input" required
@@ -37,7 +37,7 @@
             </div>
 
             <div style="display: flex; gap: 15px; justify-content: flex-end; margin-top: 20px;">
-                <a href="{{ url_for('campaigns.join_campaign', campaign_id=campaign.campaign_id) }}"
+                <a href="/campaigns/{{ campaign.campaign_id }}/join"
                    class="lcars-btn btn-sm" style="background: var(--lcars-gray);">
                     Join as Player
                 </a>

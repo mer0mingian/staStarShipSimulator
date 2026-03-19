@@ -11,7 +11,7 @@
             <span style="color: var(--lcars-tan);">Campaign:</span>
             <strong style="color: var(--lcars-purple);">{{ campaign.name }}</strong>
         </div>
-        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+        <a href="/campaigns/{{ campaign.campaign_id }}"
            class="btn btn-small" style="background: #666;">
             Back to Campaign
         </a>
@@ -204,7 +204,7 @@
     <button type="submit" class="btn" {% if not campaign.active_ship_id %}disabled style="opacity: 0.5;"{% endif %}>
         Create Encounter
     </button>
-    <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}" class="btn" style="background: #666;">
+    <a href="/campaigns/{{ campaign.campaign_id }}" class="btn" style="background: #666;">
         Cancel
     </a>
 </form>
@@ -218,7 +218,7 @@
 }
 </style>
 
-<script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+<script src="/static/js/hex-map.js"></script>
 <script>
 // Map state
 let tacticalMapData = { radius: 3, tiles: [] };

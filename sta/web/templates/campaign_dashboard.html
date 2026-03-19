@@ -25,7 +25,7 @@
                 {{ current_player.player_name }}
             </span>
         {% else %}
-            <a href="{{ url_for('campaigns.join_campaign', campaign_id=campaign.campaign_id) }}" class="btn btn-small">
+            <a href="/campaigns/{{ campaign.campaign_id }}/join" class="btn btn-small">
                 Join Campaign
             </a>
         {% endif %}
@@ -75,11 +75,11 @@
             </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 {% if is_gm %}
-                <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='gm') }}"
+                <a href="/encounters/{{ active_encounter.encounter_id }}?role=gm"
                    class="btn btn-small" style="background: var(--lcars-purple);">
                     Open GM View
                 </a>
-                <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='viewscreen') }}"
+                <a href="/encounters/{{ active_encounter.encounter_id }}?role=viewscreen"
                    class="btn btn-small" style="background: var(--lcars-blue);">
                     Open Viewscreen
                 </a>
@@ -93,7 +93,7 @@
                     Delete
                 </button>
                 {% else %}
-                <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='player') }}"
+                <a href="/encounters/{{ active_encounter.encounter_id }}?role=player"
                    class="btn btn-small">
                     Join as Player
                 </a>
@@ -123,11 +123,11 @@
             </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 {% if is_gm %}
-                <a href="{{ url_for('scenes.view_scene', scene_id=active_scene_data.id, role='gm') }}"
+                <a href="/scenes/{{ active_scene_data.id }}?role=gm"
                    class="btn btn-small" style="background: var(--lcars-purple);">
                     Open GM View
                 </a>
-                <a href="{{ url_for('scenes.view_scene', scene_id=active_scene_data.id, role='viewscreen') }}"
+                <a href="/scenes/{{ active_scene_data.id }}?role=viewscreen"
                    class="btn btn-small" style="background: var(--lcars-blue);">
                     Open Viewscreen
                 </a>
@@ -144,7 +144,7 @@
                     Delete
                 </button>
                 {% else %}
-                <a href="{{ url_for('scenes.view_scene', scene_id=active_scene_data.id, role='player') }}"
+                <a href="/scenes/{{ active_scene_data.id }}?role=player"
                    class="btn btn-small">
                     View Scene
                 </a>
@@ -519,7 +519,7 @@
 {% endif %}
 
 <div style="margin-top: 20px;">
-    <a href="{{ url_for('campaigns.gm_home') if is_gm else url_for('campaigns.player_home') }}" class="btn btn-small" style="background: #666;">
+    <a href="{{ '/gm' if is_gm else '/player/home' }}" class="btn btn-small" style="background: #666;">
         Back
     </a>
 </div>

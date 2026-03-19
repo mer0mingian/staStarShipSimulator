@@ -9,15 +9,14 @@ from sqlalchemy import (
     Text,
     DateTime,
     ForeignKey,
-    JSON,
     UniqueConstraint,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.ext.hybrid import hybrid_property
 
 from sta.models.character import Character, Attributes, Disciplines
 from sta.models.starship import Starship, Systems, Departments, Weapon, Breach
-from sta.models.combat import Encounter, ShipCombatant
-from sta.models.enums import Position, DamageType, Range, SystemType, CrewQuality
+from sta.models.enums import DamageType, Range, SystemType, CrewQuality
 
 
 class Base(DeclarativeBase):
@@ -374,6 +373,61 @@ class EncounterRecord(Base):
         DateTime, default=datetime.now, onupdate=datetime.now
     )
 
+    @hybrid_property
+    def tactical_map(self):
+        import json
+
+        try:
+            return json.loads(self.tactical_map_json) if self.tactical_map_json else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    @hybrid_property
+    def ship_positions(self):
+        import json
+
+        try:
+            return (
+                json.loads(self.ship_positions_json) if self.ship_positions_json else {}
+            )
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    @hybrid_property
+    def active_effects(self):
+        import json
+
+        try:
+            return (
+                json.loads(self.active_effects_json) if self.active_effects_json else []
+            )
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @hybrid_property
+    def enemy_ship_ids(self):
+        import json
+
+        try:
+            return (
+                json.loads(self.enemy_ship_ids_json) if self.enemy_ship_ids_json else []
+            )
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @hybrid_property
+    def players_turns_used(self):
+        import json
+
+        try:
+            return (
+                json.loads(self.players_turns_used_json)
+                if self.players_turns_used_json
+                else {}
+            )
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
 
 class CombatLogRecord(Base):
     """Database record for combat log entries."""
@@ -563,6 +617,84 @@ class SceneRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
     )
+
+    @hybrid_property
+    def scene_traits(self):
+        import json
+
+        try:
+            return json.loads(self.scene_traits_json) if self.scene_traits_json else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @hybrid_property
+    def challenges(self):
+        import json
+
+        try:
+            return json.loads(self.challenges_json) if self.challenges_json else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @hybrid_property
+    def tactical_map(self):
+        import json
+
+        try:
+            return json.loads(self.tactical_map_json) if self.tactical_map_json else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    @hybrid_property
+    def next_scenes(self):
+        import json
+
+        try:
+            return json.loads(self.next_scene_ids_json or "[]")
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @hybrid_property
+    def previous_scenes(self):
+        import json
+
+        try:
+            return json.loads(self.previous_scene_ids_json or "[]")
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @hybrid_property
+    def encounter_config(self):
+        import json
+
+        try:
+            return json.loads(self.encounter_config_json or "{}")
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    @hybrid_property
+    def characters_present(self):
+        import json
+
+        try:
+            return json.loads(self.characters_present_json or "[]")
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @hybrid_property
+    def enemy_ships(self):
+        import json
+
+        try:
+            return json.loads(self.enemy_ships_json or "[]")
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+        val = object.__getattribute__(self, "player_character_list")
+        try:
+            return json.loads(val or "[]")
+        except (json.JSONDecodeError, TypeError):
+            return []
 
 
 class SceneShipRecord(Base):

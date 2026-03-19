@@ -14,7 +14,7 @@
             <strong style="color: var(--lcars-orange);">{{ encounter.name }}</strong>
             <span class="action-type" style="margin-left: 10px;">{{ encounter.status.title() }}</span>
         </div>
-        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+        <a href="/campaigns/{{ campaign.campaign_id }}"
            class="btn btn-small" style="background: #666;">
             Back to Campaign
         </a>
@@ -196,7 +196,7 @@
 
     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
         <button type="submit" class="btn">Save Changes</button>
-        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}" class="btn" style="background: #666;">
+        <a href="/campaigns/{{ campaign.campaign_id }}" class="btn" style="background: #666;">
             Cancel
         </a>
     </div>
@@ -211,7 +211,7 @@
 }
 </style>
 
-<script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+<script src="/static/js/hex-map.js"></script>
 <script>
 // Initialize from server data
 let tacticalMapData = {{ tactical_map | tojson | safe }};

@@ -371,7 +371,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+<script src="/static/js/hex-map.js"></script>
 <script>
     const sceneId = {{ scene_id }};
     const characters = {{ characters | tojson }};

@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ encounter.name }} - Viewscreen</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/lcars.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/announcements.css') }}">
+    <link rel="stylesheet" href="/static/css/lcars.css">
+    <link rel="stylesheet" href="/static/css/announcements.css">
     <style>
         /* Viewscreen fills entire viewport - no scrolling */
         html, body {
@@ -1000,8 +1000,8 @@
     </div>
 
     <!-- Hex Map Visualization -->
-    <script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/announcements.js') }}"></script>
+    <script src="/static/js/hex-map.js"></script>
+    <script src="/static/js/announcements.js"></script>
 
     <script>
         const encounterId = '{{ encounter.encounter_id }}';

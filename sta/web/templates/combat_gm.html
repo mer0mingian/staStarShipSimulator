@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if is_narrative %}{{ scene.name }} - Narrative Scene{% else %}{{ encounter.name }} - Game Master View{% endif %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/lcars.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/announcements.css') }}">
+    <link rel="stylesheet" href="/static/css/lcars.css">
+    <link rel="stylesheet" href="/static/css/announcements.css">
     <style>
         /* GM View - Full viewport with custom left nav */
         html, body {
@@ -912,9 +912,9 @@
                 <button class="gm-nav-tab tab-override" onclick="showTab('override')">Override</button>
                 <div class="gm-nav-spacer"></div>
                 {% if campaign %}
-                <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}" class="gm-nav-tab" style="background: var(--lcars-gray);">Exit</a>
+                <a href="/campaigns/{{ campaign.campaign_id }}" class="gm-nav-tab" style="background: var(--lcars-gray);">Exit</a>
                 {% else %}
-                <a href="{{ url_for('main.index') }}" class="gm-nav-tab" style="background: var(--lcars-gray);">Exit</a>
+                <a href="/" class="gm-nav-tab" style="background: var(--lcars-gray);">Exit</a>
                 {% endif %}
             </div>
             <div class="gm-nav-bottom"></div>
@@ -1866,8 +1866,8 @@
     {% endif %}
 
     <!-- Scripts -->
-    <script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/announcements.js') }}"></script>
+    <script src="/static/js/hex-map.js"></script>
+    <script src="/static/js/announcements.js"></script>
     <script>
         // Constants
         const encounterId = {% if encounter and encounter.encounter_id %}'{{ encounter.encounter_id }}'{% else %}null{% endif %};

@@ -12,7 +12,7 @@
         <strong style="color: var(--lcars-green);">{{ player.player_name }}</strong>
     </div>
     <div>
-        <a href="{{ url_for('campaigns.switch_character', campaign_id=campaign.campaign_id) }}" class="btn btn-small" style="background: #666;">
+        <a href="/campaigns/{{ campaign.campaign_id }}/switch-character" class="btn btn-small" style="background: #666;">
             Switch Character
         </a>
     </div>
@@ -147,7 +147,7 @@
                     {% endif %}
                 </div>
 
-                <a href="{{ url_for('encounters.combat', encounter_id=active_encounter.encounter_id, role='player') }}"
+                <a href="/encounters/{{ active_encounter.encounter_id }}?role=player"
                    class="btn" style="width: 100%; text-align: center;">
                     Enter Bridge
                 </a>
@@ -190,7 +190,7 @@
 </div>
 
 <div style="margin-top: 20px;">
-    <a href="{{ url_for('campaigns.player_home') }}" class="btn btn-small" style="background: #666;">
+    <a href="/player/home" class="btn btn-small" style="background: #666;">
         Back to Campaigns
     </a>
 </div>
