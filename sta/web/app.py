@@ -3,7 +3,12 @@
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from starlette.requests import Request
+from starlette.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from sta.database.async_db import engine, initialize_db
+
+templates = Jinja2Templates(directory="sta/web/templates")
 # Note: We use os.getcwd() for root path reference, assuming this file is at the root of the web logic.
 # The actual project root is several directories up.
 
@@ -50,6 +55,7 @@ def create_app():
     from sta.web.routes.ships_router import ships_router
     from sta.web.routes.import_export_router import backup_router
     from sta.web.routes.users_router import users_router
+    from sta.web.routes.ui_router import ui_router
 
     # Register routers with prefixes mirroring original blueprint URLs
     # Note: Some routers have internal prefixes, others rely on the include_router prefix
@@ -78,6 +84,16 @@ def create_app():
     )  # VTT ship routes -> /api/vtt/ships
     app.include_router(backup_router, prefix="/api")  # Backup routes -> /api/backup
     app.include_router(users_router)  # User preferences -> /api/users
+    app.include_router(ui_router)  # UI routes (must come last for specificity)
+
+    @app.get("/api/server-info")
+    async def get_server_info(request: Request):
+        return {
+            "url": str(request.base_url).rstrip("/"),
+            "version": "1.0.0",
+        }
+
+    app.mount("/static", StaticFiles(directory="sta/web/static"), name="static")
 
     return app
 

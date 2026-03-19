@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}STA Starship Simulator{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/lcars.css') }}">
+    <!-- Theme is now handled by inline styles in base.html due to missing static asset -->
     <style>
         /* Legacy compatibility styles - will be phased out */
         .panel {
@@ -395,9 +395,9 @@
                     <span class="elbow-text">LCARS 47988</span>
                 </div>
                 <nav class="lcars-sidebar-nav">
-                    <a href="{{ url_for('main.index') }}" class="lcars-sidebar-btn color-1">Home</a>
-                    <a href="{{ url_for('campaigns.player_home') }}" class="lcars-sidebar-btn color-2">Player</a>
-                    <a href="{{ url_for('campaigns.gm_home') }}" class="lcars-sidebar-btn color-3">Game Master</a>
+                    <a href="/" class="lcars-sidebar-btn color-1">Home</a>
+                    <a href="/player/home" class="lcars-sidebar-btn color-2">Player</a>
+                    <a href="/gm" class="lcars-sidebar-btn color-3">Game Master</a>
                     {% block sidebar_nav %}{% endblock %}
                     <div class="lcars-spacer color-2"></div>
                 </nav>
@@ -426,13 +426,9 @@
 
                 <!-- Content Area -->
                 <div class="lcars-content-wrapper">
-                    {% with messages = get_flashed_messages() %}
-                        {% if messages %}
-                            {% for message in messages %}
-                                <div class="lcars-alert alert-info">{{ message }}</div>
-                            {% endfor %}
-                        {% endif %}
-                    {% endwith %}
+{% if flash_message %}
+    <div class="lcars-alert alert-info">{{ flash_message }}</div>
+{% endif %}
 
                     {% block content %}{% endblock %}
                 </div>
@@ -448,9 +444,9 @@
 
     <!-- Mobile Navigation -->
     <nav class="lcars-mobile-nav">
-        <a href="{{ url_for('main.index') }}">Home</a>
-        <a href="{{ url_for('campaigns.player_home') }}">Player</a>
-        <a href="{{ url_for('campaigns.gm_home') }}">GM</a>
+        <a href="/">Home</a>
+        <a href="/player/home">Player</a>
+        <a href="/gm">GM</a>
     </nav>
 
     {% block scripts %}{% endblock %}

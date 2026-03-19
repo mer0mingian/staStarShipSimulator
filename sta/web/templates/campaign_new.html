@@ -5,7 +5,7 @@
 {% block header %}Create New Campaign{% endblock %}
 
 {% block sidebar_nav %}
-<a href="{{ url_for('campaigns.gm_home') }}" class="lcars-sidebar-btn color-6">Back</a>
+<a href="/gm" class="lcars-sidebar-btn color-6">Back</a>
 {% endblock %}
 
 {% block content %}
@@ -17,7 +17,7 @@
         <div class="bar-cap" style="background: var(--lcars-orange);"></div>
     </div>
     <div class="lcars-panel panel-orange">
-        <form method="POST" action="{{ url_for('campaigns.new_campaign') }}">
+        <form method="POST" action="/campaigns/new">
             <div class="mb-2">
                 <label class="lcars-label" for="name">Campaign Name</label>
                 <input type="text" id="name" name="name" class="lcars-input" required
@@ -42,7 +42,7 @@
             </div>
 
             <div style="display: flex; gap: 15px; justify-content: flex-end; margin-top: 20px;">
-                <a href="{{ url_for('campaigns.gm_home') }}" class="lcars-btn btn-sm" style="background: var(--lcars-gray);">
+                <a href="/gm" class="lcars-btn btn-sm" style="background: var(--lcars-gray);">
                     Cancel
                 </a>
                 <button type="submit" class="lcars-btn">Create Campaign</button>
