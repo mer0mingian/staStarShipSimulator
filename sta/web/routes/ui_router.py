@@ -5,7 +5,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from starlette.templating import Jinja2Templates
-from datetime import datetime, timedelta
 
 from sta.database.async_db import get_db
 from sta.database.schema import (
@@ -17,7 +16,7 @@ from sta.database.schema import (
     StarshipRecord,
     CharacterRecord,
 )
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import check_password_hash
 
 templates = Jinja2Templates(directory="sta/web/templates")
 
@@ -26,12 +25,12 @@ ui_router = APIRouter()
 
 @ui_router.get("/", response_class=HTMLResponse)
 async def index_page(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html", {})
 
 
 @ui_router.get("/player/home", response_class=HTMLResponse)
 async def player_home(request: Request, db: AsyncSession = Depends(get_db)):
-    stmt = select(CampaignRecord).filter(CampaignRecord.is_active == True)
+    stmt = select(CampaignRecord).filter(CampaignRecord.is_active)
     result = await db.execute(stmt)
     all_campaigns = result.scalars().all()
 
@@ -41,9 +40,9 @@ async def player_home(request: Request, db: AsyncSession = Depends(get_db)):
     ]
 
     return templates.TemplateResponse(
+        request,
         "player_home.html",
         {
-            "request": request,
             "campaigns": campaigns,
             "my_campaigns": [],
         },
@@ -52,14 +51,14 @@ async def player_home(request: Request, db: AsyncSession = Depends(get_db)):
 
 @ui_router.get("/gm", response_class=HTMLResponse)
 async def gm_home(request: Request, db: AsyncSession = Depends(get_db)):
-    stmt = select(CampaignRecord).filter(CampaignRecord.is_active == True)
+    stmt = select(CampaignRecord).filter(CampaignRecord.is_active)
     result = await db.execute(stmt)
     campaigns = result.scalars().all()
 
     return templates.TemplateResponse(
+        request,
         "gm_home.html",
         {
-            "request": request,
             "my_campaigns": [
                 {
                     "campaign_id": c.campaign_id,
@@ -85,9 +84,9 @@ async def gm_login_page(
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     return templates.TemplateResponse(
+        request,
         "gm_login.html",
         {
-            "request": request,
             "campaign": {"campaign_id": campaign.campaign_id, "name": campaign.name},
             "error": None,
         },
@@ -112,12 +111,16 @@ async def gm_login_submit(
         campaign.gm_password_hash, password
     ):
         return templates.TemplateResponse(
+            request,
             "gm_login.html",
             {
-                "request": request,
                 "campaign": {
                     "campaign_id": campaign.campaign_id,
                     "name": campaign.name,
+                    "description": campaign.description,
+                    "enemy_turn_multiplier": getattr(
+                        campaign, "enemy_turn_multiplier", None
+                    ),
                 },
                 "error": "Invalid password",
             },
@@ -125,7 +128,7 @@ async def gm_login_submit(
 
     stmt = select(CampaignPlayerRecord).filter(
         CampaignPlayerRecord.campaign_id == campaign.id,
-        CampaignPlayerRecord.is_gm == True,
+        CampaignPlayerRecord.is_gm,
     )
     result = await db.execute(stmt)
     gm_player = result.scalars().first()
@@ -143,14 +146,14 @@ async def gm_login_submit(
 
 @ui_router.get("/campaigns", response_class=HTMLResponse)
 async def campaign_list(request: Request, db: AsyncSession = Depends(get_db)):
-    stmt = select(CampaignRecord).filter(CampaignRecord.is_active == True)
+    stmt = select(CampaignRecord).filter(CampaignRecord.is_active)
     result = await db.execute(stmt)
     campaigns = result.scalars().all()
 
     return templates.TemplateResponse(
+        request,
         "campaign_list.html",
         {
-            "request": request,
             "campaigns": [
                 {
                     "campaign_id": c.campaign_id,
@@ -165,51 +168,7 @@ async def campaign_list(request: Request, db: AsyncSession = Depends(get_db)):
 
 @ui_router.get("/campaigns/new", response_class=HTMLResponse)
 async def new_campaign_page(request: Request):
-    return templates.TemplateResponse("campaign_new.html", {"request": request})
-
-
-@ui_router.post("/campaigns/new")
-async def create_campaign(
-    request: Request,
-    name: str = Form("New Campaign"),
-    description: str = Form(""),
-    gm_name: str = Form("Game Master"),
-    db: AsyncSession = Depends(get_db),
-):
-    import uuid, secrets
-
-    campaign = CampaignRecord(
-        campaign_id=str(uuid.uuid4())[:8],
-        name=name,
-        description=description,
-        gm_password_hash=generate_password_hash("ENGAGE1"),
-        is_active=True,
-    )
-    db.add(campaign)
-    await db.flush()
-
-    gm_token = secrets.token_urlsafe(32)
-    gm_player = CampaignPlayerRecord(
-        campaign_id=campaign.id,
-        player_name=gm_name,
-        session_token=gm_token,
-        token_expires_at=datetime.now() + timedelta(days=30),
-        is_gm=True,
-        position="gm",
-    )
-    db.add(gm_player)
-    await db.commit()
-
-    response = RedirectResponse(
-        url=f"/campaigns/{campaign.campaign_id}", status_code=302
-    )
-    response.set_cookie(
-        key="sta_session_token",
-        value=gm_token,
-        httponly=True,
-        max_age=60 * 60 * 24 * 30,
-    )
-    return response
+    return templates.TemplateResponse(request, "campaign_new.html", {})
 
 
 @ui_router.get("/campaigns/{campaign_id}", response_class=HTMLResponse)
@@ -252,6 +211,14 @@ async def campaign_dashboard(
     ships_result = await db.execute(ships_stmt)
     ships = ships_result.scalars().all()
 
+    active_ship = None
+    if campaign.active_ship_id:
+        ship_stmt = select(StarshipRecord).filter(
+            StarshipRecord.id == campaign.active_ship_id
+        )
+        ship_result = await db.execute(ship_stmt)
+        active_ship = ship_result.scalars().first()
+
     scenes_stmt = select(SceneRecord).filter(SceneRecord.campaign_id == campaign.id)
     scenes_result = await db.execute(scenes_stmt)
     scenes = scenes_result.scalars().all()
@@ -275,9 +242,9 @@ async def campaign_dashboard(
     completed_encounters = [e for e in encounters if e.status == "completed"]
 
     return templates.TemplateResponse(
+        request,
         "campaign_dashboard.html",
         {
-            "request": request,
             "campaign": {
                 "campaign_id": campaign.campaign_id,
                 "name": campaign.name,
@@ -286,7 +253,8 @@ async def campaign_dashboard(
             "is_gm": is_gm,
             "current_player": current_player,
             "players": [{"id": p.id, "player_name": p.player_name} for p in players],
-            "ships": [{"id": s.id, "ship_name": s.ship_name} for s in ships],
+            "ships": list(ships),
+            "active_ship": active_ship,
             "draft_scenes": draft_scenes,
             "completed_scenes": completed_scenes,
             "active_scene_data": active_scene_data,
@@ -296,79 +264,6 @@ async def campaign_dashboard(
             "flash_message": None,
         },
     )
-
-
-@ui_router.get("/campaigns/{campaign_id}/join", response_class=HTMLResponse)
-async def join_campaign_page(
-    campaign_id: str, request: Request, db: AsyncSession = Depends(get_db)
-):
-    stmt = select(CampaignRecord).filter(CampaignRecord.campaign_id == campaign_id)
-    result = await db.execute(stmt)
-    campaign = result.scalars().first()
-
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-
-    players_stmt = select(CampaignPlayerRecord).filter(
-        CampaignPlayerRecord.campaign_id == campaign.id,
-        CampaignPlayerRecord.is_gm == False,
-    )
-    players_result = await db.execute(players_stmt)
-    players = players_result.scalars().all()
-
-    return templates.TemplateResponse(
-        "campaign_join.html",
-        {
-            "request": request,
-            "campaign": {
-                "campaign_id": campaign.campaign_id,
-                "name": campaign.name,
-                "description": campaign.description,
-            },
-            "players": [{"id": p.id, "player_name": p.player_name} for p in players],
-        },
-    )
-
-
-@ui_router.post("/campaigns/{campaign_id}/join")
-async def join_campaign_submit(
-    campaign_id: str,
-    request: Request,
-    player_id: int = Form(...),
-    db: AsyncSession = Depends(get_db),
-):
-    import secrets
-    from datetime import datetime, timedelta
-
-    stmt = select(CampaignRecord).filter(CampaignRecord.campaign_id == campaign_id)
-    result = await db.execute(stmt)
-    campaign = result.scalars().first()
-
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-
-    player_stmt = select(CampaignPlayerRecord).filter(
-        CampaignPlayerRecord.id == player_id,
-        CampaignPlayerRecord.campaign_id == campaign.id,
-    )
-    player_result = await db.execute(player_stmt)
-    player = player_result.scalars().first()
-
-    if not player:
-        raise HTTPException(status_code=404, detail="Player not found")
-
-    player.session_token = secrets.token_urlsafe(32)
-    player.token_expires_at = datetime.now() + timedelta(days=30)
-    await db.commit()
-
-    response = RedirectResponse(url=f"/campaigns/{campaign_id}/player", status_code=302)
-    response.set_cookie(
-        key="sta_session_token",
-        value=player.session_token,
-        httponly=True,
-        max_age=60 * 60 * 24 * 30,
-    )
-    return response
 
 
 @ui_router.get("/campaigns/{campaign_id}/player", response_class=HTMLResponse)
@@ -390,7 +285,7 @@ async def player_dashboard_page(
         player_stmt = select(CampaignPlayerRecord).filter(
             CampaignPlayerRecord.campaign_id == campaign.id,
             CampaignPlayerRecord.session_token == sta_session_token,
-            CampaignPlayerRecord.is_gm == False,
+            not CampaignPlayerRecord.is_gm,
         )
         player_result = await db.execute(player_stmt)
         player = player_result.scalars().first()
@@ -411,9 +306,9 @@ async def player_dashboard_page(
     active_encounter = encounters_result.scalars().first()
 
     return templates.TemplateResponse(
+        request,
         "player_dashboard.html",
         {
-            "request": request,
             "campaign": {"campaign_id": campaign.campaign_id, "name": campaign.name},
             "player": player,
             "character": character,
@@ -426,96 +321,10 @@ async def player_dashboard_page(
 @ui_router.get("/scenes/new", response_class=HTMLResponse)
 async def new_scene_page(request: Request, campaign_id: str = Query(None)):
     return templates.TemplateResponse(
+        request,
         "new_scene.html",
         {
-            "request": request,
             "campaign": {"campaign_id": campaign_id, "name": "Campaign"},
-        },
-    )
-
-
-@ui_router.get("/scenes/{scene_id}", response_class=HTMLResponse)
-async def view_scene(
-    scene_id: int,
-    request: Request,
-    role: str = Query("player"),
-    db: AsyncSession = Depends(get_db),
-):
-    stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
-    result = await db.execute(stmt)
-    scene = result.scalars().first()
-
-    if not scene:
-        raise HTTPException(status_code=404, detail="Scene not found")
-
-    campaign_stmt = select(CampaignRecord).filter(
-        CampaignRecord.id == scene.campaign_id
-    )
-    campaign_result = await db.execute(campaign_stmt)
-    campaign = campaign_result.scalars().first()
-
-    if role == "gm":
-        return templates.TemplateResponse(
-            "scene_gm.html",
-            {
-                "request": request,
-                "scene": scene,
-                "campaign": {
-                    "campaign_id": campaign.campaign_id if campaign else "",
-                    "name": campaign.name if campaign else "",
-                },
-                "flash_message": None,
-            },
-        )
-    elif role == "viewscreen":
-        return templates.TemplateResponse(
-            "scene_viewscreen.html",
-            {
-                "request": request,
-                "scene": scene,
-            },
-        )
-    else:
-        return templates.TemplateResponse(
-            "scene_player.html",
-            {
-                "request": request,
-                "scene": scene,
-                "campaign": {
-                    "campaign_id": campaign.campaign_id if campaign else "",
-                    "name": campaign.name if campaign else "",
-                },
-                "flash_message": None,
-            },
-        )
-
-
-@ui_router.get("/scenes/{scene_id}/edit", response_class=HTMLResponse)
-async def edit_scene_page(
-    scene_id: int, request: Request, db: AsyncSession = Depends(get_db)
-):
-    stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
-    result = await db.execute(stmt)
-    scene = result.scalars().first()
-
-    if not scene:
-        raise HTTPException(status_code=404, detail="Scene not found")
-
-    campaign_stmt = select(CampaignRecord).filter(
-        CampaignRecord.id == scene.campaign_id
-    )
-    campaign_result = await db.execute(campaign_stmt)
-    campaign = campaign_result.scalars().first()
-
-    return templates.TemplateResponse(
-        "edit_scene.html",
-        {
-            "request": request,
-            "scene": scene,
-            "campaign": {"campaign_id": campaign.campaign_id, "name": campaign.name}
-            if campaign
-            else {"campaign_id": "", "name": ""},
-            "flash_message": None,
         },
     )
 
@@ -523,9 +332,9 @@ async def edit_scene_page(
 @ui_router.get("/encounters/new", response_class=HTMLResponse)
 async def new_encounter_page(request: Request, campaign_id: str = Query(None)):
     return templates.TemplateResponse(
+        request,
         "new_encounter.html",
         {
-            "request": request,
             "campaign": {"campaign_id": campaign_id, "name": "Campaign"},
             "positions": [
                 "captain",
@@ -563,9 +372,9 @@ async def combat_view(
 
     if role == "gm":
         return templates.TemplateResponse(
+            request,
             "combat_gm.html",
             {
-                "request": request,
                 "encounter": encounter,
                 "campaign": {"campaign_id": campaign.campaign_id, "name": campaign.name}
                 if campaign
@@ -575,9 +384,9 @@ async def combat_view(
         )
     elif role == "viewscreen":
         return templates.TemplateResponse(
+            request,
             "combat_viewscreen.html",
             {
-                "request": request,
                 "encounter": encounter,
                 "campaign": {"campaign_id": campaign.campaign_id, "name": campaign.name}
                 if campaign
@@ -586,9 +395,9 @@ async def combat_view(
         )
     else:
         return templates.TemplateResponse(
+            request,
             "combat_player.html",
             {
-                "request": request,
                 "encounter": encounter,
                 "campaign": {"campaign_id": campaign.campaign_id, "name": campaign.name}
                 if campaign
@@ -616,9 +425,9 @@ async def edit_encounter_page(
     campaign = campaign_result.scalars().first()
 
     return templates.TemplateResponse(
+        request,
         "edit_encounter.html",
         {
-            "request": request,
             "encounter": encounter,
             "campaign": {"campaign_id": campaign.campaign_id, "name": campaign.name}
             if campaign

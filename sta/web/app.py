@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from starlette.requests import Request
 from starlette.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from sta.database.async_db import engine, initialize_db
+from sta.database.async_db import initialize_db
 
 templates = Jinja2Templates(directory="sta/web/templates")
 
@@ -57,14 +57,16 @@ def create_app():
 
     # Register routers with prefixes mirroring original blueprint URLs
     # Note: Some routers have internal prefixes, others rely on the include_router prefix
-    app.include_router(main_router, prefix="")
+    app.include_router(
+        ui_router
+    )  # UI routes (after API so /scenes/{id} JSON takes precedence)
+    app.include_router(main_router, prefix="")  # main_router / returns JSON API info
     app.include_router(
         encounters_router, prefix="/encounters"
     )  # internal prefix="/encounters"
     app.include_router(api_router, prefix="/api")
     app.include_router(campaigns_router)  # internal prefix="/campaigns"
-    # scenes_router has internal prefix="/scenes", so include_router should add no additional prefix
-    app.include_router(scenes_router, prefix="")  # Results in /scenes
+
     app.include_router(
         universe_router, prefix="/api"
     )  # internal prefix="/universe" -> /api/universe
@@ -82,7 +84,8 @@ def create_app():
     )  # VTT ship routes -> /api/vtt/ships
     app.include_router(backup_router, prefix="/api")  # Backup routes -> /api/backup
     app.include_router(users_router)  # User preferences -> /api/users
-    app.include_router(ui_router)  # UI routes (must come last for specificity)
+    # scenes_router must come after ui_router so its /scenes/{id} overrides ui_router's HTML versions
+    app.include_router(scenes_router, prefix="")  # Scene API routes
 
     @app.get("/api/server-info")
     async def get_server_info(request: Request):
@@ -96,4 +99,4 @@ def create_app():
     return app
 
 
-# app = create_app() # This line might be needed elsewhere, keeping factory structure.
+app = create_app()
