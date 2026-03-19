@@ -14,7 +14,7 @@
             <strong style="color: var(--lcars-orange);">{{ scene.name }}</strong>
             <span class="action-type" style="margin-left: 10px;">{{ scene.status.title() }}</span>
         </div>
-        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+        <a href="/campaigns/{{ campaign.campaign_id }}"
            class="btn btn-small" style="background: #666;">
             Back to Campaign
         </a>
@@ -265,10 +265,10 @@
 
     <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;">
         <button type="button" class="btn" onclick="saveScene()">Save Changes</button>
-        <a href="{{ url_for('scenes.view_scene', scene_id=scene.id, role='viewscreen') }}" class="btn" style="background: var(--lcars-blue);">
+        <a href="/scenes/{{ scene.id }}?role=viewscreen" class="btn" style="background: var(--lcars-blue);">
             Open Viewscreen
         </a>
-        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}" class="btn" style="background: #666;">
+        <a href="/campaigns/{{ campaign.campaign_id }}" class="btn" style="background: #666;">
             Cancel
         </a>
     </div>

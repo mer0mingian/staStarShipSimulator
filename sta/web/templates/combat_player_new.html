@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ encounter.name }} - Player View</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/lcars.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/announcements.css') }}">
+    <link rel="stylesheet" href="/static/css/lcars.css">
+    <link rel="stylesheet" href="/static/css/announcements.css">
     <style>
         /* Player View - Full viewport with custom left nav */
         html, body {
@@ -991,7 +991,7 @@
                 </div>
                 <div class="player-header-cap">
                     {% if campaign %}
-                    <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+                    <a href="/campaigns/{{ campaign.campaign_id }}"
                        style="color: var(--lcars-text-dark); text-decoration: none; font-size: 0.8rem;">
                         BACK
                     </a>

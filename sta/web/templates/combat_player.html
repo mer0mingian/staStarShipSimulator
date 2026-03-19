@@ -8,7 +8,7 @@
 <!-- Campaign Breadcrumb -->
 <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
     <div>
-        <a href="{{ url_for('campaigns.campaign_dashboard', campaign_id=campaign.campaign_id) }}"
+        <a href="/campaigns/{{ campaign.campaign_id }}"
            style="color: var(--lcars-purple); text-decoration: none;">
             {{ campaign.name }}
         </a>
@@ -904,7 +904,7 @@
 
 {% block scripts %}
 <!-- Hex Map Visualization -->
-<script src="{{ url_for('static', filename='js/hex-map.js') }}"></script>
+<script src="/static/js/hex-map.js"></script>
 
 <script>
     const encounterId = '{{ encounter.encounter_id }}';
