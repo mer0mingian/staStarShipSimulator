@@ -9,8 +9,6 @@ from fastapi.staticfiles import StaticFiles
 from sta.database.async_db import engine, initialize_db
 
 templates = Jinja2Templates(directory="sta/web/templates")
-# Note: We use os.getcwd() for root path reference, assuming this file is at the root of the web logic.
-# The actual project root is several directories up.
 
 SECRET_KEY = "sta-simulator-dev-key"
 
