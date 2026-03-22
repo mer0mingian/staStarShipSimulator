@@ -328,12 +328,14 @@ async def list_characters(
             select(UniverseItemRecord).filter(
                 UniverseItemRecord.item_type == "character",
                 UniverseItemRecord.category == category,
+                UniverseItemRecord.name != "Q",
             )
         )
     else:
         result = await db.execute(
             select(UniverseItemRecord).filter(
-                UniverseItemRecord.item_type == "character"
+                UniverseItemRecord.item_type == "character",
+                UniverseItemRecord.name != "Q",
             )
         )
     items = result.scalars().all()
