@@ -3,16 +3,19 @@
 ## Current Stack
 
 ### Backend
-- **Framework**: Flask (Python)
+
+- **Framework**: FastAPI (Python)
 - **Database**: SQLite with SQLAlchemy ORM
-- **API**: REST endpoints via Flask routes
+- **API**: REST endpoints via FastAPI routes
 
 ### Frontend
+
 - **Templates**: Jinja2 (Flask templates)
 - **Styling**: Bootstrap CSS
 - **JavaScript**: Vanilla JS for interactivity
 
 ### Development
+
 - **Testing**: pytest
 - **Package Management**: uv
 - **Virtual Environment**: `.venv/`

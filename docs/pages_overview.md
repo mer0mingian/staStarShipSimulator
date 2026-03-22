@@ -2,62 +2,62 @@
 
 ## Public Pages
 
-| Route | Template | Purpose |
-|-------|----------|---------|
-| `/` | `index.html` | Landing page with campaign list |
+| Route                    | Template               | Purpose                         |
+| ------------------------ | ---------------------- | ------------------------------- |
+| `/`                    | `index.html`         | Landing page with campaign list |
 | `/campaigns/{id}/join` | `campaign_join.html` | Player character selection page |
 
 ## Player Pages
 
-| Route | Template | Purpose |
-|-------|----------|---------|
-| `/player/home` | `player_home.html` | Player dashboard |
-| `/player/dashboard` | `player_dashboard.html` | Alternative player view |
-| `/campaigns/{id}/claim/{player_id}` | Redirect | Claims a player slot |
+| Route                                 | Template                  | Purpose                 |
+| ------------------------------------- | ------------------------- | ----------------------- |
+| `/player/home`                      | `player_home.html`      | Player dashboard        |
+| `/player/dashboard`                 | `player_dashboard.html` | Alternative player view |
+| `/campaigns/{id}/claim/{player_id}` | Redirect                  | Claims a player slot    |
 
 ## Game Master Pages
 
-| Route | Template | Purpose |
-|-------|----------|---------|
-| `/gm` | `gm_home.html` | GM dashboard |
-| `/gm/login` | `gm_login.html` | GM authentication |
-| `/campaigns/new` | `campaign_new.html` | Create new campaign |
-| `/campaigns/{id}` | `campaign_dashboard.html` | Campaign management |
-| `/campaigns/{id}/edit` | `campaign_edit.html` | Edit campaign settings |
-| `/campaigns/{id}/new-encounter` | `new_encounter.html` | Create new encounter |
-| `/encounters/{id}/edit` | `edit_encounter.html` | Edit encounter |
-| `/scenes/{id}/edit` | `edit_scene.html` | Edit scene |
-| `/scenes/{id}/gm` | `scene_gm.html` | GM scene view |
+| Route                             | Template                    | Purpose                |
+| --------------------------------- | --------------------------- | ---------------------- |
+| `/gm`                           | `gm_home.html`            | GM dashboard           |
+| `/gm/login`                     | `gm_login.html`           | GM authentication      |
+| `/campaigns/new`                | `campaign_new.html`       | Create new campaign    |
+| `/campaigns/{id}`               | `campaign_dashboard.html` | Campaign management    |
+| `/campaigns/{id}/edit`          | `campaign_edit.html`      | Edit campaign settings |
+| `/campaigns/{id}/new-encounter` | `new_encounter.html`      | Create new encounter   |
+| `/encounters/{id}/edit`         | `edit_encounter.html`     | Edit encounter         |
+| `/scenes/{id}/edit`             | `edit_scene.html`         | Edit scene             |
+| `/scenes/{id}/gm`               | `scene_gm.html`           | GM scene view          |
 
 ## Combat Pages
 
-| Route | Template | Purpose |
-|-------|----------|---------|
-| `/encounters/{id}` | `combat.html` | Encounter overview |
-| `/encounters/{id}/combat` | `combat_gm.html` | GM combat view |
-| `/encounters/{id}/view` | `combat_viewscreen.html` | Viewscreen (public) |
-| `/encounters/{id}/player` | `combat_player.html` | Player combat view |
-| `/encounters/{id}/player/new` | `combat_player_new.html` | New player combat |
+| Route                           | Template                   | Purpose             |
+| ------------------------------- | -------------------------- | ------------------- |
+| `/encounters/{id}`            | `combat.html`            | Encounter overview  |
+| `/encounters/{id}/combat`     | `combat_gm.html`         | GM combat view      |
+| `/encounters/{id}/view`       | `combat_viewscreen.html` | Viewscreen (public) |
+| `/encounters/{id}/player`     | `combat_player.html`     | Player combat view  |
+| `/encounters/{id}/player/new` | `combat_player_new.html` | New player combat   |
 
 ## Scene Pages
 
-| Route | Template | Purpose |
-|-------|----------|---------|
-| `/scenes/{id}` | `scene_player.html` | Player scene view |
-| `/scenes/{id}/view` | `scene_viewscreen.html` | Scene viewscreen |
+| Route                 | Template                  | Purpose           |
+| --------------------- | ------------------------- | ----------------- |
+| `/scenes/{id}`      | `scene_player.html`     | Player scene view |
+| `/scenes/{id}/view` | `scene_viewscreen.html` | Scene viewscreen  |
 
 ## Character Pages
 
-| Route | Template | Purpose |
-|-------|----------|---------|
-| `/characters/{id}` | Character detail | Character sheet view |
-| `/api/characters/{id}/model` | JSON | Character model data |
+| Route                          | Template         | Purpose              |
+| ------------------------------ | ---------------- | -------------------- |
+| `/characters/{id}`           | Character detail | Character sheet view |
+| `/api/characters/{id}/model` | JSON             | Character model data |
 
 ## Ship Pages
 
-| Route | Template | Purpose |
-|-------|----------|---------|
-| `/api/ships/{id}/model` | JSON | Ship model data |
+| Route                     | Template | Purpose         |
+| ------------------------- | -------- | --------------- |
+| `/api/ships/{id}/model` | JSON     | Ship model data |
 
 ---
 
@@ -102,6 +102,7 @@ Game Master
 ## API Endpoints (JSON)
 
 ### Campaigns
+
 - `GET /api/campaigns` - List campaigns
 - `POST /api/campaigns` - Create campaign
 - `GET /api/campaigns/{id}` - Get campaign
@@ -109,13 +110,15 @@ Game Master
 - `DELETE /api/campaigns/{id}` - Delete campaign
 
 ### Characters
-- `GET /api/characters` - List characters
+
+- `GET /ap i/characters` - List characters
 - `POST /api/characters` - Create character
 - `GET /api/characters/{id}` - Get character
 - `PUT /api/characters/{id}` - Update character
 - `DELETE /api/characters/{id}` - Delete character
 
 ### Ships
+
 - `GET /api/ships` - List ships
 - `POST /api/ships` - Create ship
 - `GET /api/ships/{id}` - Get ship
@@ -123,6 +126,7 @@ Game Master
 - `DELETE /api/ships/{id}` - Delete ship
 
 ### Encounters
+
 - `GET /api/encounters` - List encounters
 - `POST /api/encounters` - Create encounter
 - `GET /api/encounters/{id}` - Get encounter
@@ -131,6 +135,7 @@ Game Master
 - `POST /api/encounters/{id}/next-turn` - Next turn
 
 ### Universe Library
+
 - `GET /api/universe/characters` - Universe character templates
 - `GET /api/universe/ships` - Universe ship templates
 - `POST /api/universe/import` - Import to campaign
