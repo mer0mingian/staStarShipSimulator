@@ -45,6 +45,7 @@ class VTTCharacterRecord(Base):
     description: Mapped[Optional[str]] = mapped_column(Text)
 
     # Values, equipment (stored as JSON)
+    # Values now include session tracking: [{"name": str, "description": str, "used_this_session": bool}]
     values_json: Mapped[str] = mapped_column(Text, default="[]")
     equipment_json: Mapped[str] = mapped_column(Text, default="[]")
 
@@ -482,3 +483,52 @@ class WeaponRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
     )
+
+
+class LogEntryRecord(Base):
+    """Log entries for character narrative tracking.
+
+    Supports three types of logs:
+    - PERSONAL: Character roleplay notes visible to all other players
+    - MISSION: Auto-generated entries for scene/mission events
+    - VALUE: Auto-generated entries for Value interactions
+    """
+
+    __tablename__ = "log_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    character_id: Mapped[int] = mapped_column(
+        ForeignKey("vtt_characters.id"), nullable=False
+    )
+    log_type: Mapped[str] = mapped_column(
+        String(20), default="MISSION"
+    )  # PERSONAL, MISSION, VALUE
+    content: Mapped[str] = mapped_column(Text, default="")
+    event_type: Mapped[Optional[str]] = mapped_column(
+        String(50)
+    )  # e.g., "scene_enter", "scene_exit", "value_challenged", "value_complied"
+    character_name: Mapped[str] = mapped_column(
+        String(100)
+    )  # Denormalized for easier queries
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True
+    )  # User who created this entry (for PERSONAL logs)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return {
+            "id": self.id,
+            "character_id": self.character_id,
+            "log_type": self.log_type,
+            "content": self.content,
+            "event_type": self.event_type,
+            "character_name": self.character_name,
+            "created_by_user_id": self.created_by_user_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }

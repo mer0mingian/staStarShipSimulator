@@ -25,7 +25,7 @@ from sta.database.schema import (
     SceneRecord,
     CombatLogRecord,
 )
-from sta.database.vtt_schema import VTTCharacterRecord, VTTShipRecord
+from sta.database.vtt_schema import VTTCharacterRecord as VTTChar, VTTShipRecord
 from sta.database import get_db
 from sta.database.async_db import engine as async_engine, AsyncSessionLocal
 

@@ -45,7 +45,7 @@ class PlaceholderGenerator:
 
 
 # --- ROUTER SETUP ---
-encounters_router = APIRouter(prefix="/encounters")
+encounters_router = APIRouter()
 
 
 async def _handle_new_encounter_generation(
@@ -129,54 +129,56 @@ async def _handle_new_encounter_generation(
 
 @encounters_router.post("/new")
 async def new_encounter_post(request: Request, db: AsyncSession = Depends(get_db)):
-    """Create a new encounter (API POST)."""
-    form_data = await request.form()
-    campaign_id_param = form_data.get("campaign") or form_data.get("campaign_id")
+    """DEPRECATED: Encounters are now created via Scene activation.
 
-    if not campaign_id_param:
-        raise HTTPException(
-            status_code=400,
-            detail="Campaign context required (query/form 'campaign_id').",
-        )
+    This endpoint returns 410 Gone to indicate that standalone encounter
+    creation has been deprecated. Encounters now derive from Scenes.
 
-    try:
-        encounter, campaign, initial_status = await _handle_new_encounter_generation(
-            db, campaign_id_param, form_data
-        )
+    To create an encounter:
+    1. Create a Scene with appropriate type (starship_encounter or personal_encounter)
+    2. Configure the scene with ships, participants, and traits
+    3. Activate the scene via POST /api/scenes/{scene_id}/activate
 
-        if initial_status == "draft":
-            return {
-                "status": "draft_created",
-                "message": "Encounter created as draft.",
-                "campaign_id": campaign.campaign_id,
-            }
+    The encounter will be automatically created with encounter_config_json
+    and scene_traits wired from the scene.
+    """
+    from fastapi.responses import JSONResponse
 
-        return {
-            "status": "active_created",
-            "message": "Encounter started.",
-            "encounter_id": encounter.encounter_id,
-            "role": "gm",
-        }
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create encounter: {e}")
+    return JSONResponse(
+        status_code=status.HTTP_410_GONE,
+        content={
+            "error": "deprecated",
+            "message": "Standalone encounter creation has been deprecated. "
+            "Encounters are now created via Scene activation. "
+            "Create a Scene and activate it instead.",
+            "migration_guide": {
+                "step1": "Create a Scene with scene_type='starship_encounter' or 'personal_encounter'",
+                "step2": "Add ships/participants to the scene",
+                "step3": "Set scene traits via PATCH /api/scenes/{scene_id}/traits",
+                "step4": "Configure encounter via PATCH /api/scenes/{scene_id}/config",
+                "step5": "Activate via POST /api/scenes/{scene_id}/activate",
+            },
+        },
+    )
 
 
 @encounters_router.get("/new")
 async def new_encounter_get(campaign_id_param: str = Query(None, alias="campaign")):
-    """GET /new is removed for API conversion, only POST is kept."""
-    if not campaign_id_param:
-        raise HTTPException(
-            status_code=400,
-            detail="Please provide campaign context via 'campaign' query parameter.",
-        )
+    """DEPRECATED: Standalone encounter creation has been removed.
 
-    return {
-        "message": "Use POST method to create an encounter.",
-        "campaign_id": campaign_id_param,
-        "action_required": "POST",
-    }
+    Returns 410 Gone to indicate that standalone encounter creation
+    has been deprecated. Encounters now derive from Scenes.
+    """
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(
+        status_code=status.HTTP_410_GONE,
+        content={
+            "error": "deprecated",
+            "message": "Standalone encounter creation has been deprecated. "
+            "Encounters are now created via Scene activation.",
+        },
+    )
 
 
 @encounters_router.post("/{encounter_id}/edit")

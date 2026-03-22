@@ -1154,6 +1154,13 @@ async def activate_scene(
 
         npc_ship_ids = [sid for sid in ship_ids if sid != campaign.active_ship_id]
 
+        scene_encounter_config = {}
+        if scene.encounter_config_json:
+            try:
+                scene_encounter_config = json.loads(scene.encounter_config_json)
+            except json.JSONDecodeError:
+                scene_encounter_config = {}
+
         encounter = EncounterRecord(
             encounter_id=str(uuid.uuid4()),
             name=scene.name,
@@ -1162,6 +1169,8 @@ async def activate_scene(
             player_position=scene.scene_position or "captain",
             enemy_ship_ids_json=json.dumps(npc_ship_ids),
             tactical_map_json=scene.tactical_map_json or "{}",
+            encounter_config_json=scene.encounter_config_json,
+            scene_traits_json=scene.scene_traits_json,
             is_active=True,
         )
         db.add(encounter)
@@ -1499,6 +1508,192 @@ async def update_scene_config(
     await db.commit()
 
     return {"success": True}
+
+
+# =============================================================================
+# Scene Traits API (for Difficulty/Complication modification)
+# =============================================================================
+
+
+@scenes_router.get("/{scene_id}/traits")
+async def get_scene_traits(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Get scene traits that modify task Difficulty/Complication Range.
+
+    Scene Traits are GM-assigned modifiers that affect dice roll calculations.
+    Each trait can specify: difficulty_modifier, complication_range_modifier, description.
+
+    Examples:
+    - {"name": "Dark Environment", "difficulty_modifier": 1, "description": "Limited visibility"}
+    - {"name": "Hostile Terrain", "complication_range_modifier": 1, "description": "Rough conditions"}
+    """
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    traits = json.loads(scene.scene_traits_json or "[]")
+    return {"traits": traits}
+
+
+@scenes_router.put("/{scene_id}/traits")
+async def update_scene_traits(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+    body: dict = Body(...),
+):
+    """Update scene traits (replace all traits).
+
+    Trait format: [{"name": str, "description": str, "potency": int, "effect": str}]
+
+    Supported effects:
+    - "difficulty_plus": Increases task Difficulty by potency
+    - "complication_plus": Increases Complication Range by potency
+    - "difficulty_minus": Decreases task Difficulty by potency
+    - "complication_minus": Decreases Complication Range by potency
+    - "focus": Provides a focus for a specific discipline
+    """
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    traits = body.get("traits", [])
+    if not isinstance(traits, list):
+        raise HTTPException(status_code=400, detail="Traits must be a list")
+
+    for trait in traits:
+        if not isinstance(trait, dict):
+            raise HTTPException(status_code=400, detail="Each trait must be an object")
+        if "name" not in trait:
+            raise HTTPException(
+                status_code=400, detail="Each trait must have a 'name' field"
+            )
+        if "effect" not in trait:
+            raise HTTPException(
+                status_code=400, detail="Each trait must have an 'effect' field"
+            )
+
+        valid_effects = [
+            "difficulty_plus",
+            "complication_plus",
+            "difficulty_minus",
+            "complication_minus",
+            "focus",
+            "neutral",
+        ]
+        if trait["effect"] not in valid_effects:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid effect '{trait['effect']}'. Valid effects: {valid_effects}",
+            )
+
+    scene.scene_traits_json = json.dumps(traits)
+    await db.commit()
+
+    return {"success": True, "traits": traits}
+
+
+@scenes_router.post("/{scene_id}/traits")
+async def add_scene_trait(
+    scene_id: int,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+    body: dict = Body(...),
+):
+    """Add a trait to the scene.
+
+    Trait format: {"name": str, "description": str, "potency": int, "effect": str}
+    """
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    name = body.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="Trait name is required")
+
+    effect = body.get("effect", "neutral")
+    valid_effects = [
+        "difficulty_plus",
+        "complication_plus",
+        "difficulty_minus",
+        "complication_minus",
+        "focus",
+        "neutral",
+    ]
+    if effect not in valid_effects:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid effect '{effect}'. Valid effects: {valid_effects}",
+        )
+
+    new_trait = {
+        "name": name,
+        "description": body.get("description", ""),
+        "potency": body.get("potency", 1),
+        "effect": effect,
+    }
+
+    traits = json.loads(scene.scene_traits_json or "[]")
+    existing_names = [t.get("name", "").lower() for t in traits]
+    if name.lower() in existing_names:
+        raise HTTPException(
+            status_code=400, detail="Trait with this name already exists"
+        )
+
+    traits.append(new_trait)
+    scene.scene_traits_json = json.dumps(traits)
+    await db.commit()
+
+    return {"success": True, "trait": new_trait, "traits": traits}
+
+
+@scenes_router.delete("/{scene_id}/traits/{trait_name}")
+async def remove_scene_trait(
+    scene_id: int,
+    trait_name: str,
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
+):
+    """Remove a trait from the scene."""
+    scene_stmt = select(SceneRecord).filter(SceneRecord.id == scene_id)
+    scene_result = await db.execute(scene_stmt)
+    scene = scene_result.scalars().first()
+
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    await _require_gm_auth(scene.campaign_id, sta_session_token, db)
+
+    traits = json.loads(scene.scene_traits_json or "[]")
+    original_count = len(traits)
+    traits = [t for t in traits if t.get("name", "").lower() != trait_name.lower()]
+
+    if len(traits) == original_count:
+        raise HTTPException(status_code=404, detail="Trait not found")
+
+    scene.scene_traits_json = json.dumps(traits)
+    await db.commit()
+
+    return {"success": True, "removed": trait_name, "traits": traits}
 
 
 @scenes_router.get("/{scene_id}")
