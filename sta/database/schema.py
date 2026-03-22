@@ -355,6 +355,14 @@ class EncounterRecord(Base):
     # Structure: {"radius": int, "tiles": [{"coord": {"q": int, "r": int}, "terrain": str, "traits": []}]}
     tactical_map_json: Mapped[str] = mapped_column(Text, default="{}")
 
+    # Encounter configuration derived from Scene (for Difficulty/Complication modification)
+    # Structure: {"npc_turn_mode": str, "gm_spends_threat_to_start": bool}
+    encounter_config_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    # Scene traits that modify task Difficulty/Complication Range
+    # Structure: [{"name": str, "description": str, "potency": int, "effect": str}]
+    scene_traits_json: Mapped[str] = mapped_column(Text, default="[]")
+
     # Ship positions on the tactical map
     # Structure: {"player": {"q": int, "r": int}, "enemy_0": {"q": int, "r": int}, ...}
     ship_positions_json: Mapped[str] = mapped_column(Text, default="{}")
@@ -381,6 +389,24 @@ class EncounterRecord(Base):
             return json.loads(self.tactical_map_json) if self.tactical_map_json else {}
         except (json.JSONDecodeError, TypeError):
             return {}
+
+    @hybrid_property
+    def encounter_config(self):
+        try:
+            return (
+                json.loads(self.encounter_config_json)
+                if self.encounter_config_json
+                else {}
+            )
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    @hybrid_property
+    def scene_traits(self):
+        try:
+            return json.loads(self.scene_traits_json) if self.scene_traits_json else []
+        except (json.JSONDecodeError, TypeError):
+            return []
 
     @hybrid_property
     def ship_positions(self):

@@ -25,7 +25,7 @@ from sta.database.schema import (
     SceneRecord,
     CombatLogRecord,
 )
-from sta.database.vtt_schema import VTTCharacterRecord, VTTShipRecord
+from sta.database.vtt_schema import VTTCharacterRecord as VTTChar, VTTShipRecord
 from sta.database import get_db
 from sta.database.async_db import engine as async_engine, AsyncSessionLocal
 
@@ -264,6 +264,7 @@ async def sample_encounter(
     sample_campaign,
 ):
     campaign = sample_campaign["campaign"]
+    players = sample_campaign["players"]
     character = CharacterRecord(**sample_character_data)
     test_session.add(character)
     player_ship = StarshipRecord(**sample_player_ship_data)
@@ -288,6 +289,7 @@ async def sample_encounter(
     return {
         "encounter": encounter,
         "campaign": campaign,
+        "players": players,
         "character": character,
         "player_ship": player_ship,
         "enemy_ship": enemy_ship,

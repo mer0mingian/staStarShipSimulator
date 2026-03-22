@@ -39,7 +39,8 @@ This app digitizes the starship combat experience for STA 2e tabletop sessions. 
 | **M7** | ✅ Complete | Import/Export + Final Integration |
 | **M8** | ✅ Complete | Test Cleanup (376 passed, 0 skipped) |
 | **M8.2** | ✅ Complete | Rules Understanding & Documentation |
-| **M9+** | 🔭 Future | Advanced features |
+| **M9** | ✅ Complete | Web UI & Theme Support |
+| **M10** | 📋 Planned | Page Structure Rework (encounter unification) |
 
 See [`docs/delivery_plan.md`](docs/delivery_plan.md) for full roadmap.
 

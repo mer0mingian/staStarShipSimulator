@@ -36,3 +36,4 @@ sta/web/uploads/
 
 # Worktrees
 .worktrees/
+.coverage

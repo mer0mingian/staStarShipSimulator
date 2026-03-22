@@ -333,19 +333,19 @@ async def new_scene_page(request: Request, campaign_id: str = Query(None)):
 async def new_encounter_page(request: Request, campaign_id: str = Query(None)):
     return templates.TemplateResponse(
         request,
-        "new_encounter.html",
+        "deprecated.html",
         {
-            "campaign": {"campaign_id": campaign_id, "name": "Campaign"},
-            "positions": [
-                "captain",
-                "helm",
-                "tactical",
-                "science",
-                "engineering",
-                "security",
-                "medicine",
-                "conn",
+            "title": "Encounter Creation Deprecated",
+            "message": "Standalone encounter creation has been deprecated. "
+            "Encounters are now created via Scene activation.",
+            "migration_guide": [
+                "1. Create a Scene with scene_type='starship_encounter' or 'personal_encounter'",
+                "2. Add ships/participants to the scene",
+                "3. Set scene traits via the scene editor",
+                "4. Configure encounter settings via the scene config",
+                "5. Activate the scene to start the encounter",
             ],
+            "back_url": f"/campaigns/{campaign_id}/" if campaign_id else "/",
         },
     )
 

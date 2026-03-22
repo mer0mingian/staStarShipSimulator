@@ -1,5 +1,47 @@
 # Learnings and Decisions
 
+## M10: GM Console with Threat Panel & Dynamic Round Tracker (March 2026)
+
+### Accomplishments
+1. **Implemented new API endpoints in `api_router.py`**:
+   - `POST /api/encounter/{id}/threat/spend` - Spend Threat for GM actions
+   - `POST /api/encounter/{id}/claim-momentum` - Convert 2 Momentum to 1 Threat
+   - `GET /api/encounter/{id}/player-resources` - Get PC Stress/Determination/Values
+   - `POST /api/encounter/{id}/log-determination` - Log Determination spends
+   - `POST /api/encounter/{id}/log-value-interaction` - Log Value interactions
+   - `POST /api/encounter/{id}/round/start` - Start new round, reset action status
+   - `POST /api/encounter/{id}/participant/{id}/action-status` - Toggle Ready/Action Taken
+   - `GET /api/encounter/{id}/round-status` - Get round status with all participants
+
+2. **Threat spending costs** (STA 2E rules):
+   - Trait Level 1: 2 Threat
+   - Trait Level 2: 4 Threat
+   - Trait Level 3: 6 Threat
+   - Minor Reinforcement: 2 Threat
+   - Notable Reinforcement: 4 Threat
+   - Hazard: 3 Threat
+   - Reversal: 2 Threat
+   - NPC Complication: 2 Threat
+
+3. **Key technical fixes**:
+   - EncounterRecord doesn't have `scene_id` attribute directly - need to query SceneRecord by encounter_id
+   - API participant_id type changed from `int` to `str` to handle "player_ship" string
+   - Added campaign_id fallback in round-status endpoint for when scene_id is not available
+   - Fixed test fixtures to use `await test_session.commit()` for async SQLAlchemy
+
+4. **Test coverage**: 33 tests covering:
+   - Threat spending (11 tests)
+   - Claim Momentum (4 tests)
+   - Player resource feedback (6 tests)
+   - Dynamic round tracker (2 tests)
+   - Participant action status (4 tests)
+   - Round status (3 tests)
+   - Integration (3 tests)
+
+### Database Schema Discovery
+- SceneRecord has `encounter_id` pointing to EncounterRecord.id (not vice versa)
+- SceneParticipantRecord and SceneNPCRecord have `scene_id` pointing to SceneRecord.id
+
 ## M8.2: Rules Validation & Talent System Design (March 2026)
 
 ### Validation Summary
@@ -159,3 +201,49 @@ These require deeper investigation:
 
 ### Turn Enforcement (1 test)
 - Test sets `players_turns_used_json` but code checks `player_turns_used` integer field
+
+## Milestone 10: UX & Scene-Encounter Derivation (March 2026)
+
+### Tasks M10.1, M10.2, M10.3, M10.4, M10.12 Implemented
+
+#### M10.1: Deprecate Standalone Encounter Creation
+- POST `/encounters/new` now returns 410 Gone with migration guide
+- GET `/encounters/new` shows deprecation HTML page with migration instructions
+- New deprecation template: `sta/web/templates/deprecated.html`
+
+#### M10.2: Scene API with Trait Storage
+- Added Scene Traits API endpoints for Difficulty/Complication modification:
+  - GET `/scenes/{id}/traits` - Get scene traits
+  - PUT `/scenes/{id}/traits` - Replace all traits (GM auth required)
+  - POST `/scenes/{id}/traits` - Add a single trait
+  - DELETE `/scenes/{id}/traits/{name}` - Remove a trait
+- Trait format: `{"name", "description", "potency", "effect"}`
+- Supported effects: difficulty_plus, complication_plus, difficulty_minus, complication_minus, focus, neutral
+
+#### M10.3: Wire encounter_config_json from Scene Activation
+- Scene activation now wires `encounter_config_json` and `scene_traits_json` into EncounterRecord
+- EncounterRecord now has:
+  - `encounter_config_json` - Scene encounter configuration
+  - `scene_traits_json` - Scene traits for task modification
+- Added hybrid properties `encounter_config` and `scene_traits` on EncounterRecord
+
+#### M10.4: Value Session Tracking
+- Added Value session tracking to Character model:
+  - Values now include `used_this_session` flag per Value
+  - New API endpoints:
+    - GET `/api/characters/{id}/values` - Get values with session status
+    - POST `/api/characters/{id}/values` - Add a value (initializes used_this_session=False)
+    - PUT `/api/characters/{id}/values/{name}/use` - Mark value used (once/session)
+    - PUT `/api/characters/{id}/values/{name}/challenge` - Mark challenged (+1 Determination)
+    - PUT `/api/characters/{id}/values/{name}/comply` - Mark complied (+1 Determination)
+    - POST `/api/characters/{id}/values/reset-session` - Reset all values for new session
+- Updated `_serialize_character()` to include `used_this_session` field
+
+#### M10.12: Legacy Field Cleanup
+- Fixed router prefix issue in encounters_router (removed duplicate `/encounters` prefix)
+- Legacy encounter-related code retained for backward compatibility
+
+### Test Results
+- All 466 tests pass
+- 16 new tests added in `tests/test_scene_encounter_derivation.py`
+

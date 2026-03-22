@@ -26,6 +26,7 @@ from .vtt_schema import (
     TraitRecord,
     TalentRecord,
     WeaponRecord,
+    LogEntryRecord,
 )
 
 __all__ = [
@@ -54,4 +55,5 @@ __all__ = [
     "TraitRecord",
     "TalentRecord",
     "WeaponRecord",
+    "LogEntryRecord",
 ]

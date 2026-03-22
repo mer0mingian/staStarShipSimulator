@@ -166,8 +166,9 @@ class TestSinglePlayerMultiplayer:
         assert claim_response.status_code == 200
 
         action_response = client.post(
-            f"/api/encounter/{encounter_id}/execute-action",
+            f"/api/execute-action",
             json={
+                "encounter_id": encounter_id,
                 "action_name": "Attack Pattern",
                 "player_id": single_player_id,
             },
@@ -188,8 +189,9 @@ class TestSinglePlayerMultiplayer:
         await test_session.commit()
 
         second_action = client.post(
-            f"/api/encounter/{encounter_id}/execute-action",
+            f"/api/execute-action",
             json={
+                "encounter_id": encounter_id,
                 "action_name": "Calibrate Weapons",
                 "player_id": single_player_id,
             },
