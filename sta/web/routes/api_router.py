@@ -16,6 +16,7 @@ from fastapi import (
     Query,
     Body,
     Response,
+    Cookie,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete as sqlalchemy_delete
@@ -52,6 +53,29 @@ from sta.mechanics.action_config import (
 
 
 api_router = APIRouter()
+
+
+async def _require_gm_auth(
+    campaign_id: int,
+    sta_session_token: Optional[str] = Cookie(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify GM authentication for a campaign."""
+    if not sta_session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    stmt = select(CampaignPlayerRecord).filter(
+        CampaignPlayerRecord.campaign_id == campaign_id,
+        CampaignPlayerRecord.is_gm == True,
+    )
+    result = await db.execute(stmt)
+    gm_player = result.scalars().first()
+
+    if not gm_player or sta_session_token != gm_player.session_token:
+        raise HTTPException(status_code=401, detail="GM authentication required")
+
+    return gm_player
+
 
 # --- HELPER FUNCTION CONVERSIONS ---
 
@@ -298,7 +322,10 @@ async def get_action_availability(
 
 @api_router.post("/encounter/{encounter_id}/momentum")
 async def update_momentum(
-    encounter_id: str, data: dict = Body(...), db: AsyncSession = Depends(get_db)
+    encounter_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
 ):
     """Update encounter momentum (API)."""
     change = data.get("change", 0)
@@ -317,6 +344,9 @@ async def update_momentum(
     if not encounter:
         raise HTTPException(status_code=404, detail="Encounter not found")
 
+    if encounter.campaign_id:
+        await _require_gm_auth(encounter.campaign_id, sta_session_token, db)
+
     encounter.momentum = max(0, min(6, encounter.momentum + change))
     await db.commit()
 
@@ -325,7 +355,10 @@ async def update_momentum(
 
 @api_router.post("/encounter/{encounter_id}/threat")
 async def update_threat(
-    encounter_id: str, data: dict = Body(...), db: AsyncSession = Depends(get_db)
+    encounter_id: str,
+    data: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
 ):
     """Update encounter threat (API)."""
     change = data.get("change", 0)
@@ -343,6 +376,9 @@ async def update_threat(
     )
     if not encounter:
         raise HTTPException(status_code=404, detail="Encounter not found")
+
+    if encounter.campaign_id:
+        await _require_gm_auth(encounter.campaign_id, sta_session_token, db)
 
     encounter.threat = max(0, encounter.threat + change)
     await db.commit()
@@ -632,60 +668,40 @@ async def next_turn(encounter_id: str, db: AsyncSession = Depends(get_db)):
     current = encounter.current_turn or "player"
     round_advanced = False
 
-    if current == "player":
+    try:
         players_turns = json.loads(encounter.players_turns_used_json or "{}")
-        player_turns_exhausted = (
-            all(p.get("acted", False) for p in players_turns.values())
-            if players_turns
-            else False
-        )
+    except json.JSONDecodeError:
+        players_turns = {}
+    player_turns_exhausted = (
+        all(p.get("acted", False) for p in players_turns.values())
+        if players_turns
+        else False
+    )
 
+    try:
         ships_turns = json.loads(encounter.ships_turns_used_json or "{}")
+    except json.JSONDecodeError:
+        ships_turns = {}
+
+    try:
         enemy_ship_ids = json.loads(encounter.enemy_ship_ids_json or "[]")
+    except json.JSONDecodeError:
+        enemy_ship_ids = []
 
-        all_enemy_turns_exhausted = True
-        for ship_id in enemy_ship_ids:
-            ship_turns_used = ships_turns.get(str(ship_id), 0)
-            all_enemy_turns_exhausted = (
-                all_enemy_turns_exhausted and ship_turns_used >= 1
-            )
+    all_enemy_turns_exhausted = True
+    for ship_id in enemy_ship_ids:
+        ship_turns_used = ships_turns.get(str(ship_id), 0)
+        all_enemy_turns_exhausted = all_enemy_turns_exhausted and ship_turns_used >= 1
 
-        if player_turns_exhausted and all_enemy_turns_exhausted:
-            encounter.round = (encounter.round or 1) + 1
-            encounter.current_turn = "player"
-            encounter.ships_turns_used_json = "{}"
-            encounter.players_turns_used_json = "{}"
-            encounter.player_turns_used = 0
-            round_advanced = True
-        else:
-            encounter.current_turn = "enemy"
-    elif current == "enemy":
-        players_turns = json.loads(encounter.players_turns_used_json or "{}")
-        player_turns_exhausted = (
-            all(p.get("acted", False) for p in players_turns.values())
-            if players_turns
-            else False
-        )
-
-        ships_turns = json.loads(encounter.ships_turns_used_json or "{}")
-        enemy_ship_ids = json.loads(encounter.enemy_ship_ids_json or "[]")
-
-        all_enemy_turns_exhausted = True
-        for ship_id in enemy_ship_ids:
-            ship_turns_used = ships_turns.get(str(ship_id), 0)
-            all_enemy_turns_exhausted = (
-                all_enemy_turns_exhausted and ship_turns_used >= 1
-            )
-
-        if player_turns_exhausted and all_enemy_turns_exhausted:
-            encounter.round = (encounter.round or 1) + 1
-            encounter.current_turn = "player"
-            encounter.ships_turns_used_json = "{}"
-            encounter.players_turns_used_json = "{}"
-            encounter.player_turns_used = 0
-            round_advanced = True
-        else:
-            encounter.current_turn = "enemy"
+    if player_turns_exhausted and all_enemy_turns_exhausted:
+        encounter.round = (encounter.round or 1) + 1
+        encounter.current_turn = "player"
+        encounter.ships_turns_used_json = "{}"
+        encounter.players_turns_used_json = "{}"
+        encounter.player_turns_used = 0
+        round_advanced = True
+    else:
+        encounter.current_turn = "player" if current == "enemy" else "enemy"
 
     await db.commit()
 
@@ -1202,121 +1218,6 @@ async def ram_action(
     }
 
 
-# Execute action with encounter_id prefix
-
-
-@api_router.post("/encounter/{encounter_id}/execute-action")
-async def execute_action_with_encounter_id(
-    encounter_id: str,
-    data: dict = Body(...),
-    db: AsyncSession = Depends(get_db),
-):
-    """Execute a combat action (with encounter_id in path)."""
-    data["encounter_id"] = encounter_id
-    # Call the main execute_action logic inline
-    action_name = data.get("action_name")
-
-    if not encounter_id or not action_name:
-        raise HTTPException(
-            status_code=400, detail="encounter_id and action_name are required"
-        )
-
-    # Find the encounter
-    stmt = select(EncounterRecord).filter_by(encounter_id=encounter_id)
-    result = await db.execute(stmt)
-    encounter = result.scalar_one_or_none()
-
-    if not encounter:
-        raise HTTPException(status_code=404, detail="Encounter not found")
-
-    # Check if this is a major action
-    # In STA 2e: task_roll types are major by default, others are minor unless explicitly marked
-    action_config = get_action_config(action_name)
-    is_major = False
-    is_minor = False
-    if action_config:
-        action_type = action_config.get("type")
-        # Check explicit is_major first (takes priority)
-        if "is_major" in action_config and action_config["is_major"]:
-            is_major = True
-        elif action_type == "task_roll":
-            is_major = True
-        # Check explicit is_minor second
-        elif "is_minor" in action_config and action_config["is_minor"]:
-            is_minor = True
-        # Buff, toggle, special, resource_action types are minor by default
-        elif action_type in ("buff", "toggle", "special", "resource_action"):
-            is_minor = True
-
-    # Check if player has already acted (for minor action limit)
-    player_id = data.get("player_id")
-    if player_id and encounter.current_turn == "player":
-        players_turns = json.loads(encounter.players_turns_used_json or "{}")
-        player_acted = players_turns.get(str(player_id), {}).get("acted", False)
-
-        if is_minor and player_acted:
-            raise HTTPException(
-                status_code=403,
-                detail="Player has already acted this turn. Only one minor action allowed per turn.",
-            )
-
-        # Mark player as acted (for both major and minor actions) before switching turn
-        if str(player_id) not in players_turns:
-            players_turns[str(player_id)] = {"acted": True}
-            encounter.players_turns_used_json = json.dumps(players_turns)
-
-    # If major action and it's player's turn, switch to enemy
-    if is_major and encounter.current_turn == "player":
-        encounter.current_turn = "enemy"
-        encounter.current_player_id = None
-
-    # Get the ship name from the encounter's player ship
-    ship_name = data.get("ship_name")
-    if not ship_name and encounter.player_ship_id:
-        ship_stmt = select(StarshipRecord).filter_by(id=encounter.player_ship_id)
-        ship_result = await db.execute(ship_stmt)
-        ship = ship_result.scalar_one_or_none()
-        if ship:
-            ship_name = ship.name
-
-    if not ship_name:
-        ship_name = "Unknown Ship"
-
-    # Determine success based on roll parameters (if provided)
-    success = True
-    if "roll_succeeded" in data:
-        success = bool(data["roll_succeeded"])
-
-    # Create a combat log entry
-    log_entry = CombatLogRecord(
-        encounter_id=encounter.id,
-        round=encounter.round or 1,
-        actor_name=data.get("actor_name", "Test Actor"),
-        actor_type=data.get("actor_type", "player"),
-        ship_name=ship_name,
-        action_name=action_name,
-        action_type="major" if is_major else "minor",
-        description=f"Actor performed {action_name}",
-        task_result_json=json.dumps(data.get("task_result", {})),
-        damage_dealt=data.get("damage_dealt", 0),
-        momentum_spent=data.get("momentum_spent", 0),
-        threat_spent=data.get("threat_spent", 0),
-        timestamp=datetime.now(),
-    )
-    db.add(log_entry)
-    await db.commit()
-
-    return {
-        "success": success,
-        "action_name": action_name,
-        "encounter_id": encounter_id,
-        "log_entry_id": log_entry.id,
-    }
-
-
-# Remaining endpoints (e.g., scene/npc/log manipulation) are omitted but should follow similar async conversion/stubbing.
-
-
 @api_router.post("/execute-action")
 async def execute_action(
     data: dict = Body(...),
@@ -1536,12 +1437,6 @@ async def execute_action(
         "log_entry_id": log_entry.id,
         "message": message,
     }
-
-    # Add effect_created for buff actions
-    if effect_created:
-        response["effect_created"] = True
-
-    return response
 
     # Add effect_created for buff actions
     if effect_created:
@@ -2022,6 +1917,7 @@ async def spend_threat_action(
     encounter_id: str,
     data: dict = Body(...),
     db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
 ):
     """Spend Threat for GM actions (STA 2E Ch 9).
 
@@ -2085,6 +1981,9 @@ async def spend_threat_action(
     if not encounter:
         raise HTTPException(status_code=404, detail="Encounter not found")
 
+    if encounter.campaign_id:
+        await _require_gm_auth(encounter.campaign_id, sta_session_token, db)
+
     if encounter.threat < cost:
         raise HTTPException(
             status_code=400,
@@ -2125,6 +2024,7 @@ async def claim_momentum_for_threat(
     encounter_id: str,
     data: dict = Body(...),
     db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
 ):
     """Claim Momentum: Convert 2 Momentum to 1 Threat (STA 2E Ch 9).
 
@@ -2145,6 +2045,9 @@ async def claim_momentum_for_threat(
     )
     if not encounter:
         raise HTTPException(status_code=404, detail="Encounter not found")
+
+    if encounter.campaign_id:
+        await _require_gm_auth(encounter.campaign_id, sta_session_token, db)
 
     momentum_cost = amount * 2
     if encounter.momentum < momentum_cost:
@@ -2297,6 +2200,7 @@ async def log_determination_spend(
     encounter_id: str,
     data: dict = Body(...),
     db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
 ):
     """Log a Determination spend by a player character.
 
@@ -2332,6 +2236,9 @@ async def log_determination_spend(
     )
     if not encounter:
         raise HTTPException(status_code=404, detail="Encounter not found")
+
+    if encounter.campaign_id:
+        await _require_gm_auth(encounter.campaign_id, sta_session_token, db)
 
     log_entry = CombatLogRecord(
         encounter_id=encounter.id,
@@ -2431,6 +2338,7 @@ async def log_value_interaction(
 async def start_new_round(
     encounter_id: str,
     db: AsyncSession = Depends(get_db),
+    sta_session_token: Optional[str] = Cookie(None),
 ):
     """Start a new round. Resets all participant action status to Ready.
 
@@ -2449,6 +2357,9 @@ async def start_new_round(
     )
     if not encounter:
         raise HTTPException(status_code=404, detail="Encounter not found")
+
+    if encounter.campaign_id:
+        await _require_gm_auth(encounter.campaign_id, sta_session_token, db)
 
     old_round = encounter.round or 1
     encounter.round = old_round + 1
@@ -2515,6 +2426,8 @@ async def toggle_participant_action_status(
 
     if participant_type == "player":
         player_id = int(participant_id)
+        if player_id < 0:
+            raise HTTPException(status_code=400, detail="Invalid player ID")
         players_turns = json.loads(encounter.players_turns_used_json or "{}")
         players_turns[str(player_id)] = {"acted": action_taken}
         encounter.players_turns_used_json = json.dumps(players_turns)
@@ -2617,28 +2530,35 @@ async def get_round_status(
         scene_participants_result = await db.execute(scene_participants_stmt)
         scene_participants = scene_participants_result.scalars().all()
 
-        for sp in scene_participants:
-            player_stmt = select(CampaignPlayerRecord).filter(
-                CampaignPlayerRecord.id == sp.player_id
+        player_ids = [sp.player_id for sp in scene_participants if sp.player_id]
+        if player_ids:
+            batch_stmt = select(CampaignPlayerRecord).filter(
+                CampaignPlayerRecord.id.in_(player_ids)
             )
-            player_result = await db.execute(player_stmt)
-            player = player_result.scalars().first()
-            if player:
-                players_total += 1
-                has_acted = players_turns.get(str(player.id), {}).get("acted", False)
-                if has_acted:
-                    players_acted += 1
+            batch_result = await db.execute(batch_stmt)
+            players_map = {p.id: p for p in batch_result.scalars().all()}
 
-                players_info.append(
-                    {
-                        "participant_id": player.id,
-                        "participant_type": "player",
-                        "name": player.player_name,
-                        "has_acted": has_acted,
-                        "status": "Action Taken" if has_acted else "Ready",
-                        "can_act": not has_acted and encounter.current_turn == "player",
-                    }
-                )
+            for sp in scene_participants:
+                player = players_map.get(sp.player_id)
+                if player:
+                    players_total += 1
+                    has_acted = players_turns.get(str(player.id), {}).get(
+                        "acted", False
+                    )
+                    if has_acted:
+                        players_acted += 1
+
+                    players_info.append(
+                        {
+                            "participant_id": player.id,
+                            "participant_type": "player",
+                            "name": player.player_name,
+                            "has_acted": has_acted,
+                            "status": "Action Taken" if has_acted else "Ready",
+                            "can_act": not has_acted
+                            and encounter.current_turn == "player",
+                        }
+                    )
     elif encounter.campaign_id:
         campaign_players_stmt = select(CampaignPlayerRecord).filter(
             CampaignPlayerRecord.campaign_id == encounter.campaign_id,

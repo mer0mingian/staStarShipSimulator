@@ -6,6 +6,23 @@ from sqlalchemy import select
 from sta.database.schema import EncounterRecord, CombatLogRecord
 
 
+def set_gm_auth(client, sample_encounter):
+    """Set GM auth cookie for API calls."""
+    gm = sample_encounter["campaign"].id
+    players = [p for p in sample_encounter.get("players", []) if p.is_gm]
+    if players:
+        client.cookies.set("sta_session_token", players[0].session_token)
+
+
+@pytest.fixture
+def gm_auth_client(client, sample_encounter):
+    """Client fixture with GM authentication pre-set."""
+    gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+    if gm:
+        client.cookies.set("sta_session_token", gm[0].session_token)
+    return client
+
+
 @pytest.mark.m10_gm_console
 class TestThreatSpending:
     """Tests for GM Threat spending mechanics (M10.7)."""
@@ -17,6 +34,10 @@ class TestThreatSpending:
         encounter.threat = 5
         await test_session.commit()
         await test_session.flush()
+
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
 
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
@@ -38,6 +59,10 @@ class TestThreatSpending:
         await test_session.commit()
         await test_session.flush()
 
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
             json={"spend_type": "trait_2"},
@@ -55,6 +80,10 @@ class TestThreatSpending:
         encounter.threat = 10
         await test_session.commit()
         await test_session.flush()
+
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
 
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
@@ -76,6 +105,10 @@ class TestThreatSpending:
         await test_session.commit()
         await test_session.flush()
 
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
             json={"spend_type": "reinforcement_minor"},
@@ -96,6 +129,10 @@ class TestThreatSpending:
         await test_session.commit()
         await test_session.flush()
 
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
             json={"spend_type": "reinforcement_notable"},
@@ -113,6 +150,10 @@ class TestThreatSpending:
         encounter.threat = 5
         await test_session.commit()
         await test_session.flush()
+
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
 
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
@@ -132,6 +173,10 @@ class TestThreatSpending:
         await test_session.commit()
         await test_session.flush()
 
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
             json={"spend_type": "reversal"},
@@ -149,6 +194,10 @@ class TestThreatSpending:
         await test_session.commit()
         await test_session.flush()
 
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
             json={"spend_type": "npc_complication"},
@@ -165,6 +214,10 @@ class TestThreatSpending:
         encounter.threat = 5
         await test_session.commit()
         await test_session.flush()
+
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
 
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
@@ -186,6 +239,10 @@ class TestThreatSpending:
         await test_session.commit()
         await test_session.flush()
 
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
             json={"spend_type": "hazard"},
@@ -197,6 +254,10 @@ class TestThreatSpending:
     @pytest.mark.asyncio
     async def test_spend_invalid_type(self, client, sample_encounter):
         """Test that invalid spend_type is rejected."""
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(
             f"/api/encounter/{sample_encounter['encounter'].encounter_id}/threat/spend",
             json={"spend_type": "invalid_type"},
@@ -214,6 +275,10 @@ class TestThreatSpending:
         encounter.threat = 5
         await test_session.commit()
         await test_session.flush()
+
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
 
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
@@ -248,6 +313,10 @@ class TestClaimMomentum:
         await test_session.commit()
         await test_session.flush()
 
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/claim-momentum",
             json={"amount": 1},
@@ -272,6 +341,10 @@ class TestClaimMomentum:
         await test_session.commit()
         await test_session.flush()
 
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/claim-momentum",
             json={"amount": 2},
@@ -293,6 +366,10 @@ class TestClaimMomentum:
         await test_session.commit()
         await test_session.flush()
 
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/claim-momentum",
             json={"amount": 1},
@@ -311,6 +388,10 @@ class TestClaimMomentum:
         encounter.threat = 23
         await test_session.commit()
         await test_session.flush()
+
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
 
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/claim-momentum",
@@ -356,6 +437,10 @@ class TestPlayerResourceFeedback:
         encounter = sample_encounter["encounter"]
         character = sample_encounter["character"]
 
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/log-determination",
             json={
@@ -384,6 +469,10 @@ class TestPlayerResourceFeedback:
         """Test logging Perfect Opportunity spend."""
         encounter = sample_encounter["encounter"]
         character = sample_encounter["character"]
+
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
 
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/log-determination",
@@ -487,6 +576,10 @@ class TestDynamicRoundTracker:
         await test_session.commit()
         await test_session.flush()
 
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
+
         response = client.post(f"/api/encounter/{encounter_id}/round/start")
 
         assert response.status_code == 200
@@ -508,6 +601,10 @@ class TestDynamicRoundTracker:
     async def test_start_new_round_creates_log(self, client, sample_encounter):
         """Test that starting new round creates a combat log entry."""
         encounter = sample_encounter["encounter"]
+
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
 
         response = client.post(f"/api/encounter/{encounter.encounter_id}/round/start")
 
@@ -692,6 +789,10 @@ class TestThreatAndRoundIntegration:
         encounter.round = 1
         await test_session.commit()
         await test_session.flush()
+
+        gm = [p for p in sample_encounter.get("players", []) if p.is_gm]
+        if gm:
+            client.cookies.set("sta_session_token", gm[0].session_token)
 
         response = client.post(
             f"/api/encounter/{encounter.encounter_id}/threat/spend",
