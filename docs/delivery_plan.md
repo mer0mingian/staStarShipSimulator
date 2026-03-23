@@ -1,7 +1,38 @@
 # VTT Transition Delivery Plan
 ## Executive Summary
 This document outlines the comprehensive plan for transitioning the Star Trek Adventures Starship Simulator from a dedicated combat encounter tool to a minimal Virtual Tabletop (VTT) experience. The plan covers all milestones with detailed task breakdowns, parallel work assignments, testing strategies, and acceptance criteria.
-**Status**: M1-M8 **COMPLETE**. M8.2 (Rules Analysis) **IN PROGRESS** - Documentation synchronization underway.
+**Status**: M1-M10 **COMPLETE**. M11 **IN PROGRESS** - Logging & Observability.
+
+## Milestone 10: Page Structure Rework & UX Enhancements
+### Status: ✅ Complete — PR #24 merged
+
+## Milestone 11: Logging & Observability (Planned)
+### Overview
+Add comprehensive logging infrastructure to trace user-observed behavior during testing and production debugging.
+
+### Design Decisions (Planned)
+- **Centralized Logger**: Create `sta/logging.py` with structured logging config
+- **Request Middleware**: Auto-log all HTTP requests with timing
+- **Game Action Loggers**: Track dice rolls, value interactions, combat actions
+- **GM Action Loggers**: Track threat spends, scene changes, NPC spawns
+- **Error Logging**: Capture exceptions with full context
+
+### Status: 📋 PLANNED
+### Tasks
+| Task | Description |
+|---|---|
+| M11.1 | Create centralized logging module (`sta/logging.py`) |
+| M11.2 | Add request/response middleware to FastAPI app |
+| M11.3 | Implement game action loggers (dice, values, combat) |
+| M11.4 | Add GM action logging (threat, scenes, NPCs) |
+| M11.5 | Configure log levels for dev vs production |
+| M11.6 | Tests and verification |
+
+**Branch:** `feature/m11-logging` from `main`
+**Tasks doc:** `docs/tasks/milestone11_tasks.md`
+
+## Acceptance Criteria
+- ✅ All M10 tasks complete
 ## Milestone 8.2: Rules Understanding &amp; Documentation Sync
 ### Overview
 Analyze core rulebook chapters (Ch 4, 5, 6, 7, 8, 9, 11) against VTT mechanics reference. Agent reports are synthesized into the **Acceptance Criteria** section below and the new file `docs/m8.2-open-questions.md`.
